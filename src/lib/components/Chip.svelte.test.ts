@@ -212,3 +212,206 @@ describe('flashPin', () => {
 		expect(getComputedStyle(pin).backgroundColor).toBe(resting);
 	});
 });
+
+// The outline is an inline SVG: a chamfered path made of five lines (top, right, bottom, left and
+// the 45-degree cut), laid out with percentages so it needs no JS and no measuring. A registered
+// number, --draw, says how much of it is drawn: segment 0 first, segment 4 last.
+type Layer = 'base' | 'accent';
+const lines = (section: HTMLElement, layer: Layer) =>
+	Array.from(section.querySelectorAll<SVGLineElement>(`.outline.${layer} .seg`));
+const offsets = (section: HTMLElement, layer: Layer) =>
+	lines(section, layer).map((line) => parseFloat(getComputedStyle(line).strokeDashoffset));
+
+describe('outline', () => {
+	it('has five segments in each of two layers: the silkscreen line and the lit ring', async () => {
+		const { section } = await mount();
+		expect(lines(section, 'base')).toHaveLength(5);
+		expect(lines(section, 'accent')).toHaveLength(5);
+	});
+
+	it('is an inline SVG inside the hidden chrome', async () => {
+		const { section } = await mount();
+		expect(section.querySelectorAll('svg.outline')).toHaveLength(2);
+		for (const svg of section.querySelectorAll('svg.outline')) {
+			expect(svg.closest('.chrome')?.getAttribute('aria-hidden')).toBe('true');
+			expect(getComputedStyle(svg).pointerEvents).toBe('none');
+		}
+	});
+
+	it('cuts the top left corner at 45 degrees, 18px each way', async () => {
+		const { section } = await mount({ bodyHeight: 120 });
+		const chip = section.getBoundingClientRect();
+		const [top, , , left, cut] = lines(section, 'base');
+		const cutBox = cut.getBoundingClientRect();
+		expect(cutBox.width).toBeCloseTo(18, 0);
+		expect(cutBox.height).toBeCloseTo(18, 0);
+		expect(cutBox.left - chip.left).toBeLessThan(1.5);
+		expect(cutBox.top - chip.top).toBeLessThan(1.5);
+		// Nothing else runs through the corner square: the top line starts after the cut, the
+		// left line ends before it.
+		expect(top.getBoundingClientRect().left - chip.left).toBeGreaterThanOrEqual(17);
+		expect(left.getBoundingClientRect().top - chip.top).toBeGreaterThanOrEqual(17);
+	});
+
+	it('runs round the whole chip', async () => {
+		const { section } = await mount({ bodyHeight: 120 });
+		const chip = section.getBoundingClientRect();
+		const boxes = lines(section, 'base').map((line) => line.getBoundingClientRect());
+		expect(Math.min(...boxes.map((box) => box.left)) - chip.left).toBeLessThan(1.5);
+		expect(chip.right - Math.max(...boxes.map((box) => box.right))).toBeLessThan(1.5);
+		expect(Math.min(...boxes.map((box) => box.top)) - chip.top).toBeLessThan(1.5);
+		expect(chip.bottom - Math.max(...boxes.map((box) => box.bottom))).toBeLessThan(1.5);
+	});
+
+	it('paints the ring with a gradient that exists, one per chip', async () => {
+		const first = await mount({ id: 'one' });
+		const second = await mount({ id: 'two' });
+		const ids = new Set<string>();
+		for (const { section } of [first, second]) {
+			for (const line of lines(section, 'accent')) {
+				const ref = line.getAttribute('stroke')!.match(/url\(#([^)]+)\)/)![1];
+				expect(document.getElementById(ref)).not.toBeNull();
+				ids.add(ref);
+			}
+		}
+		expect(ids.size).toBe(2);
+	});
+
+	it('draws the segments one after another as --draw rises', async () => {
+		const { section } = await mount();
+		const progress = (draw: number) => {
+			section.style.setProperty('--draw', String(draw));
+			return offsets(section, 'base');
+		};
+		expect(progress(0)).toEqual([1, 1, 1, 1, 1]);
+		expect(progress(1)).toEqual([0, 0, 0, 0, 0]);
+		const half = progress(0.5);
+		expect(half.slice(0, 2)).toEqual([0, 0]);
+		expect(half[2]).toBeCloseTo(0.5, 5);
+		expect(half.slice(3)).toEqual([1, 1]);
+		// The ring follows the same progress.
+		expect(offsets(section, 'accent')).toEqual(half);
+	});
+
+	describe('without scroll-driven animation: it follows data-state', () => {
+		// The shared style turns animations off, so only the state rules are left, which is what a
+		// browser without animation-timeline runs.
+		beforeEach(() => root.classList.add('js'));
+
+		it('is undrawn while off, drawn once booting, and stays drawn when on', async () => {
+			const { section } = await mount();
+			const [handle] = chips();
+			await expect.poll(() => section.dataset.state).toBe('off');
+			expect(offsets(section, 'base')).toEqual([1, 1, 1, 1, 1]);
+			expect(offsets(section, 'accent')).toEqual([1, 1, 1, 1, 1]);
+
+			handle.state = 'booting';
+			await expect.poll(() => offsets(section, 'base')).toEqual([0, 0, 0, 0, 0]);
+			handle.state = 'on';
+			await expect.poll(() => section.dataset.state).toBe('on');
+			expect(offsets(section, 'base')).toEqual([0, 0, 0, 0, 0]);
+			expect(offsets(section, 'accent')).toEqual([0, 0, 0, 0, 0]);
+		});
+
+		it('is complete without JS: no html.js, no data-state', async () => {
+			root.classList.remove('js');
+			const { section } = await mount();
+			section.removeAttribute('data-state');
+			expect(offsets(section, 'base')).toEqual([0, 0, 0, 0, 0]);
+		});
+
+		it('is complete under reduced motion even when the state says off', async () => {
+			root.classList.add('reduced');
+			const { section } = await mount();
+			await expect.poll(() => section.dataset.state).toBe('off');
+			expect(offsets(section, 'base')).toEqual([0, 0, 0, 0, 0]);
+			expect(offsets(section, 'accent')).toEqual([0, 0, 0, 0, 0]);
+		});
+	});
+
+	it('transitions --draw with the state, except under reduced motion', async () => {
+		noMotion.remove();
+		root.classList.add('js');
+		const { section } = await mount();
+		expect(getComputedStyle(section).transitionProperty).toContain('--draw');
+		root.classList.add('reduced');
+		const durations = getComputedStyle(section).transitionDuration.split(',');
+		expect(durations.every((d) => d.trim() === '0s')).toBe(true);
+	});
+});
+
+describe.skipIf(!CSS.supports('animation-timeline', 'view()'))('scroll-driven outline', () => {
+	let room: HTMLElement;
+	let tail: HTMLElement;
+	const chrome = (section: HTMLElement) => section.querySelector<HTMLElement>('.chrome')!;
+	const draw = (section: HTMLElement) =>
+		parseFloat(getComputedStyle(chrome(section)).getPropertyValue('--draw'));
+
+	beforeEach(() => {
+		// The real thing: animations on.
+		noMotion.remove();
+		// Room above the chip, so it starts below the window and can scroll in.
+		room = document.createElement('div');
+		room.style.height = '2500px';
+		document.body.append(room);
+		window.scrollTo(0, 0);
+	});
+
+	afterEach(() => {
+		room.remove();
+		tail?.remove();
+		window.scrollTo(0, 0);
+	});
+
+	/** Mounts the chip and adds room below it, so the page can scroll the chip well into view. */
+	async function mountInRoom(props: Props = {}) {
+		const mounted = await mount(props);
+		tail = document.createElement('div');
+		tail.style.height = '2000px';
+		document.body.append(tail);
+		return mounted;
+	}
+
+	it('draws with a view() timeline on the chip', async () => {
+		const { section } = await mount();
+		expect(getComputedStyle(chrome(section)).animationTimeline).toContain('view');
+		expect(chrome(section).getAnimations().length).toBeGreaterThanOrEqual(1);
+	});
+
+	it('is undrawn below the window, draws as the chip scrolls in and is whole once it has', async () => {
+		const { section } = await mountInRoom({ bodyHeight: 400 });
+		const top = () => section.getBoundingClientRect().top + window.scrollY;
+		const height = window.innerHeight;
+		await expect.poll(() => draw(section)).toBe(0);
+
+		// A little of the chip is in.
+		window.scrollTo(0, top() - height + 120);
+		await expect.poll(() => draw(section)).toBeGreaterThan(0);
+		expect(draw(section)).toBeLessThan(1);
+
+		// Well in.
+		window.scrollTo(0, top() - height + 900);
+		await expect.poll(() => draw(section)).toBe(1);
+		expect(offsets(section, 'base')).toEqual([0, 0, 0, 0, 0]);
+
+		// And back out through the bottom edge: the drawing follows the scroll both ways.
+		window.scrollTo(0, 0);
+		await expect.poll(() => draw(section)).toBe(0);
+	});
+
+	it('ignores data-state for the outline: a chip that is off is drawn once it has scrolled in', async () => {
+		root.classList.add('js');
+		const { section } = await mountInRoom({ bodyHeight: 400 });
+		await expect.poll(() => section.dataset.state).toBe('off');
+		window.scrollTo(0, section.getBoundingClientRect().top + window.scrollY - 200);
+		await expect.poll(() => draw(section)).toBe(1);
+	});
+
+	it('does not animate under reduced motion: whole from the first paint', async () => {
+		root.classList.add('reduced');
+		const { section } = await mount({ bodyHeight: 400 });
+		expect(chrome(section).getAnimations()).toHaveLength(0);
+		expect(draw(section)).toBe(1);
+		expect(offsets(section, 'base')).toEqual([0, 0, 0, 0, 0]);
+	});
+});
