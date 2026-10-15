@@ -9,7 +9,13 @@ import { overwriteGetLocale } from '#lib/paraglide/runtime.js';
 import EducationLanguages from './EducationLanguages.svelte';
 import Experience, { newestFirst } from './Experience.svelte';
 import Skills, { sortSkills } from './Skills.svelte';
-import Talks, { foreignTitleLang, newestGivenFirst, offerFacts, offerStats } from './Talks.svelte';
+import Talks, {
+	foreignTitleLang,
+	newestGivenFirst,
+	offerFacts,
+	offerStats,
+	splitTalkTitle
+} from './Talks.svelte';
 
 const root = document.documentElement;
 const CYAN = 'rgb(0, 231, 255)';
@@ -745,7 +751,7 @@ describe('Talks (U7)', () => {
 	const rows = () => Array.from(document.querySelectorAll<HTMLElement>('[data-given]'));
 	const row = (id: string) => document.querySelector<HTMLElement>(`[data-given="${id}"]`)!;
 	// The talks that are given in English: their titles stay English on the Dutch page.
-	const ENGLISH_OFFERS = ['php-2005-called', 'frontend-love', 'services-pocket'];
+	const ENGLISH_OFFERS = ['php-2005-called', 'frontend-love'];
 
 	it('is a chip labelled by its h2, registered as U7', async () => {
 		const screen = await render(Talks, {});
@@ -864,6 +870,39 @@ describe('Talks (U7)', () => {
 			expect(title('flutter-frontmania')).toBe('Flutter-talk');
 		});
 
+		it('shows the Services talk as the talk of Remi Appels, with the Flutter demo in it', async () => {
+			await render(Talks, {});
+			const el = row('services-join-belgie');
+			expect(el.querySelector('.title')?.textContent).toBe(
+				'Flutter-demo in de talk Services down to your pocket van Remi Appels'
+			);
+			// Only the title of that talk is English, and it is a quotation.
+			expect(el.querySelectorAll('[lang]')).toHaveLength(1);
+			expect(el.querySelector('q')?.getAttribute('lang')).toBe('en');
+			expect(el.querySelector('.event')?.textContent).toContain('JOIN België');
+			expect(el.querySelector('time')?.getAttribute('datetime')).toBe('2022-10-04');
+			// It is no offer of his own.
+			expect(document.querySelector('[data-offer="services-pocket"]')).toBeNull();
+			expect(document.querySelector('[data-offer]')?.textContent).not.toContain('Remi Appels');
+		});
+
+		it('writes the Services talk in English on the English page, with no language marks', async () => {
+			setLocale('en');
+			await render(Talks, {});
+			const el = row('services-join-belgie');
+			expect(el.querySelector('.title')?.textContent).toBe(
+				'Flutter demo in the talk Services down to your pocket by Remi Appels'
+			);
+			expect(el.querySelector('q')?.textContent).toBe('Services down to your pocket');
+			expect(el.querySelectorAll('[lang]')).toHaveLength(0);
+		});
+
+		it('splits a title around the place of the talk quoted in it', () => {
+			expect(splitTalkTitle('Demo in {talk} van Remi')).toEqual(['Demo in ', ' van Remi']);
+			expect(splitTalkTitle('Demo in {talk}')).toEqual(['Demo in ', '']);
+			expect(splitTalkTitle('Geen plek')).toEqual(['Geen plek', '']);
+		});
+
 		it('gives the date as a machine-readable time', async () => {
 			await render(Talks, {});
 			expect(row('flutter-frontmania').querySelector('time')?.getAttribute('datetime')).toBe(
@@ -946,9 +985,10 @@ describe('Talks (U7)', () => {
 				const lang = row(g.id).querySelector('.title')?.getAttribute('lang');
 				expect(lang, g.id).toBe(ENGLISH_OFFERS.includes(g.offerId ?? '') ? 'en' : null);
 			}
+			// A title of its own is in the language of the page, except for the talk quoted in it.
 			for (const el of document.querySelectorAll('section#talks [lang]')) {
 				expect(el.getAttribute('lang')).toBe('en');
-				expect(el.classList.contains('title')).toBe(true);
+				expect(el.classList.contains('title') || el.tagName === 'Q').toBe(true);
 			}
 		});
 
@@ -957,7 +997,7 @@ describe('Talks (U7)', () => {
 			expect(offer('frontend-love').querySelector('[lang="en"]')?.textContent).toBe(
 				'Falling in Love with Front-end all over again'
 			);
-			expect(row('services-join-belgie').querySelector('[lang="en"]')?.textContent).toBe(
+			expect(row('services-join-belgie').querySelector('q[lang="en"]')?.textContent).toBe(
 				'Services down to your pocket'
 			);
 			// The event next to it is a name in Dutch, on a Dutch page.

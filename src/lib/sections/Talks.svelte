@@ -45,6 +45,12 @@
 		return facts;
 	}
 
+	/** A title around the place of the talk quoted in it: [before, after]. No place: [title, ""]. */
+	export function splitTalkTitle(title: string): [string, string] {
+		const [before, after = ''] = title.split('{talk}');
+		return [before, after];
+	}
+
 	/** The line under an offer, in two pieces around the date, so that the date can be a <time>. */
 	export function timesParts(times: Talks['labels']['times'], count: number): [string, string] {
 		const template = (count === 1 ? times.one : times.many).replace('{count}', String(count));
@@ -66,11 +72,31 @@
 	const given = newestGivenFirst(content.given);
 	const offers = new Map(content.offers.map((offer) => [offer.id, offer]));
 
+	interface RowTitle {
+		before: string;
+		/** The talk of someone else quoted in the title, with the language to mark it with. */
+		quote?: { text: string; lang?: Locale };
+		after: string;
+		/** The language to mark the whole title with. */
+		lang?: Locale;
+	}
+
 	/** What an occurrence is called: its own title, or the title of the offer it belongs to. */
-	function titleOf(talk: TalkGiven): { text: string; lang?: Locale } {
-		if (talk.title !== undefined) return { text: talk.title };
+	function titleOf(talk: TalkGiven): RowTitle {
+		if (talk.title !== undefined) {
+			const [before, after] = splitTalkTitle(talk.title);
+			const quote = talk.talk && {
+				text: talk.talk.title,
+				lang: foreignTitleLang(talk.talk, locale)
+			};
+			return { before, quote: talk.title.includes('{talk}') ? quote : undefined, after };
+		}
 		const offer = talk.offerId ? offers.get(talk.offerId) : undefined;
-		return offer ? { text: offer.title, lang: foreignTitleLang(offer, locale) } : { text: '' };
+		return {
+			before: offer?.title ?? '',
+			after: '',
+			lang: offer && foreignTitleLang(offer, locale)
+		};
 	}
 </script>
 
@@ -121,7 +147,10 @@
 				<li data-given={talk.id}>
 					<time datetime={talk.date}>{formatDay(talk.date, locale)}</time>
 					<span class="what">
-						<span class="title" lang={title.lang}>{title.text}</span>
+						<span class="title" lang={title.lang}
+							>{title.before}{#if title.quote}<q lang={title.quote.lang}>{title.quote.text}</q
+								>{title.after}{/if}</span
+						>
 						{#if talk.event}
 							<span class="sr-only">, </span>
 							<span class="event">

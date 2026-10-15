@@ -172,10 +172,16 @@ export interface TalkGiven {
 	event?: string;
 	/**
 	 * What this occurrence was called, when that differs from the offer (a training that was an
-	 * occurrence of the workshop). Written in the language of the page: an English title belongs
-	 * on the offer, with `lang: 'en'`.
+	 * occurrence of the workshop, a demo in the talk of someone else). Written in the language of
+	 * the page: an English title belongs on the offer, with `lang: 'en'`. It holds "{talk}" where
+	 * `talk` goes.
 	 */
 	title?: string;
+	/**
+	 * The talk of someone else that this was a part of, quoted in `title` at "{talk}". It keeps its
+	 * own title in both locales, and `lang` is the language of that title, so the page can mark it.
+	 */
+	talk?: { title: string; lang: Locale };
 	/** Page of the event. A link is shown only when this exists. */
 	url?: string;
 }

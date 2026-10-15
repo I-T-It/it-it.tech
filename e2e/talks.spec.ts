@@ -7,7 +7,6 @@ const scheme = ['mail', 'to'].join('');
 const OFFERS = [
 	'php-2005-called',
 	'frontend-love',
-	'services-pocket',
 	'flutter-talk',
 	'flutter-workshop',
 	'svelte-talk'
@@ -48,8 +47,9 @@ test.describe('talks and workshops', () => {
 	test('marks the English titles on the Dutch page and nothing else', async ({ page }) => {
 		await page.goto('./');
 		const marked = page.locator('section#talks [lang]');
-		// Three English talks in the catalogue, and the four times they were given.
-		await expect(marked).toHaveCount(3 + 4);
+		// Two English talks in the catalogue, the three times they were given, and the title of the
+		// talk of Remi Appels that is quoted in the history.
+		await expect(marked).toHaveCount(2 + 3 + 1);
 		for (const lang of await marked.evaluateAll((els) =>
 			els.map((el) => el.getAttribute('lang'))
 		)) {

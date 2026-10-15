@@ -81,7 +81,7 @@ describe('NL and EN parity', () => {
 	});
 
 	it('has the same talks, competences, education and languages', () => {
-		expect(nl.talks.offers).toHaveLength(6);
+		expect(nl.talks.offers).toHaveLength(5);
 		expect(nl.talks.given).toHaveLength(9);
 		expect(nl.competences.items).toHaveLength(4);
 		const offer = (o: TalkOffer) => [
@@ -98,7 +98,9 @@ describe('NL and EN parity', () => {
 			g.date,
 			g.url,
 			g.event === undefined,
-			g.title === undefined
+			g.title === undefined,
+			g.talk?.title,
+			g.talk?.lang
 		];
 		expect(en.talks.given.map(given)).toEqual(nl.talks.given.map(given));
 		expect(en.competences.items.map((c) => c.id)).toEqual(nl.competences.items.map((c) => c.id));
@@ -136,7 +138,7 @@ describe('NL and EN parity', () => {
 			/jobs\[\d+\]\.tech\[\d+\]$/.test(path) ||
 			/groups\[\d+\]\.(title|skills\[\d+\]\.title)$/.test(path) ||
 			/^talks\.offers\[\d+\]\.title$/.test(path) ||
-			/^talks\.given\[\d+\]\.event$/.test(path) ||
+			/^talks\.given\[\d+\]\.(event|talk\.title)$/.test(path) ||
 			/^talks\.labels\.kind\.(talk|workshop)$/.test(path) ||
 			/education\[\d+\]\.institution$/.test(path) ||
 			/^contact\.(title|labels\.(linkedin|github))$/.test(path) ||
@@ -417,7 +419,6 @@ describe('talks', () => {
 			expect(c.talks.offers.map((o) => [o.id, o.kind, o.lang])).toEqual([
 				['php-2005-called', 'talk', 'en'],
 				['frontend-love', 'talk', 'en'],
-				['services-pocket', 'talk', 'en'],
 				['flutter-talk', 'talk', 'nl'],
 				['flutter-workshop', 'workshop', 'nl'],
 				['svelte-talk', 'talk', 'nl']
@@ -452,6 +453,33 @@ describe('talks', () => {
 			// Every offer of the seed was given at least once; the history is where it comes from.
 			const used = new Set(c.talks.given.map((g) => g.offerId));
 			for (const id of offerIds) expect(used.has(id), id).toBe(true);
+		}
+	});
+
+	it('shows the Services talk as the talk of someone else, with a Flutter demo in it', () => {
+		for (const [, c] of both) {
+			// It is not an offer: Remi Appels gives the talk, the demo in it is taken from the workshop.
+			expect(c.talks.offers.map((o) => o.id)).not.toContain('services-pocket');
+			const given = c.talks.given.find((g) => g.id === 'services-join-belgie')!;
+			expect(given.offerId).toBeUndefined();
+			expect(given.date).toBe('2022-10-04');
+			expect(given.talk).toEqual({ title: 'Services down to your pocket', lang: 'en' });
+			expect(given.title).toContain('{talk}');
+			expect(given.title).toMatch(/Flutter/);
+			expect(given.title).toContain('Remi Appels');
+		}
+	});
+
+	it('has a talk of someone else exactly where the title has a place for it', () => {
+		for (const [, c] of both) {
+			for (const g of c.talks.given) {
+				expect(g.title?.includes('{talk}') ?? false, g.id).toBe(g.talk !== undefined);
+				if (g.talk) {
+					expect(g.talk.title.length, g.id).toBeGreaterThan(3);
+					expect(['nl', 'en'], g.id).toContain(g.talk.lang);
+					expect(g.title!.split('{talk}'), g.id).toHaveLength(2);
+				}
+			}
 		}
 	});
 

@@ -636,13 +636,6 @@ export const en: SiteContent = {
 				lang: 'en'
 			},
 			{
-				id: 'services-pocket',
-				kind: 'talk',
-				title: 'Services down to your pocket',
-				summary: 'Together with Remi Appels. On services that reach your pocket.',
-				lang: 'en'
-			},
-			{
 				id: 'flutter-talk',
 				kind: 'talk',
 				title: 'Flutter talk',
@@ -700,9 +693,10 @@ export const en: SiteContent = {
 			},
 			{
 				id: 'services-join-belgie',
-				offerId: 'services-pocket',
 				date: '2022-10-04',
 				event: 'JOIN Belgium',
+				title: 'Flutter demo in the talk {talk} by Remi Appels',
+				talk: { title: 'Services down to your pocket', lang: 'en' },
 				url: 'https://join.ordina-jworks.io/'
 			},
 			{
