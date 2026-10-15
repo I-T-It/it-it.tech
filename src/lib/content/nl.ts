@@ -27,12 +27,6 @@ export const nl: SiteContent = {
 	},
 
 	hero: {
-		lead: {
-			company:
-				'Als I.T. It bouw ik webapplicaties en apps en help ik bij computerproblemen, in de avonden en het weekend.',
-			personal:
-				'Ik werk overdag als developer en bouw in de avonden en het weekend projecten met mijn eigen bedrijf, I.T. It.'
-		},
 		cta: {
 			job: 'Zoek je een developer voor je team?',
 			freelance: 'Project voor I.T. It'

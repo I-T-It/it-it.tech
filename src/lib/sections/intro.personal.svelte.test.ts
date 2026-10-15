@@ -72,7 +72,7 @@ afterEach(async () => {
 const hero = () => document.querySelector<HTMLElement>('section#hero')!;
 
 describe('Hero', () => {
-	it('is the page heading with the name, then the English tagline and the personal lead', async () => {
+	it('is the page heading with the name, then the English tagline, and no lead line', async () => {
 		const screen = await mount(Hero);
 		await expect
 			.element(screen.getByRole('heading', { level: 1 }))
@@ -81,18 +81,8 @@ describe('Hero', () => {
 			(el) => el.textContent?.trim() === 'Professional Computer Nerd'
 		);
 		expect(tagline?.getAttribute('lang')).toBe('en');
-		await expect
-			.element(screen.getByText(content.nl.hero.lead.personal, { exact: true }))
-			.toBeVisible();
-		expect(hero().textContent).not.toContain(content.nl.hero.lead.company);
-	});
-
-	it('has the English lead on the English page', async () => {
-		setLocale('en');
-		const screen = await mount(Hero);
-		await expect
-			.element(screen.getByText(content.en.hero.lead.personal, { exact: true }))
-			.toBeVisible();
+		// The tagline says what he does; the personal page has no lead line either.
+		expect(hero().querySelector('.lead')).toBeNull();
 	});
 
 	for (const locale of ['nl', 'en'] as const) {
@@ -323,7 +313,7 @@ describe('Hero focal point', () => {
 		await page.viewport(1280, 720);
 		await mount(Hero, true);
 		const frame = socket()!.el.getBoundingClientRect();
-		expect(frame.width).toBeGreaterThanOrEqual(220);
+		expect(frame.width).toBeGreaterThanOrEqual(280);
 		const box = hero().getBoundingClientRect();
 		expect(box.height).toBeCloseTo(720, 0);
 	});
@@ -364,7 +354,7 @@ describe('Hero size', () => {
 		expect(box.height).toBeGreaterThan(256);
 		expect(hero().scrollHeight).toBeLessThanOrEqual(hero().clientHeight);
 		for (const part of hero().querySelectorAll(
-			'h1, .tagline, .lead, a.scroll-indicator, .socket'
+			'h1, .tagline, .follow, a.scroll-indicator, .socket'
 		)) {
 			expect(part.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom + 0.5);
 		}
@@ -538,7 +528,7 @@ describe('the page together', () => {
 			const root = document.documentElement;
 			expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
 			const box = hero().getBoundingClientRect();
-			for (const part of hero().querySelectorAll('h1, .tagline, .lead, a.scroll-indicator')) {
+			for (const part of hero().querySelectorAll('h1, .tagline, .follow, a.scroll-indicator')) {
 				expect(part.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom + 0.5);
 			}
 		} finally {

@@ -100,16 +100,18 @@ describe('Hero', () => {
 		await expect.element(screen.getByText('Professional Computer Nerd')).toBeVisible();
 	});
 
-	for (const locale of ['nl', 'en'] as const) {
-		it(`shows the company lead line in ${locale}`, async () => {
-			setLocale(locale);
-			const screen = await mount(Hero);
-			await expect
-				.element(screen.getByText(content[locale].hero.lead.company, { exact: true }))
-				.toBeVisible();
-			expect(hero().textContent).not.toContain(content[locale].hero.lead.personal);
-		});
-	}
+	it('has no lead line: the name, the tagline and the handle say who he is', async () => {
+		await mount(Hero);
+		expect(hero().querySelector('.lead')).toBeNull();
+		// What is left of the text block, top to bottom.
+		const block = obstacles()[0];
+		const parts = Array.from(block.children).map((el) =>
+			el.tagName === 'H1'
+				? 'h1'
+				: ['rule', 'tagline', 'follow', 'profiles'].find((name) => el.classList.contains(name))
+		);
+		expect(parts).toEqual(['h1', 'rule', 'tagline', 'follow', 'profiles']);
+	});
 
 	for (const locale of ['nl', 'en'] as const) {
 		it(`says where to follow him online, with the handle set apart, in ${locale}`, async () => {
@@ -126,10 +128,10 @@ describe('Hero', () => {
 			expect(getComputedStyle(handle).fontFamily).toContain('Fira Code');
 			// Text, not a link: the hero stays free of anything to click but the indicator.
 			expect(follow.querySelector('a')).toBeNull();
-			// It sits in the block the traces keep out of, under the lead line.
+			// It sits in the block the traces keep out of, under the tagline.
 			expect(obstacles()[0].contains(follow)).toBe(true);
-			const lead = hero().querySelector('.lead')!.getBoundingClientRect();
-			expect(follow.getBoundingClientRect().top).toBeGreaterThanOrEqual(lead.bottom);
+			const tagline = hero().querySelector('.tagline')!.getBoundingClientRect();
+			expect(follow.getBoundingClientRect().top).toBeGreaterThanOrEqual(tagline.bottom);
 		});
 	}
 
@@ -286,7 +288,7 @@ describe('Hero socket and obstacle', () => {
 		expect(list).toHaveLength(1);
 		const block = list[0];
 		expect(block.contains(hero().querySelector('h1'))).toBe(true);
-		expect(block.querySelector('.lead')).not.toBeNull();
+		expect(block.querySelector('.tagline')).not.toBeNull();
 		// The socket and the text are different elements: the socket keeps its own clearance.
 		expect(block.contains(socket()!.el)).toBe(false);
 	});
@@ -338,9 +340,9 @@ describe('Hero power-up', () => {
 		}
 	});
 
-	it('never animates the text: the name, tagline and lead are there from the first frame', async () => {
+	it('never animates the text: the name, tagline and handle line are there from the first frame', async () => {
 		await mount(Hero);
-		for (const selector of ['h1', '.tagline', '.lead']) {
+		for (const selector of ['h1', '.tagline', '.follow']) {
 			const el = hero().querySelector<HTMLElement>(selector)!;
 			expect(el.getAnimations(), selector).toHaveLength(0);
 			expect(getComputedStyle(el).opacity, selector).toBe('1');
@@ -395,7 +397,7 @@ describe('Hero size', () => {
 		const box = hero().getBoundingClientRect();
 		expect(box.height).toBeGreaterThan(256);
 		expect(hero().scrollHeight).toBeLessThanOrEqual(hero().clientHeight);
-		for (const part of hero().querySelectorAll('h1, .tagline, .lead, a.scroll-indicator, svg')) {
+		for (const part of hero().querySelectorAll('h1, .tagline, .follow, a.scroll-indicator, svg')) {
 			expect(part.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom + 0.5);
 		}
 		const root = document.documentElement;

@@ -26,12 +26,6 @@ export const en: SiteContent = {
 	},
 
 	hero: {
-		lead: {
-			company:
-				'As I.T. It I build web applications and apps and help with computer problems, in the evenings and at weekends.',
-			personal:
-				'I work as a developer by day, and in the evenings and at weekends I build projects with my own company, I.T. It.'
-		},
 		cta: {
 			job: 'Looking for a developer for your team?',
 			freelance: 'Project for I.T. It'

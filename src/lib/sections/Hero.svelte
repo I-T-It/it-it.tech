@@ -12,7 +12,6 @@
 	import ScrollIndicator from '#lib/components/ScrollIndicator.svelte';
 
 	const content = getContent(getLocale());
-	const lead = site === 'company' ? content.hero.lead.company : content.hero.lead.personal;
 
 	/**
 	 * The photo's footprint: an 11 by 11 grid with pads round the outside and the photo in the
@@ -96,7 +95,6 @@
 			<h1 id="hero-title">{content.profile.name}</h1>
 			<span class="rule" aria-hidden="true"></span>
 			<p class="tagline" lang="en">{content.profile.tagline}</p>
-			<p class="lead">{lead}</p>
 			<!-- The same name everywhere he is online, as in his talks. Text, not a link. -->
 			<p class="follow">{m.hero_follow()} <span class="handle">{company.githubHandle}</span></p>
 			<!-- The profiles under that name. The address of each is in content/profiles.ts; one whose address is still TODO is left out. -->
@@ -178,11 +176,11 @@
 
 	/*
 	 * The photo in its footprint, and the focal point of the personal page: a square as big as the
-	 * window allows, up to 26rem. 100svh - 31rem is what the text block, the corridor and the scroll
+	 * window allows, up to 26rem. 100svh - 27rem is what the text block, the corridor and the scroll
 	 * indicator leave of the window, so the hero stays one window high; on a phone the width wins.
 	 */
 	.photo-socket {
-		--size: clamp(10rem, min(42vw, calc(100svh - 31rem)), 26rem);
+		--size: clamp(10rem, min(48vw, calc(100svh - 27rem)), 26rem);
 		width: var(--size);
 		height: var(--size);
 	}
@@ -346,17 +344,9 @@
 		background: var(--silk);
 	}
 
-	.lead {
-		margin: 1rem 0 0;
-		max-width: 36rem;
-		color: var(--ink-muted);
-		font-size: 1.125rem;
-		text-wrap: pretty;
-	}
-
-	/* One line under the lead, like a note on a drawing: small, muted, the handle in the display face. */
+	/* One line under the tagline, like a note on a drawing: small, muted, the handle in the display face. */
 	.follow {
-		margin: 0.5rem 0 0;
+		margin: 1rem 0 0;
 		color: var(--ink-muted);
 		font-size: var(--text-small);
 	}

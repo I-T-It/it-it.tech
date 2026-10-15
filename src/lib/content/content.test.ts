@@ -100,11 +100,10 @@ describe('NL and EN parity', () => {
 		expect(en.experience.jobs.map(facts)).toEqual(nl.experience.jobs.map(facts));
 	});
 
-	it('has both lead lines, both CTA labels and both page metas in each locale', () => {
+	it('has both CTA labels and both page metas in each locale, and no hero lead line', () => {
 		for (const [, c] of both) {
-			expect(c.hero.lead.company.length).toBeGreaterThan(20);
-			expect(c.hero.lead.personal.length).toBeGreaterThan(20);
-			expect(c.hero.lead.company).not.toBe(c.hero.lead.personal);
+			// The tagline "Professional Computer Nerd" says what he does; a lead line repeated it.
+			expect('lead' in c.hero).toBe(false);
 			expect(c.hero.cta.job.length).toBeGreaterThan(5);
 			expect(c.hero.cta.freelance.length).toBeGreaterThan(5);
 			expect(c.meta.company.title.length).toBeGreaterThan(10);
@@ -422,12 +421,11 @@ describe('variant copy', () => {
 	it('names what I.T. It takes on, without tying it to a tech stack', () => {
 		for (const [, c] of both) {
 			expect(c.availability.freelance.takesOn.length).toBeGreaterThanOrEqual(4);
-			// Robbin is not tied to Laravel or Svelte: the chip, the company lead and the meta say
-			// that the solution is found together, and none of them lists a stack.
+			// Robbin is not tied to Laravel or Svelte: the chip and the company meta say that the
+			// solution is found together, and none of them lists a stack.
 			const copy = [
 				...c.availability.freelance.body,
 				...c.availability.freelance.takesOn,
-				c.hero.lead.company,
 				c.meta.company.title,
 				c.meta.company.description
 			].join(' ');
@@ -446,9 +444,7 @@ describe('variant copy', () => {
 		expect(help(en)).toMatch(/printer/);
 		expect(help(en)).toMatch(/email/);
 		expect(help(en)).toMatch(/older people/);
-		// The company page says it up front too, and the meta mentions it.
-		expect(nl.hero.lead.company).toMatch(/computer/);
-		expect(en.hero.lead.company).toMatch(/computer/);
+		// The company meta mentions it too.
 		expect(nl.meta.company.description).toMatch(/computer/);
 		expect(en.meta.company.description).toMatch(/computer/);
 	});
@@ -468,8 +464,6 @@ describe('variant copy', () => {
 			expect(c.meta.personal.title).toContain('I.T. It');
 			expect(c.meta.personal.description).toContain('I.T. It');
 			expect(c.meta.company.description).toContain('I.T. It');
-			expect(c.hero.lead.company).toContain('I.T. It');
-			expect(c.hero.lead.personal).toContain('I.T. It');
 		}
 	});
 
