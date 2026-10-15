@@ -71,7 +71,7 @@ export const nl: SiteContent = {
 	about: {
 		title: 'Over mij',
 		paragraphs: [
-			'Ik ben developer met de meeste expertise in de backend. De frontend en devops vind ik ook leuk.',
+			'Ik ben developer met de meeste expertise in de backend. Ik heb ook ervaring met frontend en devops en kan die taken zelf oppakken.',
 			'Ik programmeer sinds mijn elfde. Die ervaring gebruik ik om je project en mijn teamgenoten een stap verder te brengen.',
 			'Ik denk niet in problemen maar in uitdagingen en creatieve oplossingen, dus er is weinig dat ik niet wil bouwen.'
 		]

@@ -70,7 +70,7 @@ export const en: SiteContent = {
 	about: {
 		title: 'About me',
 		paragraphs: [
-			'I am a developer with most of my expertise in the backend. I also enjoy the frontend and devops.',
+			'I am a developer with most of my expertise in the backend. I also have experience with frontend and devops and can take on that work myself.',
 			'I have been programming since I was eleven. I use that experience to take your project and my teammates a step further.',
 			'I think in challenges and creative solutions, not in problems, so there is little I would not want to build.'
 		]
