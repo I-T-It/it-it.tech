@@ -139,17 +139,77 @@ export interface Skills extends SectionHead {
 	};
 }
 
-/** One entry in U7. A link is shown only when `url` exists. */
-export interface Talk {
+/** A talk or workshop that is ready to give: one entry of the catalogue in U7. */
+export interface TalkOffer {
 	id: string;
-	date: YearMonth;
+	kind: 'talk' | 'workshop';
+	/**
+	 * Title of the talk. A talk given in English keeps its English title in both locales; any
+	 * other title is translated.
+	 */
 	title: string;
+	/** Two sentences at most, in the language of the page. */
+	summary: string;
+	/** Free text, e.g. "45 minuten". Left out until it is known. */
+	duration?: string;
+	/** Free text, e.g. "Developers". Left out until it is known. */
+	audience?: string;
+	/**
+	 * The language the talk is given in. The Dutch page marks the title `lang="en"` when this is
+	 * `en`, so a screen reader switches voice (WCAG 3.1.2).
+	 */
+	lang: Locale;
+}
+
+/** One time a talk or workshop was given: one entry of the history in U7. */
+export interface TalkGiven {
+	id: string;
+	/** The offer this was an occurrence of. Without one, `title` says what it was. */
+	offerId?: string;
+	/** A day ("2023-03-14") or a month ("2023-03"). */
+	date: YearMonth;
+	/** Where it was given: a meetup, a conference or a company. Left out where it is not known. */
+	event?: string;
+	/**
+	 * What this occurrence was called, when that differs from the offer (a training that was an
+	 * occurrence of the workshop). Written in the language of the page: an English title belongs
+	 * on the offer, with `lang: 'en'`.
+	 */
+	title?: string;
+	/** Page of the event. A link is shown only when this exists. */
 	url?: string;
 }
 
 export interface Talks extends SectionHead {
-	/** Newest first. */
-	talks: Talk[];
+	/** The catalogue: what is ready to give. */
+	offers: TalkOffer[];
+	/** The history: newest first. */
+	given: TalkGiven[];
+	labels: {
+		/** h3 of the catalogue, e.g. "Klaar om te geven". */
+		offers: string;
+		/** h3 of the history, e.g. "Gegeven". */
+		given: string;
+		kind: Record<TalkOffer['kind'], string>;
+		/** The name of a language, for the `lang` of an offer. */
+		language: Record<Locale, string>;
+		facts: { language: string; duration: string; audience: string };
+		times: {
+			/** Contains "{last}", the date of the one time it was given. */
+			one: string;
+			/** Contains "{count}" and "{last}", the date of the most recent time. */
+			many: string;
+		};
+		book: {
+			/** Label of the mail link on the company build, one per kind. */
+			talk: string;
+			workshop: string;
+			/** Label of the link to I.T. It on the personal build. */
+			company: string;
+		};
+		/** Subject of the mail, contains "{title}". Not a secret; the address is. */
+		emailSubject: string;
+	};
 }
 
 export interface Education {

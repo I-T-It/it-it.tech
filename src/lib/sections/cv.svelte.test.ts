@@ -9,7 +9,21 @@ import { overwriteGetLocale } from '#lib/paraglide/runtime.js';
 import EducationLanguages from './EducationLanguages.svelte';
 import Experience, { newestFirst } from './Experience.svelte';
 import Skills, { sortSkills } from './Skills.svelte';
-import Talks, { foreignPhrase, newestTalksFirst } from './Talks.svelte';
+import Talks, {
+	bookingSubject,
+	foreignTitleLang,
+	newestGivenFirst,
+	offerFacts,
+	offerStats
+} from './Talks.svelte';
+
+// The talks book by mail on the company build; the personal build is in talks.personal.svelte.test.ts.
+// The variant is a build-time constant, so the mock holds what the sections read (importActual does
+// not load site.ts in browser mode).
+vi.mock('../site.js', () => ({
+	site: 'company',
+	COMPANY_SITE_URL: 'https://company.example/'
+}));
 
 const root = document.documentElement;
 const CYAN = 'rgb(0, 231, 255)';
@@ -740,14 +754,12 @@ describe('Skills (U6)', () => {
 
 describe('Talks (U7)', () => {
 	const talks = (locale: Locale = 'nl') => getContent(locale).talks;
-	const items = () => Array.from(document.querySelectorAll<HTMLElement>('[data-talk]'));
-	const item = (id: string) => document.querySelector<HTMLElement>(`[data-talk="${id}"]`)!;
-	const ENGLISH_TITLES = [
-		'php-2005-called',
-		'frontend-js-eindhoven',
-		'frontend-festival',
-		'services-join-belgie'
-	];
+	const offers = () => Array.from(document.querySelectorAll<HTMLElement>('[data-offer]'));
+	const offer = (id: string) => document.querySelector<HTMLElement>(`[data-offer="${id}"]`)!;
+	const rows = () => Array.from(document.querySelectorAll<HTMLElement>('[data-given]'));
+	const row = (id: string) => document.querySelector<HTMLElement>(`[data-given="${id}"]`)!;
+	// The talks that are given in English: their titles stay English on the Dutch page.
+	const ENGLISH_OFFERS = ['php-2005-called', 'frontend-love', 'services-pocket'];
 
 	it('is a chip labelled by its h2, registered as U7', async () => {
 		const screen = await render(Talks, {});
@@ -758,18 +770,37 @@ describe('Talks (U7)', () => {
 		await expect.element(screen.getByText(talks().intro!)).toBeVisible();
 	});
 
-	it('lists every talk, newest first, with its date', async () => {
+	it('is one chip in two parts: what is ready to give, then when it was given', async () => {
 		await render(Talks, {});
-		expect(items().map((el) => el.dataset.talk)).toEqual(talks().talks.map((t) => t.id));
-		const dates = items().map((el) => el.querySelector('time')!.getAttribute('datetime')!);
+		expect(document.querySelectorAll('section#talks')).toHaveLength(1);
+		const headings = Array.from(document.querySelectorAll('section#talks h3')).map(
+			(h) => h.textContent
+		);
+		expect(headings).toEqual([talks().labels.offers, talks().labels.given]);
+		expect(headings).toEqual(['Klaar om te geven', 'Gegeven']);
+		const [catalogue, history] = Array.from(document.querySelectorAll('section#talks h3'));
+		// Each list sits under its own heading: the offers between the two, the history after.
+		const { DOCUMENT_POSITION_FOLLOWING: after, DOCUMENT_POSITION_PRECEDING: before } = Node;
+		expect(catalogue.compareDocumentPosition(history) & after).toBeTruthy();
+		for (const el of offers()) {
+			expect(catalogue.compareDocumentPosition(el) & after).toBeTruthy();
+			expect(history.compareDocumentPosition(el) & before).toBeTruthy();
+		}
+		for (const el of rows()) expect(history.compareDocumentPosition(el) & after).toBeTruthy();
+	});
+
+	it('lists every occurrence, newest first, with its date', async () => {
+		await render(Talks, {});
+		expect(rows().map((el) => el.dataset.given)).toEqual(talks().given.map((g) => g.id));
+		const dates = rows().map((el) => el.querySelector('time')!.getAttribute('datetime')!);
 		expect(dates).toEqual([...dates].sort().reverse());
-		expect(item('php-2005-called').querySelector('time')?.textContent).toBe('21 jun 2024');
-		expect(item('flutter-frontmania').querySelector('time')?.textContent).toBe('5 okt 2022');
+		expect(row('php-2005-called').querySelector('time')?.textContent).toBe('21 jun 2024');
+		expect(row('flutter-frontmania').querySelector('time')?.textContent).toBe('5 okt 2022');
 	});
 
 	it('puts a list that arrives out of order right', () => {
-		const t = (id: string, date: string) => ({ id, title: id, date });
-		const sorted = newestTalksFirst([
+		const t = (id: string, date: string) => ({ id, offerId: id, date });
+		const sorted = newestGivenFirst([
 			t('a', '2022-04-13'),
 			t('b', '2024-06-21'),
 			t('c', '2022-04-13')
@@ -777,69 +808,174 @@ describe('Talks (U7)', () => {
 		expect(sorted.map((x) => x.id)).toEqual(['b', 'a', 'c']);
 	});
 
-	it('writes English dates on the English page', async () => {
+	it('writes English dates, labels and counts on the English page', async () => {
 		setLocale('en');
 		await render(Talks, {});
-		expect(item('php-2005-called').querySelector('time')?.textContent).toBe('21 Jun 2024');
+		expect(row('php-2005-called').querySelector('time')?.textContent).toBe('21 Jun 2024');
 		expect(document.querySelector('section#talks h2')?.textContent).toBe(talks('en').title);
+		expect(
+			Array.from(document.querySelectorAll('section#talks h3')).map((h) => h.textContent)
+		).toEqual(['Ready to give', 'Given']);
+		expect(offer('frontend-love').querySelector('.times')?.textContent).toBe(
+			'Given 2 times, most recently on 23 Aug 2023'
+		);
+		expect(offer('php-2005-called').querySelector('.times')?.textContent).toBe(
+			'Given once, on 21 Jun 2024'
+		);
+		expect(offer('flutter-workshop').querySelector('h4')?.textContent).toBe('Flutter workshop');
 	});
 
-	it('links a talk only when it has a url', async () => {
-		await render(Talks, {});
-		let linked = 0;
-		let plain = 0;
-		for (const talk of talks().talks) {
-			const a = item(talk.id).querySelector('a');
-			if (talk.url) {
-				linked++;
-				expect(a?.getAttribute('href')).toBe(talk.url);
-				expect(a?.textContent).toContain(talk.title);
-			} else {
-				plain++;
-				expect(a).toBeNull();
+	describe('history', () => {
+		it('links the event only when it has a url', async () => {
+			await render(Talks, {});
+			let linked = 0;
+			let plain = 0;
+			for (const g of talks().given) {
+				const a = row(g.id).querySelector('a');
+				if (g.url) {
+					linked++;
+					expect(a?.getAttribute('href'), g.id).toBe(g.url);
+					expect(a?.textContent, g.id).toContain(g.event);
+				} else {
+					plain++;
+					expect(a, g.id).toBeNull();
+				}
 			}
-		}
-		expect(linked).toBe(4);
-		expect(plain).toBe(5);
+			expect(linked).toBe(4);
+			expect(plain).toBe(5);
+		});
+
+		it('says that a link leaves the site, for screen readers only', async () => {
+			await render(Talks, {});
+			const link = row('frontend-festival').querySelector('a')!;
+			const notice = link.querySelector<HTMLElement>('.sr-only')!;
+			expect(notice.textContent).toContain('(externe site)');
+			expect(notice.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+			expect(link.hasAttribute('target')).toBe(false);
+		});
+
+		it('names the event of every occurrence that has one, and leaves the line out of the rest', async () => {
+			await render(Talks, {});
+			for (const g of talks().given) {
+				const event = row(g.id).querySelector('.event');
+				if (g.event) expect(event?.textContent, g.id).toContain(g.event);
+				else expect(event, g.id).toBeNull();
+			}
+			expect(row('frontend-festival').querySelector('.event')?.textContent).toContain(
+				'Frontend Festival'
+			);
+			expect(row('php-2005-called').querySelector('.event')).toBeNull();
+		});
+
+		it('shows the title of the offer, or the title of its own where the occurrence has one', async () => {
+			await render(Talks, {});
+			const title = (id: string) => row(id).querySelector('.title')?.textContent;
+			expect(title('frontend-festival')).toBe('Falling in Love with Front-end all over again');
+			expect(title('frontend-js-eindhoven')).toBe('Falling in Love with Front-end all over again');
+			expect(title('flutter-ordina-noord')).toBe('Flutter-workshop');
+			// The training is an occurrence of the Flutter workshop under its own name.
+			expect(title('flutter-ordina-belgie')).toBe('Flutter-training');
+			expect(title('flutter-frontmania')).toBe('Flutter-talk');
+		});
+
+		it('gives the date as a machine-readable time', async () => {
+			await render(Talks, {});
+			expect(row('flutter-frontmania').querySelector('time')?.getAttribute('datetime')).toBe(
+				'2022-10-05'
+			);
+		});
 	});
 
-	it('says that a link leaves the site, for screen readers only', async () => {
-		await render(Talks, {});
-		const link = item('frontend-festival').querySelector('a')!;
-		const notice = link.querySelector<HTMLElement>('.sr-only')!;
-		expect(notice.textContent).toContain('(externe site)');
-		expect(notice.getBoundingClientRect().width).toBeLessThanOrEqual(1);
-		expect(link.hasAttribute('target')).toBe(false);
-	});
+	describe('catalogue', () => {
+		it('lists every offer in the order of the content, titled by an h4 and told apart by kind', async () => {
+			await render(Talks, {});
+			expect(offers().map((el) => el.dataset.offer)).toEqual(talks().offers.map((o) => o.id));
+			for (const o of talks().offers) {
+				const el = offer(o.id);
+				expect(el.querySelector('h4')?.textContent, o.id).toBe(o.title);
+				expect(el.querySelector('.kind')?.textContent, o.id).toBe(talks().labels.kind[o.kind]);
+				expect(el.querySelector('.summary')?.textContent, o.id).toBe(o.summary);
+			}
+			expect(offer('flutter-workshop').querySelector('.kind')?.textContent).toBe('Workshop');
+			expect(offer('svelte-talk').querySelector('.kind')?.textContent).toBe('Talk');
+		});
 
-	it('keeps the title as the content has it, however it is marked up', async () => {
-		await render(Talks, {});
-		for (const talk of talks().talks) {
-			const title = item(talk.id).querySelector('.title')!;
-			expect(title.textContent).toBe(talk.title + (talk.url ? ' (externe site)' : ''));
-		}
+		it('names the language of every offer and shows no duration or audience yet', async () => {
+			await render(Talks, {});
+			const facts = (id: string) =>
+				Array.from(offer(id).querySelectorAll('.facts > div')).map((d) =>
+					[d.querySelector('dt')?.textContent, d.querySelector('dd')?.textContent].join(': ')
+				);
+			expect(facts('php-2005-called')).toEqual(['Taal: Engels']);
+			expect(facts('flutter-workshop')).toEqual(['Taal: Nederlands']);
+		});
+
+		it('adds the duration and the audience to the facts where an offer has them', () => {
+			const labels = talks().labels;
+			const base = { id: 'x', kind: 'talk', title: 'T', summary: 'S', lang: 'en' } as const;
+			expect(offerFacts(base, labels)).toEqual([{ label: 'Taal', value: 'Engels' }]);
+			expect(
+				offerFacts({ ...base, duration: '45 minuten', audience: 'Developers' }, labels)
+			).toEqual([
+				{ label: 'Taal', value: 'Engels' },
+				{ label: 'Duur', value: '45 minuten' },
+				{ label: 'Doelgroep', value: 'Developers' }
+			]);
+		});
+
+		it('says how often and when an offer was last given, in a time element', async () => {
+			await render(Talks, {});
+			const times = (id: string) => offer(id).querySelector('.times')!;
+			expect(times('php-2005-called').textContent).toBe('Eén keer gegeven, op 21 jun 2024');
+			expect(times('frontend-love').textContent).toBe('2 keer gegeven, laatst op 23 aug 2023');
+			expect(times('flutter-workshop').textContent).toBe('3 keer gegeven, laatst op 27 okt 2022');
+			expect(times('frontend-love').querySelector('time')?.getAttribute('datetime')).toBe(
+				'2023-08-23'
+			);
+		});
+
+		it('counts the occurrences of an offer and finds the last one', () => {
+			const g = (id: string, offerId: string | undefined, date: string) => ({ id, offerId, date });
+			const given = [
+				g('1', 'a', '2022-04-13'),
+				g('2', 'b', '2024-01-01'),
+				g('3', 'a', '2023-05-01'),
+				g('4', undefined, '2025-01-01')
+			];
+			expect(offerStats('a', given)).toEqual({ count: 2, last: '2023-05-01' });
+			expect(offerStats('b', given)).toEqual({ count: 1, last: '2024-01-01' });
+			// Never given: nothing to say, so the line is left out.
+			expect(offerStats('c', given)).toEqual({ count: 0 });
+		});
 	});
 
 	describe('English titles on the Dutch page', () => {
-		it('are marked lang="en" and nothing else is', async () => {
+		it('are marked lang="en" in the catalogue and the history, and nothing else is', async () => {
 			await render(Talks, {});
-			for (const talk of talks().talks) {
-				const spans = item(talk.id).querySelectorAll('[lang]');
-				expect(spans.length > 0, talk.id).toBe(ENGLISH_TITLES.includes(talk.id));
-				for (const span of spans) expect(span.getAttribute('lang')).toBe('en');
+			for (const o of talks().offers) {
+				const lang = offer(o.id).querySelector('.title')?.getAttribute('lang');
+				expect(lang, o.id).toBe(ENGLISH_OFFERS.includes(o.id) ? 'en' : null);
+			}
+			for (const g of talks().given) {
+				const lang = row(g.id).querySelector('.title')?.getAttribute('lang');
+				expect(lang, g.id).toBe(ENGLISH_OFFERS.includes(g.offerId ?? '') ? 'en' : null);
+			}
+			for (const el of document.querySelectorAll('section#talks [lang]')) {
+				expect(el.getAttribute('lang')).toBe('en');
+				expect(el.classList.contains('title')).toBe(true);
 			}
 		});
 
-		it('mark the English words and leave the Dutch around them alone', async () => {
+		it('mark the whole title, which is all English', async () => {
 			await render(Talks, {});
-			const span = (id: string) => item(id).querySelector('[lang="en"]')!.textContent;
-			expect(span('php-2005-called')).toBe('2005 Called! They Want Your Opinion About PHP Back!');
-			expect(span('frontend-js-eindhoven')).toBe('Falling in Love with Front-end all over again');
-			expect(span('frontend-festival')).toBe('Falling in Love with Front-end all over again');
-			expect(span('services-join-belgie')).toBe('Talk "Services down to your pocket"');
-			expect(item('frontend-festival').querySelector('.title')?.textContent).toContain(
-				'(talk op Frontend Festival)'
+			expect(offer('frontend-love').querySelector('[lang="en"]')?.textContent).toBe(
+				'Falling in Love with Front-end all over again'
 			);
+			expect(row('services-join-belgie').querySelector('[lang="en"]')?.textContent).toBe(
+				'Services down to your pocket'
+			);
+			// The event next to it is a name in Dutch, on a Dutch page.
+			expect(row('frontend-festival').querySelector('.event')?.hasAttribute('lang')).toBe(false);
 		});
 
 		it('are not marked on the English page, where the whole page is English', async () => {
@@ -848,30 +984,72 @@ describe('Talks (U7)', () => {
 			expect(document.querySelectorAll('section#talks [lang]')).toHaveLength(0);
 		});
 
-		it('are found by comparing the Dutch title with the English one', () => {
-			const same = '2005 Called! They Want Your Opinion About PHP Back!';
-			expect(foreignPhrase(same, same)).toBe(same);
-			expect(
-				foreignPhrase(
-					'Falling in Love with Front-end all over again (talk op Frontend Festival)',
-					'Falling in Love with Front-end all over again (talk at Frontend Festival)'
-				)
-			).toBe('Falling in Love with Front-end all over again');
-			expect(
-				foreignPhrase(
-					'Talk "Services down to your pocket" met Remi Appels op JOIN België',
-					'Talk "Services down to your pocket" with Remi Appels at JOIN Belgium'
-				)
-			).toBe('Talk "Services down to your pocket"');
-			// A Dutch title shares no run of words with its translation.
-			expect(
-				foreignPhrase('Workshop Flutter Ordina Noord', 'Flutter workshop at Ordina Noord')
-			).toBeUndefined();
-			expect(
-				foreignPhrase('Talk Flutter FrontMania', 'Flutter talk at FrontMania')
-			).toBeUndefined();
-			// A word or two in common is not a passage in another language.
-			expect(foreignPhrase('Talk Svelte nu', 'Talk Svelte now')).toBeUndefined();
+		it('are found from the language the talk is given in and the language of the page', () => {
+			const english = { lang: 'en' } as const;
+			const dutch = { lang: 'nl' } as const;
+			expect(foreignTitleLang(english, 'nl')).toBe('en');
+			expect(foreignTitleLang(english, 'en')).toBeUndefined();
+			// A talk given in Dutch has a translated title on the English page.
+			expect(foreignTitleLang(dutch, 'nl')).toBeUndefined();
+			expect(foreignTitleLang(dutch, 'en')).toBeUndefined();
+		});
+	});
+
+	describe('booking', () => {
+		// Built from parts: the address and the mail scheme are never written out (see CLAUDE.md).
+		const address = ['info', '@', 'it-it', '.', 'tech'].join('');
+		const scheme = ['mail', 'to'].join('') + ':';
+		const cta = (id: string) => offer(id).querySelector<HTMLAnchorElement>('a.email.cta')!;
+
+		it('gives every offer one protected email link, named by what it books', async () => {
+			await render(Talks, {});
+			for (const o of talks().offers) {
+				expect(offer(o.id).querySelectorAll('a'), o.id).toHaveLength(1);
+				expect(cta(o.id).textContent, o.id).toContain(talks().labels.book[o.kind]);
+			}
+			expect(cta('svelte-talk').textContent).toContain('Boek deze talk');
+			expect(cta('flutter-workshop').textContent).toContain('Boek deze workshop');
+		});
+
+		it('mails the address with the title of that talk in the subject, once mounted', async () => {
+			await render(Talks, {});
+			for (const o of talks().offers) {
+				await expect
+					.poll(() => cta(o.id).getAttribute('href'), { message: o.id })
+					.toBe(`${scheme}${address}?subject=${encodeURIComponent('Talk/workshop: ' + o.title)}`);
+			}
+		});
+
+		it('writes the subject in English with the English title on the English page', async () => {
+			setLocale('en');
+			await render(Talks, {});
+			await expect
+				.poll(() => cta('flutter-workshop').getAttribute('href'))
+				.toBe(
+					`${scheme}${address}?subject=${encodeURIComponent('Talk/workshop: Flutter workshop')}`
+				);
+			expect(cta('flutter-workshop').textContent).toContain('Book this workshop');
+		});
+
+		it('gives every offer an anchor, which the personal build links to', async () => {
+			await render(Talks, {});
+			for (const o of talks().offers) expect(offer(o.id).id, o.id).toBe(`offer-${o.id}`);
+		});
+
+		it('is an outline button in the green of the freelance path, not a filled one', async () => {
+			await render(Talks, {});
+			const link = cta('svelte-talk');
+			expect(link.classList.contains('cta-freelance')).toBe(true);
+			expect(link.classList.contains('cta-filled')).toBe(false);
+			expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(24);
+		});
+
+		it('fills the subject template with the title', () => {
+			expect(bookingSubject('Talk/workshop: {title}', 'Flutter-talk')).toBe(
+				'Talk/workshop: Flutter-talk'
+			);
+			// A title that holds a placeholder is not expanded a second time.
+			expect(bookingSubject('X: {title}', '{title}')).toBe('X: {title}');
 		});
 	});
 });
@@ -966,7 +1144,8 @@ describe('the four chips on one page', () => {
 				headings.filter((h) => h === 'H2'),
 				id
 			).toHaveLength(1);
-			expect(headings.includes('H4'), id).toBe(false);
+			// Only the talks have a level below the h3: the title of each talk on offer.
+			expect(headings.includes('H4'), id).toBe(id === 'talks');
 		}
 		expect(chips().map((c) => c.designator)).toEqual(['U5', 'U6', 'U7', 'U8']);
 	});

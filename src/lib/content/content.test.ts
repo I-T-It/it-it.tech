@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { en } from './en.js';
 import { getContent } from './index.js';
 import { nl } from './nl.js';
-import type { Job, SiteContent } from './types.js';
+import type { Job, SiteContent, TalkGiven, TalkOffer } from './types.js';
 
 const both: [string, SiteContent][] = [
 	['nl', nl],
@@ -81,11 +81,26 @@ describe('NL and EN parity', () => {
 	});
 
 	it('has the same talks, competences, education and languages', () => {
-		expect(nl.talks.talks).toHaveLength(9);
+		expect(nl.talks.offers).toHaveLength(6);
+		expect(nl.talks.given).toHaveLength(9);
 		expect(nl.competences.items).toHaveLength(4);
-		expect(en.talks.talks.map((t) => [t.id, t.date, t.url])).toEqual(
-			nl.talks.talks.map((t) => [t.id, t.date, t.url])
-		);
+		const offer = (o: TalkOffer) => [
+			o.id,
+			o.kind,
+			o.lang,
+			o.duration === undefined,
+			o.audience === undefined
+		];
+		expect(en.talks.offers.map(offer)).toEqual(nl.talks.offers.map(offer));
+		const given = (g: TalkGiven) => [
+			g.id,
+			g.offerId,
+			g.date,
+			g.url,
+			g.event === undefined,
+			g.title === undefined
+		];
+		expect(en.talks.given.map(given)).toEqual(nl.talks.given.map(given));
 		expect(en.competences.items.map((c) => c.id)).toEqual(nl.competences.items.map((c) => c.id));
 		expect(en.educationLanguages.education.map((e) => [e.id, e.year])).toEqual(
 			nl.educationLanguages.education.map((e) => [e.id, e.year])
@@ -116,11 +131,13 @@ describe('NL and EN parity', () => {
 		const enByPath = new Map(copy(en));
 		const sameAllowed = (path: string, value: string) =>
 			path.startsWith('profile.') ||
-			/\.id$/.test(path) ||
+			/\.(id|kind|lang|offerId)$/.test(path) ||
 			/jobs\[\d+\]\.(organisation|via|title)$/.test(path) ||
 			/jobs\[\d+\]\.tech\[\d+\]$/.test(path) ||
 			/groups\[\d+\]\.(title|skills\[\d+\]\.title)$/.test(path) ||
-			/talks\[\d+\]\.title$/.test(path) ||
+			/^talks\.offers\[\d+\]\.title$/.test(path) ||
+			/^talks\.given\[\d+\]\.event$/.test(path) ||
+			/^talks\.labels\.(kind\.(talk|workshop)|emailSubject)$/.test(path) ||
 			/education\[\d+\]\.institution$/.test(path) ||
 			/^contact\.(title|labels\.(linkedin|github))$/.test(path) ||
 			path === 'experience.labels.via' ||
@@ -378,23 +395,100 @@ describe('experience', () => {
 	});
 });
 
-describe('talks and education', () => {
-	it('has valid dates, newest first, and links only as valid https', () => {
+describe('talks', () => {
+	it('has valid dates in the history, newest first, and links only as valid https', () => {
 		for (const [, c] of both) {
-			const dates = c.talks.talks.map((t) => t.date);
+			const dates = c.talks.given.map((t) => t.date);
 			for (const d of dates) {
 				expect(d).toMatch(DATE);
 				expect(Number.isNaN(new Date(d).getTime())).toBe(false);
 				expect(d.slice(0, 7) <= EXPORT_MONTH).toBe(true);
 			}
 			expect(dates).toEqual([...dates].sort().reverse());
-			const urls = c.talks.talks.flatMap((t) => (t.url ? [t.url] : []));
+			const urls = c.talks.given.flatMap((t) => (t.url ? [t.url] : []));
 			expect(urls).toHaveLength(4);
 			for (const u of urls) expect(new URL(u).protocol).toBe('https:');
 			expect(new Set(urls).size).toBe(urls.length);
 		}
 	});
 
+	it('seeds the catalogue with every distinct talk and workshop of the history', () => {
+		for (const [, c] of both) {
+			expect(c.talks.offers.map((o) => [o.id, o.kind, o.lang])).toEqual([
+				['php-2005-called', 'talk', 'en'],
+				['frontend-love', 'talk', 'en'],
+				['services-pocket', 'talk', 'en'],
+				['flutter-talk', 'talk', 'nl'],
+				['flutter-workshop', 'workshop', 'nl'],
+				['svelte-talk', 'talk', 'nl']
+			]);
+		}
+	});
+
+	it('has unique ids, a summary on every offer and no empty optional field', () => {
+		for (const [, c] of both) {
+			const offerIds = c.talks.offers.map((o) => o.id);
+			expect(new Set(offerIds).size).toBe(offerIds.length);
+			const givenIds = c.talks.given.map((g) => g.id);
+			expect(new Set(givenIds).size).toBe(givenIds.length);
+			for (const o of c.talks.offers) {
+				expect(['talk', 'workshop']).toContain(o.kind);
+				expect(['nl', 'en']).toContain(o.lang);
+				expect(o.title.length).toBeGreaterThan(3);
+				expect(o.summary.length).toBeGreaterThan(20);
+				// An optional field is left out until it is known, never filled with a guess.
+				for (const field of [o.duration, o.audience]) expect(field?.length ?? 1).toBeGreaterThan(0);
+			}
+		}
+	});
+
+	it('points every occurrence at an offer, or gives it a title of its own', () => {
+		for (const [, c] of both) {
+			const offerIds = new Set(c.talks.offers.map((o) => o.id));
+			for (const g of c.talks.given) {
+				if (g.offerId !== undefined) expect(offerIds.has(g.offerId), g.id).toBe(true);
+				else expect(g.title?.length, g.id).toBeGreaterThan(3);
+			}
+			// Every offer of the seed was given at least once; the history is where it comes from.
+			const used = new Set(c.talks.given.map((g) => g.offerId));
+			for (const id of offerIds) expect(used.has(id), id).toBe(true);
+		}
+	});
+
+	it('keeps the title of an English talk as it is and translates the others', () => {
+		for (const o of nl.talks.offers) {
+			const english = en.talks.offers.find((x) => x.id === o.id)!;
+			if (o.lang === 'en') expect(english.title, o.id).toBe(o.title);
+			else expect(english.title, o.id).not.toBe(o.title);
+		}
+	});
+
+	it('has the labels the section needs, with their placeholders', () => {
+		for (const [, c] of both) {
+			const { labels } = c.talks;
+			expect(labels.offers.length).toBeGreaterThan(3);
+			expect(labels.given.length).toBeGreaterThan(3);
+			expect(labels.times.one).toContain('{last}');
+			expect(labels.times.many).toContain('{last}');
+			expect(labels.times.many).toContain('{count}');
+			expect(labels.emailSubject).toContain('{title}');
+			expect(labels.book.talk.length).toBeGreaterThan(3);
+			expect(labels.book.workshop.length).toBeGreaterThan(3);
+			expect(labels.book.company.length).toBeGreaterThan(3);
+			expect(Object.keys(labels.language).sort()).toEqual(['en', 'nl']);
+		}
+		expect(nl.talks.labels.offers).toBe('Klaar om te geven');
+		expect(nl.talks.labels.given).toBe('Gegeven');
+		expect(en.talks.labels.offers).toBe('Ready to give');
+		expect(en.talks.labels.given).toBe('Given');
+	});
+
+	it('has the mail subject of the plan for a talk, without an address in it', () => {
+		for (const [, c] of both) expect(c.talks.labels.emailSubject).toBe('Talk/workshop: {title}');
+	});
+});
+
+describe('education', () => {
 	it('has the course of the export', () => {
 		for (const [, c] of both) {
 			expect(c.educationLanguages.education).toHaveLength(1);

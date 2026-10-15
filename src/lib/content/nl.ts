@@ -621,58 +621,131 @@ export const nl: SiteContent = {
 	talks: {
 		title: 'Talks en workshops',
 		intro:
-			'Talks, workshops en trainingen over Flutter, Svelte, front-end en PHP, de nieuwste bovenaan.',
-		talks: [
+			'Talks en workshops over Flutter, Svelte, front-end en PHP: wat ik kan geven en waar ik ze al gegeven heb.',
+		offers: [
 			{
 				id: 'php-2005-called',
-				date: '2024-06-21',
-				title: '2005 Called! They Want Your Opinion About PHP Back!'
+				kind: 'talk',
+				title: '2005 Called! They Want Your Opinion About PHP Back!',
+				summary: 'Over PHP zoals het nu is, voor wie het nog van 2005 kent.',
+				lang: 'en'
+			},
+			{
+				id: 'frontend-love',
+				kind: 'talk',
+				title: 'Falling in Love with Front-end all over again',
+				summary: 'Over opnieuw plezier vinden in front-endwerk.',
+				lang: 'en'
+			},
+			{
+				id: 'services-pocket',
+				kind: 'talk',
+				title: 'Services down to your pocket',
+				summary: 'Samen met Remi Appels. Over services die tot in je broekzak komen.',
+				lang: 'en'
+			},
+			{
+				id: 'flutter-talk',
+				kind: 'talk',
+				title: 'Flutter-talk',
+				summary:
+					'Een talk over Flutter: vanuit één codebase bouw je apps voor meerdere platformen.',
+				lang: 'nl'
+			},
+			{
+				id: 'flutter-workshop',
+				kind: 'workshop',
+				title: 'Flutter-workshop',
+				summary:
+					'Een workshop waarin deelnemers zelf met Flutter bouwen. Ook gegeven als training.',
+				lang: 'nl'
+			},
+			{
+				id: 'svelte-talk',
+				kind: 'talk',
+				title: 'Svelte-talk',
+				summary:
+					'Een talk over Svelte, een front-endframework dat componenten bij het bouwen compileert.',
+				lang: 'nl'
+			}
+		],
+		given: [
+			{
+				id: 'php-2005-called',
+				offerId: 'php-2005-called',
+				date: '2024-06-21'
 			},
 			{
 				id: 'frontend-js-eindhoven',
+				offerId: 'frontend-love',
 				date: '2023-08-23',
-				title: 'Falling in Love with Front-end all over again (talk op JS Meetup Eindhoven)',
+				event: 'JS Meetup Eindhoven',
 				url: 'https://www.meetup.com/nl-NL/js-eindhoven/events/291205657/'
 			},
 			{
 				id: 'frontend-festival',
+				offerId: 'frontend-love',
 				date: '2023-04-13',
-				title: 'Falling in Love with Front-end all over again (talk op Frontend Festival)',
+				event: 'Frontend Festival',
 				url: 'https://frontendfestival.nl'
 			},
 			{
 				id: 'flutter-ordina-noord',
+				offerId: 'flutter-workshop',
 				date: '2022-10-27',
-				title: 'Workshop Flutter Ordina Noord'
+				event: 'Ordina Noord'
 			},
 			{
 				id: 'flutter-frontmania',
+				offerId: 'flutter-talk',
 				date: '2022-10-05',
-				title: 'Talk Flutter FrontMania',
+				event: 'FrontMania',
 				url: 'https://frontmania.com/'
 			},
 			{
 				id: 'services-join-belgie',
+				offerId: 'services-pocket',
 				date: '2022-10-04',
-				title: 'Talk "Services down to your pocket" met Remi Appels op JOIN België',
+				event: 'JOIN België',
 				url: 'https://join.ordina-jworks.io/'
 			},
 			{
 				id: 'flutter-ordina-belgie',
+				offerId: 'flutter-workshop',
 				date: '2022-09-19',
-				title: 'Training Flutter Ordina België'
+				event: 'Ordina België',
+				title: 'Flutter-training'
 			},
 			{
 				id: 'flutter-code-comedy',
+				offerId: 'flutter-workshop',
 				date: '2022-06-16',
-				title: 'Workshop Flutter Code&Comedy'
+				event: 'Code&Comedy'
 			},
 			{
 				id: 'svelte-nieuwegein',
+				offerId: 'svelte-talk',
 				date: '2022-04-13',
-				title: 'Talk Svelte FrontEnd Meetup Nieuwegein'
+				event: 'FrontEnd Meetup Nieuwegein'
 			}
-		]
+		],
+		labels: {
+			offers: 'Klaar om te geven',
+			given: 'Gegeven',
+			kind: { talk: 'Talk', workshop: 'Workshop' },
+			language: { nl: 'Nederlands', en: 'Engels' },
+			facts: { language: 'Taal', duration: 'Duur', audience: 'Doelgroep' },
+			times: {
+				one: 'Eén keer gegeven, op {last}',
+				many: '{count} keer gegeven, laatst op {last}'
+			},
+			book: {
+				talk: 'Boek deze talk',
+				workshop: 'Boek deze workshop',
+				company: 'Boek via I.T. It'
+			},
+			emailSubject: 'Talk/workshop: {title}'
+		}
 	},
 
 	educationLanguages: {
