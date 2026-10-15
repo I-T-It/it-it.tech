@@ -132,8 +132,10 @@ export interface Skills extends SectionHead {
 	labels: {
 		/** Contains "{level}" and "{max}", e.g. "niveau {level} van {max}". */
 		level: string;
-		/** Contains "{years}". */
+		/** Contains "{years}", e.g. "{years} years". */
 		years: string;
+		/** Same with the singular, used when the skill has 1 year, e.g. "{years} year". */
+		yearsOne: string;
 	};
 }
 

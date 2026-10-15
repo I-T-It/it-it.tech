@@ -1,4 +1,6 @@
 import prettier from 'eslint-config-prettier';
+import { execFileSync } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import js from '@eslint/js';
 import svelte from 'eslint-plugin-svelte';
@@ -8,8 +10,36 @@ import ts from 'typescript-eslint';
 
 const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
 
+/**
+ * Globs of the other git worktrees that sit inside this checkout. They are separate trees with
+ * their own lint run, so linting them from here only reports their work in progress.
+ * @returns {string[]}
+ */
+function nestedWorktreeGlobs() {
+	const root = realpathSync(import.meta.dirname);
+	let output;
+	try {
+		output = execFileSync('git', ['worktree', 'list', '--porcelain'], {
+			cwd: root,
+			encoding: 'utf8',
+			stdio: ['ignore', 'pipe', 'ignore']
+		});
+	} catch {
+		return []; // no git: nothing nested to skip
+	}
+	return output
+		.split('\n')
+		.filter((line) => line.startsWith('worktree '))
+		.map((line) => path.relative(root, line.slice('worktree '.length)))
+		.filter(
+			(relative) => relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)
+		)
+		.map((relative) => `${relative.split(path.sep).join('/')}/**`);
+}
+
 export default defineConfig(
 	includeIgnoreFile(gitignorePath),
+	{ ignores: nestedWorktreeGlobs() },
 	js.configs.recommended,
 	ts.configs.recommended,
 	svelte.configs.recommended,

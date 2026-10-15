@@ -18,8 +18,8 @@
 		"setup": "pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm exec svelte-kit sync",
 		"check": "node scripts/compile-paraglide.mjs && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "node scripts/compile-paraglide.mjs && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"lint": "prettier --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude --check . && eslint .",
-		"format": "prettier --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude --write .",
+		"lint": "node scripts/prettier.mjs --check . && eslint .",
+		"format": "node scripts/prettier.mjs --write .",
 		"test:unit": "vitest",
 		"test": "vitest --run",
 		"test:e2e": "playwright test"
