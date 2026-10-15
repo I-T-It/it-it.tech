@@ -252,8 +252,10 @@ describe('layoutBoard hero field', () => {
 	it('fills the open board between the rim buses with buses from the edges that end in vias', () => {
 		expect(fill.length).toBeGreaterThan(4);
 		for (const trace of fill) {
-			expect(onEdge(trace.points[0], area, board.width), trace.id).toBe(true);
-			expect(trace.startVia, trace.id).toBeUndefined();
+			const start = trace.points[0];
+			// From the bottom they start on vias below the hero, the rest on a window edge.
+			if (start.y > heroBottom) expect(trace.startVia, trace.id).toBe(true);
+			else expect(onEdge(start, area, board.width), trace.id).toBe(true);
 			expect(trace.end).toEqual({ kind: 'via' });
 		}
 	});
@@ -313,19 +315,58 @@ describe('layoutBoard hero field', () => {
 		}
 	});
 
-	it('starts each hero trace on an edge of the window, or at a via on the board', () => {
+	const spines = board.traces.filter((t) => t.kind === 'spine');
+	const onSpineTop = (p: Point) =>
+		spines.some((s) => s.points[0].x === p.x && s.points[0].y === p.y);
+	const heroBottom = area.y + area.height;
+
+	it('starts each rim trace on a side or the top of the window, at a via, or on a spine', () => {
 		let vias = 0;
-		for (const trace of field) {
+		for (const trace of rim) {
 			const start = trace.points[0];
+			if (onSpineTop(start)) continue;
 			if (trace.startVia) {
 				vias++;
 				expect(onEdge(start, area, board.width), trace.id).toBe(false);
 			} else {
-				expect(onEdge(start, area, board.width), trace.id).toBe(true);
+				const onSideOrTop =
+					Math.abs(start.x) < 1e-6 ||
+					Math.abs(start.x - board.width) < 1e-6 ||
+					Math.abs(start.y - area.y) < 1e-6;
+				expect(onSideOrTop, trace.id).toBe(true);
 			}
 		}
 		expect(vias).toBeGreaterThan(0);
-		expect(vias).toBeLessThan(field.length / 2);
+		expect(vias).toBeLessThan(rim.length / 2);
+	});
+
+	it('runs the traces from the bottom on out of the hero, to vias on the page below', () => {
+		const onSide = (p: Point) => Math.abs(p.x) < 1e-6 || Math.abs(p.x - board.width) < 1e-6;
+		const below = field.filter(
+			(t) => t.points[0].y > heroBottom && !onSpineTop(t.points[0]) && !onSide(t.points[0])
+		);
+		expect(below.length).toBeGreaterThan(5);
+		for (const trace of below) {
+			expect(trace.startVia, trace.id).toBe(true);
+			expect(trace.points[0].y, trace.id).toBeLessThan(board.heroBottom);
+		}
+		// Nothing starts or ends on the bottom edge of the hero itself.
+		for (const trace of field) {
+			expect(Math.abs(trace.points[0].y - heroBottom), trace.id).toBeGreaterThan(1);
+		}
+	});
+
+	it('lets the spine grow out of the field: a hero trace runs on from the top of each spine trace', () => {
+		expect(spines.length).toBeGreaterThan(0);
+		for (const spine of spines) {
+			const top = spine.points[0];
+			const link = field.find((t) => t.points[0].x === top.x && t.points[0].y === top.y);
+			expect(link, spine.id).toBeDefined();
+			expect(link!.startVia, spine.id).toBeUndefined();
+			// Straight up out of the spine.
+			expect(link!.points[1].x, spine.id).toBe(top.x);
+			expect(link!.points[1].y, spine.id).toBeLessThan(top.y);
+		}
 	});
 
 	it('comes in from all four corners', () => {
@@ -367,12 +408,12 @@ describe('layoutBoard hero field', () => {
 		}
 	});
 
-	it('bends at 45 degrees only and stays inside the hero', () => {
+	it('bends at 45 degrees only and stays above the first chip', () => {
 		for (const trace of field) {
 			expect(isOctilinear(trace.points), trace.id).toBe(true);
 			for (const p of trace.points) {
 				expect(p.y).toBeGreaterThanOrEqual(area.y - 1e-6);
-				expect(p.y).toBeLessThanOrEqual(area.y + area.height + 1e-6);
+				expect(p.y).toBeLessThanOrEqual(board.heroBottom + PITCH);
 			}
 		}
 	});

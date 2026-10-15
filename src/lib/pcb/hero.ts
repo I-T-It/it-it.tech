@@ -31,7 +31,7 @@
  */
 
 import { DX, DY, dirOf, simplify, turnSteps, type Dir, type Point, type Rect } from './geometry.js';
-import { walkCells, type Cell, type Grid } from './grid.js';
+import { CLEARANCE, FREE, walkCells, type Cell, type Grid } from './grid.js';
 import { createRng, deriveSeed, type Rng } from './rng.js';
 import { route, type SearchWindow } from './router.js';
 
@@ -70,7 +70,7 @@ const FIELD_TURN_COST = 1.5;
 /** Extra cells round a route's start and goal that its search may use. */
 const MARGIN = 4;
 /** A field route gives up after this many expanded states. */
-const MAX_EXPANSIONS = 2000;
+const MAX_EXPANSIONS = 1200;
 /** A rim bus closes after this many failed routes in a row. */
 const MAX_FAILURES = 2;
 /**
@@ -89,6 +89,10 @@ const FILL_BUS_MAX = 4;
 const FILL_MIN_RUN = 6;
 /** How far in from the edge a free run is measured, in cells. */
 const FILL_MAX_RUN = 48;
+/** How many ways into the rim a spine link tries. */
+const LINK_TRIES = 8;
+/** The field runs on at most this many rows below the hero, toward the first chip. */
+const BELOW_MAX_ROWS = 24;
 /** One try at a dot trace per this many cells of field. */
 const DOT_TRY_CELLS = 4;
 /** A dot trace's first run, in cells... */
@@ -177,6 +181,8 @@ export interface HeroFieldOptions {
 	seed: number;
 	/** Hands out a fresh bus number for the lanes. */
 	nextBus: () => number;
+	/** The top of every spine trace: the field runs a trace on from each, up to the rim. */
+	spineTops?: readonly Point[];
 }
 
 export interface HeroRoute {
@@ -202,11 +208,14 @@ const EXIT_DIRS: Record<Edge, Dir[]> = {
 
 /** The heading straight in from each edge. */
 const INWARD: Record<Edge, Dir> = { left: 0, top: 2, right: 4, bottom: 6 };
+const NORTH: Dir = 6;
 
 /** Everything a pass needs. */
 interface Field {
 	grid: Grid;
 	window: SearchWindow;
+	/** The first row below the hero: rows from here down lie on the page under it. */
+	below: number;
 	edges: Record<Edge, number>;
 	nextBus: () => number;
 	out: HeroRoute[];
@@ -258,11 +267,10 @@ export function heroField(options: HeroFieldOptions): HeroRoute[] {
 	const { grid, area, ellipse: e } = options;
 	const p = grid.pitch;
 	const row0 = Math.max(0, Math.ceil(area.y / p));
-	const row1 = Math.min(
-		grid.rows - 1,
-		options.rowLimit - 1,
-		Math.floor((area.y + area.height) / p) - 1
-	);
+	// The field runs on below the hero, down to the first chip, so the traces from the bottom end
+	// on the page instead of on the hero's bottom edge.
+	const below = Math.floor((area.y + area.height) / p);
+	const row1 = Math.min(grid.rows - 1, options.rowLimit - 1, below - 1 + BELOW_MAX_ROWS);
 	const col1 = grid.cols - 1;
 	if (row1 - row0 < 3 || col1 < 3 || !(e.rx > 0) || !(e.ry > 0)) return [];
 
@@ -280,27 +288,107 @@ export function heroField(options: HeroFieldOptions): HeroRoute[] {
 	const field: Field = {
 		grid,
 		window: { col0: 0, col1, row0, row1 },
-		edges: {
-			top: area.y,
-			bottom: Math.min(area.y + area.height, (row1 + 1) * p),
-			left: 0,
-			right: options.width
-		},
+		below,
+		edges: { top: area.y, bottom: (row1 + 1) * p, left: 0, right: options.width },
 		nextBus: options.nextBus,
 		out: []
 	};
+	spineLinks(field, keep, options.spineTops ?? []);
 	rimBuses(field, keep, createRng(deriveSeed(options.seed, 'hero')));
 	dotTraces(field, createRng(deriveSeed(options.seed, 'hero:dots')));
 	fillBuses(field, createRng(deriveSeed(options.seed, 'hero:fill')));
 	return field.out;
 }
 
+/**
+ * The cell just outside the keep-out at parameter `phi` and the heading out of it, or null when
+ * that cell is outside the field or taken.
+ */
+function rimCell(field: Field, keep: Ellipse, phi: number): { cell: Cell; dir: Dir } | null {
+	const { grid, window: w } = field;
+	const p = grid.pitch;
+	const dir = outwardDir(keep, phi);
+	let cell = grid.cellAt({
+		x: keep.cx + keep.rx * Math.cos(phi),
+		y: keep.cy + keep.ry * Math.sin(phi)
+	});
+	for (
+		let k = 0;
+		k < 3 && ellipseDistance(keep, { x: cell.col * p + p / 2, y: cell.row * p + p / 2 }) < 1;
+		k++
+	) {
+		cell = { col: cell.col + DX[dir], row: cell.row + DY[dir] };
+	}
+	if (!inWindow(w, cell.col, cell.row) || !grid.isFree(cell.col, cell.row)) return null;
+	return { cell, dir };
+}
+
+/**
+ * Before anything else: a trace from the top of each spine trace straight up out of it and on to
+ * the nearest free point of the rim, so the spine grows out of the field.
+ */
+function spineLinks(field: Field, keep: Ellipse, tops: readonly Point[]): void {
+	const { grid, window: w } = field;
+	const steps = Math.max(64, Math.ceil(perimeter(keep) / 6));
+	tops.forEach((top, i) => {
+		const spine = grid.cellAt(top);
+		const start = { col: spine.col, row: spine.row - 1 };
+		if (!inWindow(w, start.col, start.row)) return;
+		// The ways into the rim, one cell out from it, nearest first.
+		const ways: { cell: Cell; next: Cell; dir: Dir; d: number }[] = [];
+		for (let k = 0; k < steps; k++) {
+			const rim = rimCell(field, keep, (2 * Math.PI * k) / steps);
+			if (!rim) continue;
+			const next = { col: rim.cell.col + DX[rim.dir], row: rim.cell.row + DY[rim.dir] };
+			if (!inWindow(w, next.col, next.row) || !grid.isFree(next.col, next.row)) continue;
+			ways.push({ ...rim, next, d: chebyshev(next, start) + Math.abs(next.col - start.col) / 2 });
+		}
+		ways.sort((a, b) => a.d - b.d);
+		// The cell above the spine lies in its clearance: let the route in.
+		const index = grid.index(start.col, start.row);
+		const state = grid.cells[index];
+		if (state !== FREE && state !== CLEARANCE) return;
+		grid.cells[index] = FREE;
+		let found: { path: Cell[]; cell: Cell } | null = null;
+		// The nearest ones may lie behind a link already made: try a few, a few cells apart.
+		let tried = 0;
+		let lastTried: Cell | null = null;
+		for (const way of ways) {
+			if (tried >= LINK_TRIES) break;
+			if (lastTried && chebyshev(way.cell, lastTried) < 3) continue;
+			tried++;
+			lastTried = way.cell;
+			const inward = ((way.dir + 4) & 7) as Dir;
+			const path = route(grid, start, way.next, {
+				startDir: NORTH,
+				endDir: [inward, ((inward + 1) & 7) as Dir, ((inward + 7) & 7) as Dir],
+				window: around(w, start, way.next),
+				maxExpansions: MAX_EXPANSIONS,
+				turnCost: FIELD_TURN_COST
+			});
+			if (path && forward(path, NORTH)) {
+				found = { path, cell: way.cell };
+				break;
+			}
+		}
+		if (!found) {
+			grid.cells[index] = state;
+			return;
+		}
+		const corners = [...found.path, found.cell];
+		const lane = field.nextBus();
+		grid.markPath(corners, lane);
+		const points = simplify([
+			{ ...top },
+			...walkCells(corners).map((c) => grid.centre(c.col, c.row))
+		]);
+		field.out.push({ id: `hero:s${i}`, bus: `hero:s${i}`, points, startVia: false });
+	});
+}
+
 /** The first pass: buses from the window edges into the rim of the ellipse. */
 function rimBuses(field: Field, keep: Ellipse, rng: Rng): void {
 	const { grid, window: w } = field;
-	const p = grid.pitch;
-	const kept = (c: Cell) =>
-		ellipseDistance(keep, { x: c.col * p + p / 2, y: c.row * p + p / 2 }) < 1;
 	const steps = Math.max(64, Math.ceil(perimeter(keep) / 3));
 	const phi0 = rng.range(0, 2 * Math.PI);
 	const tried = new Set<number>();
@@ -311,21 +399,17 @@ function rimBuses(field: Field, keep: Ellipse, rng: Rng): void {
 	let inBus = 0;
 	let lane = field.nextBus();
 	let shift = busShift(rng);
+	// The row below the hero where a bus that leaves by the bottom starts, on vias.
+	const shallowest = Math.min(field.below + 1, w.row1);
+	let depth = rng.int(shallowest, w.row1);
 	let first: Cell | null = null;
 	let last: Cell | null = null;
 	let failures = 0;
 
 	for (let i = 0; i < steps; i++) {
-		const phi = phi0 + (2 * Math.PI * i) / steps;
-		const dir = outwardDir(keep, phi);
-		let cell = grid.cellAt({
-			x: keep.cx + keep.rx * Math.cos(phi),
-			y: keep.cy + keep.ry * Math.sin(phi)
-		});
-		for (let k = 0; k < 3 && kept(cell); k++) {
-			cell = { col: cell.col + DX[dir], row: cell.row + DY[dir] };
-		}
-		if (!inWindow(w, cell.col, cell.row) || !grid.isFree(cell.col, cell.row)) continue;
+		const rim = rimCell(field, keep, phi0 + (2 * Math.PI * i) / steps);
+		if (!rim) continue;
+		const { cell, dir } = rim;
 		if (last && chebyshev(cell, last) < (inBus === 0 ? gap : SPACING)) continue;
 		// Coming back round to where the walk began: keep a gap to the first bus.
 		if (first && i > steps / 2 && chebyshev(cell, first) < GAP_MIN) continue;
@@ -336,8 +420,8 @@ function rimBuses(field: Field, keep: Ellipse, rng: Rng): void {
 		// The first step off the rim goes straight out, so every trace meets the rim square on.
 		const next = { col: cell.col + DX[dir], row: cell.row + DY[dir] };
 		if (!inWindow(w, next.col, next.row) || !grid.isFree(next.col, next.row)) continue;
-		const path = routeOut(grid, next, dir, w, lane, shift);
-		if (!path) {
+		const out = routeOut(grid, next, dir, w, lane, shift, depth);
+		if (!out) {
 			// A bus that keeps failing has run into a crowded corner: close it, try another shape.
 			if (++failures >= MAX_FAILURES) {
 				failures = 0;
@@ -346,16 +430,22 @@ function rimBuses(field: Field, keep: Ellipse, rng: Rng): void {
 				size = rng.int(HERO_BUS_MIN, HERO_BUS_MAX);
 				lane = field.nextBus();
 				shift = busShift(rng);
+				depth = rng.int(shallowest, w.row1);
+				// Move on past the crowded spot before the next try.
+				last = cell;
 			}
 			continue;
 		}
 		failures = 0;
-		const cells = walkCells([cell, ...path]).reverse();
-		const via = rng.next() < HERO_VIA_SHARE && cells.length > 2 * MIN_VIA_CELLS;
-		const from = via ? Math.floor(rng.range(0.3, 0.7) * (cells.length - MIN_VIA_CELLS)) : 0;
+		const cells = walkCells([cell, ...out.path]).reverse();
+		// Out of the bottom: it starts on a via on the page below the hero.
+		const bottom = out.edge === 'bottom';
+		const cut = !bottom && rng.next() < HERO_VIA_SHARE && cells.length > 2 * MIN_VIA_CELLS;
+		const from = cut ? Math.floor(rng.range(0.3, 0.7) * (cells.length - MIN_VIA_CELLS)) : 0;
 		const track = cells.slice(from);
 		grid.markPath(track, lane);
 		const points = simplify(track.map((c) => grid.centre(c.col, c.row)));
+		const via = cut || bottom;
 		if (!via) toEdge(points, field.edges);
 		field.out.push({ id: `hero:${bus}.${inBus}`, bus: `hero:${bus}`, points, startVia: via });
 
@@ -369,6 +459,7 @@ function rimBuses(field: Field, keep: Ellipse, rng: Rng): void {
 			gap = rng.int(GAP_MIN, GAP_MAX);
 			lane = field.nextBus();
 			shift = busShift(rng);
+			depth = rng.int(shallowest, w.row1);
 		}
 	}
 }
@@ -380,8 +471,9 @@ function busShift(rng: Rng): number {
 
 /**
  * Routes one rim trace from the cell off the rim out to the window edge its heading points at,
- * moved along that edge toward the nearest corner by `shift` of the way. Returns the corner cells
- * (rim end first), or null.
+ * moved along that edge toward the nearest corner by `shift` of the way. One that heads out of
+ * the bottom stops at row `depth` instead, below the hero. Returns the corner cells (rim end
+ * first) and the edge, or null.
  */
 function routeOut(
 	grid: Grid,
@@ -389,8 +481,9 @@ function routeOut(
 	dir: Dir,
 	field: SearchWindow,
 	lane: number,
-	shift: number
-): Cell[] | null {
+	shift: number,
+	depth: number
+): { path: Cell[]; edge: Edge } | null {
 	// Straight out to the edge of the field.
 	let end = start;
 	let travelled = 0;
@@ -412,9 +505,10 @@ function routeOut(
 	const along = vertical ? end.row : end.col;
 	const toward = along - lo < hi - along ? -1 : 1;
 	const base = along + toward * Math.round(shift * travelled);
+	const row = edge === 'bottom' ? Math.max(start.row, Math.min(end.row, depth)) : end.row;
 	for (const offset of GOAL_SHIFTS) {
 		const at = Math.max(lo, Math.min(hi, base + offset));
-		const goal = vertical ? { col: end.col, row: at } : { col: at, row: end.row };
+		const goal = vertical ? { col: end.col, row: at } : { col: at, row };
 		if (!grid.isFree(goal.col, goal.row)) continue;
 		const path = route(grid, start, goal, {
 			startDir: dir,
@@ -424,7 +518,7 @@ function routeOut(
 			maxExpansions: MAX_EXPANSIONS,
 			turnCost: FIELD_TURN_COST
 		});
-		return path && forward(path, dir) ? path : null;
+		return path && forward(path, dir) ? { path, edge } : null;
 	}
 	return null;
 }
@@ -478,12 +572,14 @@ function fillBuses(field: Field, rng: Rng): void {
 				if (!path || path.length < 2 || !forward(path, inward)) continue;
 				grid.markPath(path, lane);
 				const points = simplify(path.map((c) => grid.centre(c.col, c.row)));
-				toEdge(points, field.edges);
+				// From the bottom they start on vias on the page below the hero.
+				const via = edge === 'bottom';
+				if (!via) toEdge(points, field.edges);
 				field.out.push({
 					id: `hero:f${bus}.${made}`,
 					bus: `hero:f${bus}`,
 					points,
-					startVia: false
+					startVia: via
 				});
 				made++;
 			}

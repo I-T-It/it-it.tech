@@ -362,7 +362,8 @@ function heroTraces(ctx: Context, hero: HeroInput): void {
 		rowLimit: ctx.heroRow,
 		width: ctx.width,
 		seed: ctx.seed,
-		nextBus: () => ++ctx.busCount
+		nextBus: () => ++ctx.busCount,
+		spineTops: ctx.traces.filter((t) => t.kind === 'spine').map((t) => t.points[0])
 	});
 	for (const r of routes) {
 		ctx.traces.push(

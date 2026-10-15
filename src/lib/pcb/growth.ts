@@ -149,9 +149,9 @@ function heroDelay(board: Board, trace: Trace, random: number): number {
 		for (const y of ys) nearest = Math.min(nearest, Math.hypot(start.x - x, start.y - y));
 	const reach = Math.max(board.width, area.height) / 2;
 	const spread = reach > 0 ? Math.min(1, nearest / reach) : 0;
-	return (
-		(trace.startVia ? HERO_VIA_DELAY_MS : 0) + spread * HERO_SPREAD_MS + random * HERO_JITTER_MS
-	);
+	// A via below the hero is where a trace from the bottom edge comes in: it goes with the edges.
+	const onBoard = trace.startVia === true && start.y <= area.y + area.height;
+	return (onBoard ? HERO_VIA_DELAY_MS : 0) + spread * HERO_SPREAD_MS + random * HERO_JITTER_MS;
 }
 
 function easeOut(t: number): number {

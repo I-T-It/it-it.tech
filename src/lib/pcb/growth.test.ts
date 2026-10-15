@@ -144,6 +144,14 @@ describe('Growth hero field', () => {
 		return seen;
 	}
 
+	it('starts a trace from a via below the hero with the edges, not with the dots', () => {
+		const under = heroTrace('hero:4.0', { x: 30, y: 960 }, 200, true);
+		const g = new Growth({ ...board([under, dot]), hero: HERO });
+		const seen = firstDrawn(g, [under.id, dot.id]);
+		expect(seen[under.id]).toBeLessThan(HERO_VIA_DELAY_MS);
+		expect(seen[dot.id]).toBeGreaterThanOrEqual(HERO_VIA_DELAY_MS);
+	});
+
 	it('starts in the corners, then works along the edges, the dots on the board last', () => {
 		const seen = firstDrawn(new Growth(heroBoard()), [corner.id, middle.id, dot.id]);
 		expect(seen[corner.id]).toBeLessThanOrEqual(400);
