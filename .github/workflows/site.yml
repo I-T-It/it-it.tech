@@ -1,0 +1,151 @@
+name: site
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm check
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm test:e2e
+      - name: Keep the e2e results of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results
+          path: test-results
+          if-no-files-found: ignore
+
+  build:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        site: [company, personal]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Work out the base path and the site addresses
+        id: settings
+        env:
+          SITE: ${{ matrix.site }}
+          COMPANY_DOMAIN: ${{ vars.COMPANY_DOMAIN }}
+          PERSONAL_DOMAIN: ${{ vars.PERSONAL_DOMAIN }}
+        run: |
+          set -euo pipefail
+          if [ "$SITE" = "company" ]; then
+            domain="$COMPANY_DOMAIN"
+            base="/it-it.tech"
+            url="https://i-t-it.github.io/it-it.tech"
+          else
+            domain="$PERSONAL_DOMAIN"
+            base="/deschepers.nl"
+            url="https://roboroads.github.io/deschepers.nl"
+          fi
+          # A live custom domain serves from the root, so the base path goes away.
+          if [ -n "$domain" ]; then
+            base=""
+            url="https://$domain"
+          fi
+          company_url="https://i-t-it.github.io/it-it.tech/"
+          if [ -n "$COMPANY_DOMAIN" ]; then
+            company_url="https://$COMPANY_DOMAIN/"
+          fi
+          {
+            echo "base=$base"
+            echo "url=$url"
+            echo "company_url=$company_url"
+          } >> "$GITHUB_OUTPUT"
+      - name: Build ${{ matrix.site }}
+        env:
+          BASE_PATH: ${{ steps.settings.outputs.base }}
+          PUBLIC_SITE_URL: ${{ steps.settings.outputs.url }}
+          PUBLIC_COMPANY_SITE_URL: ${{ steps.settings.outputs.company_url }}
+        run: node scripts/build-variant.mjs "${{ matrix.site }}" --no-copy
+      - name: Upload the company site for Pages
+        if: matrix.site == 'company'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist/company
+      - name: Upload the personal site for the push to deschepers.nl
+        if: matrix.site == 'personal'
+        uses: actions/upload-artifact@v7
+        with:
+          name: site-personal
+          path: dist/personal
+          include-hidden-files: true
+          if-no-files-found: error
+
+  deploy-company:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: deploy-company
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+  deploy-personal:
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-personal
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: site-personal
+          path: out
+      - name: Push one commit to Roboroads/deschepers.nl
+        env:
+          DEPLOY_KEY: ${{ secrets.DESCHEPERS_DEPLOY_KEY }}
+          PERSONAL_DOMAIN: ${{ vars.PERSONAL_DOMAIN }}
+        run: |
+          set -euo pipefail
+          cd out
+          touch .nojekyll
+          # In branch mode a push without CNAME would remove the custom domain.
+          if [ -n "$PERSONAL_DOMAIN" ]; then
+            printf '%s\n' "$PERSONAL_DOMAIN" > CNAME
+          fi
+          key="$RUNNER_TEMP/deschepers_deploy"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+          git init -b main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit --message "chore: deploy ${GITHUB_SHA::7}"
+          GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            git push --force git@github.com:Roboroads/deschepers.nl.git main
+          rm -f "$key"
