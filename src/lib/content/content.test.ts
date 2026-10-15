@@ -420,7 +420,7 @@ describe('talks', () => {
 		for (const [, c] of both) {
 			// Per offer: the kind, the language it is given in, and the language of its title.
 			expect(c.talks.offers.map((o) => [o.id, o.kind, o.lang, o.titleLang])).toEqual([
-				['php-2005-called', 'talk', 'en', 'en'],
+				['php-2005-called', 'talk', 'nl', 'en'],
 				['frontend-love', 'talk', 'en', 'en'],
 				['flutter-talk', 'talk', 'nl', 'en'],
 				['flutter-workshop', 'workshop', 'nl', 'nl']
@@ -554,8 +554,24 @@ describe('talks', () => {
 			// The workshop is Dutch too, and the other occurrences have no language of their own yet.
 			expect(c.talks.offers.find((o) => o.id === 'flutter-workshop')!.lang).toBe('nl');
 			expect(c.talks.given.filter((g) => g.lang !== undefined).map((g) => g.id)).toEqual([
+				'php-2005-called',
 				'flutter-frontmania'
 			]);
+		}
+	});
+
+	it('has the PHP talk given at Sopra Steria in June 2024, in Dutch, under its English title', () => {
+		for (const [, c] of both) {
+			const given = c.talks.given.find((g) => g.id === 'php-2005-called')!;
+			expect(given.offerId).toBe('php-2005-called');
+			// Only the month is known, and there is no page of the event.
+			expect(given.date).toBe('2024-06');
+			expect(given.event).toBe('Sopra Steria');
+			expect(given.url).toBeUndefined();
+			expect(given.lang).toBe('nl');
+			const offer = c.talks.offers.find((o) => o.id === 'php-2005-called')!;
+			expect(offer.lang).toBe('nl');
+			expect(offer.titleLang).toBe('en');
 		}
 	});
 
@@ -576,6 +592,9 @@ describe('talks', () => {
 			expect(labels.times.many).toContain('{last}');
 			expect(labels.times.many).toContain('{count}');
 			expect(Object.keys(labels.language).sort()).toEqual(['en', 'nl']);
+			// A date can be a month ("Jun 2024"), so the line has no "op" or "on" before it.
+			expect(labels.times.one).not.toMatch(/\b(op|on)\b/);
+			expect(labels.times.many).not.toMatch(/\b(op|on)\b/);
 		}
 		expect(nl.talks.labels.offers).toBe('Klaar om te geven');
 		expect(nl.talks.labels.given).toBe('Gegeven');

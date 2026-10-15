@@ -786,7 +786,7 @@ describe('Talks (U7)', () => {
 		expect(rows().map((el) => el.dataset.given)).toEqual(talks().given.map((g) => g.id));
 		const dates = rows().map((el) => el.querySelector('time')!.getAttribute('datetime')!);
 		expect(dates).toEqual([...dates].sort().reverse());
-		expect(row('php-2005-called').querySelector('time')?.textContent).toBe('21 jun 2024');
+		expect(row('php-2005-called').querySelector('time')?.textContent).toBe('jun 2024');
 		expect(row('flutter-frontmania').querySelector('time')?.textContent).toBe('5 okt 2022');
 	});
 
@@ -803,16 +803,16 @@ describe('Talks (U7)', () => {
 	it('writes English dates, labels and counts on the English page', async () => {
 		setLocale('en');
 		await render(Talks, {});
-		expect(row('php-2005-called').querySelector('time')?.textContent).toBe('21 Jun 2024');
+		expect(row('php-2005-called').querySelector('time')?.textContent).toBe('Jun 2024');
 		expect(document.querySelector('section#talks h2')?.textContent).toBe(talks('en').title);
 		expect(
 			Array.from(document.querySelectorAll('section#talks h3')).map((h) => h.textContent)
 		).toEqual(['Ready to give', 'Given']);
 		expect(offer('frontend-love').querySelector('.times')?.textContent).toBe(
-			'Given 3 times, most recently on 23 Aug 2023'
+			'Given 3 times, most recently: 23 Aug 2023'
 		);
 		expect(offer('php-2005-called').querySelector('.times')?.textContent).toBe(
-			'Given once, on 21 Jun 2024'
+			'Given once: Jun 2024'
 		);
 		expect(offer('flutter-workshop').querySelector('h4')?.textContent).toBe('Flutter workshop');
 	});
@@ -856,7 +856,16 @@ describe('Talks (U7)', () => {
 			expect(row('frontend-festival').querySelector('.event')?.textContent).toContain(
 				'Frontend Festival'
 			);
-			expect(row('php-2005-called').querySelector('.event')).toBeNull();
+			// The PHP talk was given at Sopra Steria, which has no page to link to.
+			expect(row('php-2005-called').querySelector('.event')?.textContent).toContain('Sopra Steria');
+			expect(row('php-2005-called').querySelector('a')).toBeNull();
+		});
+
+		it('gives the month for the PHP talk, since the day is not known', async () => {
+			await render(Talks, {});
+			const time = row('php-2005-called').querySelector('time')!;
+			expect(time.getAttribute('datetime')).toBe('2024-06');
+			expect(time.textContent).toBe('jun 2024');
 		});
 
 		it('shows the title of the offer, or the title of its own where the occurrence has one', async () => {
@@ -920,7 +929,9 @@ describe('Talks (U7)', () => {
 				rows()
 					.filter((el) => el.querySelector('.spoken'))
 					.map((el) => el.dataset.given)
-			).toEqual(['flutter-frontmania']);
+			).toEqual(['php-2005-called', 'flutter-frontmania']);
+			expect(row('php-2005-called').querySelector('.event')?.textContent).toContain('Sopra Steria');
+			expect(spoken('php-2005-called')).toContain('Nederlands');
 		});
 
 		it('writes the language of an occurrence in English on the English page', async () => {
@@ -959,7 +970,8 @@ describe('Talks (U7)', () => {
 				Array.from(offer(id).querySelectorAll('.facts > div')).map((d) =>
 					[d.querySelector('dt')?.textContent, d.querySelector('dd')?.textContent].join(': ')
 				);
-			expect(facts('php-2005-called')).toEqual(['Taal: Engels']);
+			// The PHP talk has an English title and is given in Dutch, like the Flutter talk.
+			expect(facts('php-2005-called')).toEqual(['Taal: Nederlands']);
 			// The Flutter talk has an English title and is given in Dutch.
 			expect(facts('flutter-talk')).toEqual(['Taal: Nederlands']);
 			expect(facts('flutter-workshop')).toEqual(['Taal: Nederlands']);
@@ -998,10 +1010,11 @@ describe('Talks (U7)', () => {
 		it('says how often and when an offer was last given, in a time element', async () => {
 			await render(Talks, {});
 			const times = (id: string) => offer(id).querySelector('.times')!;
-			expect(times('php-2005-called').textContent).toBe('Eén keer gegeven, op 21 jun 2024');
-			expect(times('frontend-love').textContent).toBe('3 keer gegeven, laatst op 23 aug 2023');
-			expect(times('flutter-talk').textContent).toBe('Eén keer gegeven, op 5 okt 2022');
-			expect(times('flutter-workshop').textContent).toBe('3 keer gegeven, laatst op 27 okt 2022');
+			// A month and a day read the same after the colon: "jun 2024" and "23 aug 2023".
+			expect(times('php-2005-called').textContent).toBe('Eén keer gegeven: jun 2024');
+			expect(times('frontend-love').textContent).toBe('3 keer gegeven, laatst: 23 aug 2023');
+			expect(times('flutter-talk').textContent).toBe('Eén keer gegeven: 5 okt 2022');
+			expect(times('flutter-workshop').textContent).toBe('3 keer gegeven, laatst: 27 okt 2022');
 			expect(times('frontend-love').querySelector('time')?.getAttribute('datetime')).toBe(
 				'2023-08-23'
 			);

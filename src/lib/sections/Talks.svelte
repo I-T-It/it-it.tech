@@ -165,7 +165,8 @@
 								{/if}
 								{#if talk.lang}
 									<span class="spoken"
-										>{#if talk.event}<span aria-hidden="true"> · </span><span class="sr-only"
+										>{#if talk.event}<span class="dot" aria-hidden="true">·</span><span
+												class="sr-only"
 												>,
 											</span>{/if}{labels.language[talk.lang]}</span
 									>
@@ -322,6 +323,11 @@
 		display: block;
 		color: var(--ink-muted);
 		font-size: var(--text-small);
+	}
+
+	/* A dot between the event and the language, with room on both sides. */
+	.dot {
+		margin-inline: 0.5em;
 	}
 
 	/* The date takes a column of its own once there is room for one. */

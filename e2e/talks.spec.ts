@@ -58,6 +58,21 @@ test.describe('talks and workshops', () => {
 		}
 	});
 
+	test('shows the PHP talk at Sopra Steria in June 2024, in Dutch', async ({ page }) => {
+		await page.goto('./');
+		const row = page.locator('[data-given="php-2005-called"]');
+		await expect(row.locator('time')).toHaveText('jun 2024');
+		await expect(row.locator('time')).toHaveAttribute('datetime', '2024-06');
+		await expect(row.locator('.event')).toContainText('Sopra Steria');
+		await expect(row.locator('.spoken')).toContainText('Nederlands');
+		await expect(row.locator('.title')).toHaveAttribute('lang', 'en');
+
+		await page.goto('en/');
+		await expect(row.locator('time')).toHaveText('Jun 2024');
+		await expect(row.locator('.spoken')).toContainText('Dutch');
+		await expect(row.locator('.title')).not.toHaveAttribute('lang', /.*/);
+	});
+
 	test('gives the Flutter talk in Dutch under its English title', async ({ page }) => {
 		const title = 'Writing multi-platform apps with native performance';
 		await page.goto('./');

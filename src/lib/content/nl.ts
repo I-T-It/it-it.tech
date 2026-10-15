@@ -629,7 +629,7 @@ export const nl: SiteContent = {
 				title: '2005 Called! They Want Your Opinion About PHP Back!',
 				summary:
 					'Waarom PHP slecht was, waarom dat niet meer zo is en waarom het nog steeds een goede taal is om projecten in te bouwen.',
-				lang: 'en',
+				lang: 'nl',
 				titleLang: 'en'
 			},
 			{
@@ -662,7 +662,9 @@ export const nl: SiteContent = {
 			{
 				id: 'php-2005-called',
 				offerId: 'php-2005-called',
-				date: '2024-06-21'
+				date: '2024-06',
+				lang: 'nl',
+				event: 'Sopra Steria'
 			},
 			{
 				id: 'frontend-js-eindhoven',
@@ -727,8 +729,8 @@ export const nl: SiteContent = {
 			language: { nl: 'Nederlands', en: 'Engels' },
 			facts: { language: 'Taal', duration: 'Duur', audience: 'Doelgroep' },
 			times: {
-				one: 'Eén keer gegeven, op {last}',
-				many: '{count} keer gegeven, laatst op {last}'
+				one: 'Eén keer gegeven: {last}',
+				many: '{count} keer gegeven, laatst: {last}'
 			}
 		}
 	},
