@@ -112,7 +112,15 @@
 			{#if site === 'company'}
 				<Logo size={72} />
 			{:else}
-				<span class="wordmark"><span class="dot" aria-hidden="true"></span>{company.founder}</span>
+				<!-- His photo in front of the name: the personal page is about him. The link is named by the text (aria-label), so the photo is decoration. -->
+				<span class="wordmark"
+					><enhanced:img
+						class="avatar"
+						src="../assets/robbin-schepers.jpg"
+						alt=""
+						sizes="28px"
+					/>{company.founder}</span
+				>
 			{/if}
 		</a>
 
@@ -243,13 +251,24 @@
 		}
 	}
 
-	/* The pin-1 dot of a chip, as the personal mark. */
-	.dot {
-		width: 0.375rem;
-		height: 0.375rem;
+	/* The personal mark: his face, small and round, with a trace-coloured ring like a lit pad. */
+	.avatar {
+		display: block;
+		width: 1.5rem;
+		height: 1.5rem;
 		border-radius: 50%;
-		background: var(--trace-cyan);
-		box-shadow: 0 0 6px var(--trace-cyan);
+		object-fit: cover;
+		object-position: 45% 25%;
+		box-shadow:
+			0 0 0 1.5px var(--trace-cyan),
+			0 0 8px color-mix(in srgb, var(--trace-cyan) 60%, transparent);
+	}
+
+	/* On the narrowest windows (320 CSS px) the name, Contact and the toggle need the whole row. */
+	@media (max-width: 21rem) {
+		.avatar {
+			display: none;
+		}
 	}
 
 	ul {

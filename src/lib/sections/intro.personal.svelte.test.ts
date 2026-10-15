@@ -241,6 +241,37 @@ describe('Hero power-up', () => {
 	});
 });
 
+describe('Hero focal point', () => {
+	it('makes the photo the biggest thing in the hero on a desktop window', async () => {
+		await page.viewport(1440, 900);
+		await mount(Hero, true);
+		const frame = socket()!.el.getBoundingClientRect();
+		const copy = obstacles()[0].getBoundingClientRect();
+		// A big frame, at least 400px a side, and taller than the whole text block under it.
+		expect(frame.width).toBeGreaterThanOrEqual(400);
+		expect(frame.height).toBeGreaterThan(copy.height);
+		// The photo itself is more than 320px a side, inside its pad ring.
+		const photo = hero().querySelector('img')!.getBoundingClientRect();
+		expect(photo.width).toBeGreaterThanOrEqual(320);
+	});
+
+	it('keeps the photo big on a short laptop window and the hero one window high', async () => {
+		await page.viewport(1280, 720);
+		await mount(Hero, true);
+		const frame = socket()!.el.getBoundingClientRect();
+		expect(frame.width).toBeGreaterThanOrEqual(260);
+		const box = hero().getBoundingClientRect();
+		expect(box.height).toBeCloseTo(720, 0);
+	});
+
+	it('is the only visual in the hero: no logo next to the photo', async () => {
+		await mount(Hero);
+		expect(hero().querySelector('svg')).not.toBeNull(); // the footprint outline
+		expect(hero().querySelector('svg.logo')).toBeNull();
+		expect(hero().querySelectorAll('img')).toHaveLength(1);
+	});
+});
+
 describe('Hero size', () => {
 	it('is at least the viewport high and starts at the top of the page', async () => {
 		await page.viewport(1440, 900);
@@ -338,6 +369,34 @@ describe('Availability', () => {
 		expect(root.innerHTML).not.toContain(scheme);
 	});
 
+	it('shows I.T. It as a small logo in the freelance chip only, and names it', async () => {
+		await page.viewport(1280, 900);
+		const screen = await mount(Availability, true);
+		const logos = document.querySelectorAll<SVGElement>('#availability svg.logo');
+		expect(logos).toHaveLength(1);
+		expect(section('freelance').contains(logos[0])).toBe(true);
+		expect(section('job').querySelector('svg.logo')).toBeNull();
+		// Small and still: a mark next to the title, not a picture.
+		const box = logos[0].getBoundingClientRect();
+		expect(box.width).toBeGreaterThanOrEqual(80);
+		expect(box.width).toBeLessThanOrEqual(130);
+		expect(logos[0].classList.contains('animate')).toBe(false);
+		await expect.element(screen.getByRole('img', { name: content.nl.hero.logoAlt })).toBeVisible();
+		// The chip is still named by its h2.
+		expect(section('freelance').getAttribute('aria-labelledby')).toBe(
+			section('freelance').querySelector('h2')!.id
+		);
+	});
+
+	it('keeps the logo beside the title on a phone, without sideways scroll', async () => {
+		await page.viewport(320, 640);
+		await mount(Availability, true);
+		const logo = document.querySelector('#availability svg.logo')!.getBoundingClientRect();
+		expect(logo.right).toBeLessThanOrEqual(320);
+		const root = document.documentElement;
+		expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+	});
+
 	it('still shows the freelance hours and what I.T. It takes on', async () => {
 		await mount(Availability);
 		expect(section('freelance').textContent).toContain(content.nl.availability.freelance.hours);
@@ -431,6 +490,12 @@ describe('the page together', () => {
 			await render(component, { target });
 		}
 		expect(chips().map((c) => c.designator)).toEqual(['U1', 'U2', 'U3', 'U4', 'U9']);
+		// The photo leads the page; the only logo is the small one by the I.T. It chip.
+		const logos = Array.from(target.querySelectorAll<SVGElement>('svg.logo'));
+		expect(logos).toHaveLength(1);
+		expect(logos[0].getBoundingClientRect().width).toBeLessThan(
+			socket()!.el.getBoundingClientRect().width / 2
+		);
 		const html = target.innerHTML;
 		expect(html).not.toContain(address);
 		expect(html).not.toContain(scheme);

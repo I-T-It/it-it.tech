@@ -81,7 +81,7 @@
 						class="photo"
 						src="../assets/robbin-schepers.jpg"
 						alt={content.hero.photoAlt}
-						sizes="(min-width: 30rem) 19rem, 46vw"
+						sizes="(min-width: 40rem) 26rem, 46vw"
 					/>
 				</div>
 			</div>
@@ -156,11 +156,26 @@
 		width: clamp(16rem, min(52vw, 100svh), 42rem);
 	}
 
-	/* The photo in its footprint. A square, as big as the window allows. */
+	/*
+	 * The photo in its footprint, and the focal point of the personal page: a square as big as the
+	 * window allows, up to 26rem. 100svh - 27rem is what the text block, the corridor and the scroll
+	 * indicator leave of the window, so the hero stays one window high; on a phone the width wins.
+	 */
 	.photo-socket {
-		--size: clamp(10rem, min(46vw, 36svh), 19rem);
+		--size: clamp(10rem, min(46vw, calc(100svh - 27rem)), 26rem);
 		width: var(--size);
 		height: var(--size);
+	}
+
+	/* More light round the photo than round the logo: this is what the eye goes to first. */
+	.photo-socket::before {
+		inset: -45%;
+		background: radial-gradient(
+			closest-side,
+			color-mix(in srgb, var(--trace-cyan) 24%, transparent),
+			color-mix(in srgb, var(--trace-green) 14%, transparent) 55%,
+			transparent
+		);
 	}
 
 	/* Silkscreen outline of the footprint, cut at the top left like the chips. */

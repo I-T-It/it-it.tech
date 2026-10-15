@@ -5,10 +5,12 @@
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { COMPANY_SITE_URL, site, variant } from '#lib/site.js';
 	import Chip from '#lib/components/Chip.svelte';
+	import Logo from '#lib/components/Logo.svelte';
 	import ProtectedEmail from '#lib/components/ProtectedEmail.svelte';
 
 	const locale = getLocale();
-	const { job, freelance } = getContent(locale).availability;
+	const { availability, hero } = getContent(locale);
+	const { job, freelance } = availability;
 
 	/** I.T. It in the language of this page. The personal build links here instead of mailing. */
 	const companyUrl = COMPANY_SITE_URL + (locale === 'en' ? 'en/' : '');
@@ -47,7 +49,17 @@
 		{:else}
 			<Chip id="freelance" designator="U2" accent="green" {side} labelledby="freelance-title">
 				<div class="inner">
-					<h2 id="freelance-title">{freelance.title}</h2>
+					<!--
+						On the personal build the photo leads the page and I.T. It is one of two paths, so
+						its logo is small and still, beside the title of its chip. The company build has the
+						big logo in the hero and none here.
+					-->
+					<div class="title-row">
+						<h2 id="freelance-title">{freelance.title}</h2>
+						{#if site === 'personal'}
+							<Logo size="clamp(5.5rem, 22vw, 7rem)" title={hero.logoAlt} />
+						{/if}
+					</div>
 					{#each freelance.body as paragraph (paragraph)}
 						<p>{paragraph}</p>
 					{/each}
@@ -122,6 +134,24 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
+	}
+
+	/* The title takes what the small logo leaves, and the logo drops under it when there is no room. */
+	.title-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.25rem 1rem;
+	}
+
+	.title-row h2 {
+		flex: 1 1 12rem;
+	}
+
+	.title-row > :global(.logo) {
+		flex: none;
+		margin-bottom: 0.5rem;
 	}
 
 	.actions {

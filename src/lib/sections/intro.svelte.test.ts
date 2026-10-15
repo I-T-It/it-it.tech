@@ -304,6 +304,11 @@ describe('Availability', () => {
 		expect(ids).toEqual(['freelance', 'job']);
 	});
 
+	it('has no logo of its own on the company build: the hero logo is the one', async () => {
+		await mount(Availability);
+		expect(document.querySelector('#availability svg.logo, #availability img')).toBeNull();
+	});
+
 	it('is the target of the scroll indicator: focusable, with room under the header', async () => {
 		await page.viewport(1440, 900);
 		await mount(Availability, true);

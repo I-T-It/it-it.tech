@@ -45,6 +45,33 @@ describe('personal mark', () => {
 	});
 });
 
+describe('photo mark', () => {
+	it('puts a small round photo of him in front of the name, as decoration', async () => {
+		await page.viewport(1280, 800);
+		await render(SiteHeader, {});
+		const avatar = header().querySelector<HTMLImageElement>('.brand img')!;
+		expect(avatar).not.toBeNull();
+		// Empty alt: the link is named by the text next to it, the photo adds nothing to say.
+		expect(avatar.getAttribute('alt')).toBe('');
+		const box = avatar.getBoundingClientRect();
+		expect(box.width).toBeGreaterThanOrEqual(24);
+		expect(box.width).toBeLessThanOrEqual(40);
+		expect(box.width).toBeCloseTo(box.height, 0);
+		expect(getComputedStyle(avatar).borderRadius).toBe('50%');
+		const name = header().querySelector('.wordmark')!.getBoundingClientRect();
+		expect(box.right).toBeLessThanOrEqual(name.right);
+		// The mark is the photo, not the logo.
+		expect(header().querySelector('svg.logo')).toBeNull();
+	});
+
+	it('keeps the link name as it was: the text, with the photo left out of it', async () => {
+		const screen = await render(SiteHeader, {});
+		await expect
+			.element(screen.getByRole('link', { name: 'Robbin Schepers, naar boven' }))
+			.toBeVisible();
+	});
+});
+
 describe('size and spacing', () => {
 	it('sets the name small, at most 14px', async () => {
 		await page.viewport(1280, 800);
