@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { company } from '#lib/content/company.js';
 	import { getContent } from '#lib/content/index.js';
+	import { visibleProfiles } from '#lib/content/profiles.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { registerObstacle, registerSocket } from '#lib/pcb/registry.svelte.js';
 	import { site } from '#lib/site.js';
+	import Icon from '#lib/components/Icon.svelte';
 	import Logo from '#lib/components/Logo.svelte';
+	import { profileIcons } from '#lib/components/profile-icons.js';
 	import ScrollIndicator from '#lib/components/ScrollIndicator.svelte';
 
 	const content = getContent(getLocale());
@@ -96,6 +99,19 @@
 			<p class="lead">{lead}</p>
 			<!-- The same name everywhere he is online, as in his talks. Text, not a link. -->
 			<p class="follow">{m.hero_follow()} <span class="handle">{company.githubHandle}</span></p>
+			<!-- The profiles under that name. The address of each is in content/profiles.ts; one whose address is still TODO is left out. -->
+			<ul class="profiles" aria-label={m.hero_profiles_label()}>
+				{#each visibleProfiles() as profile (profile.id)}
+					<li>
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- an external address, not a route -->
+						<a href={profile.url} rel="me noopener"
+							><Icon icon={profileIcons[profile.id]} /><span class="sr-only"
+								>{m.profile_on({ service: profile.name }) + ' ' + m.external_site()}</span
+							></a
+						>
+					</li>
+				{/each}
+			</ul>
 		</div>
 	</div>
 
@@ -162,11 +178,11 @@
 
 	/*
 	 * The photo in its footprint, and the focal point of the personal page: a square as big as the
-	 * window allows, up to 26rem. 100svh - 28.5rem is what the text block, the corridor and the scroll
+	 * window allows, up to 26rem. 100svh - 31rem is what the text block, the corridor and the scroll
 	 * indicator leave of the window, so the hero stays one window high; on a phone the width wins.
 	 */
 	.photo-socket {
-		--size: clamp(10rem, min(42vw, calc(100svh - 28.5rem)), 26rem);
+		--size: clamp(10rem, min(42vw, calc(100svh - 31rem)), 26rem);
 		width: var(--size);
 		height: var(--size);
 	}
@@ -264,8 +280,14 @@
 		text-align: center;
 	}
 
+	/*
+	 * The name on one line from 375 CSS px up (2rem is 15 characters of Fira Code in 288px), which
+	 * the hero needs to keep its photo, handle line and icon row inside one phone window. From
+	 * about 400px the size of the other headings takes over.
+	 */
 	h1 {
 		margin: 0;
+		font-size: clamp(2rem, 8vw, var(--text-h1));
 		letter-spacing: -0.02em;
 	}
 
@@ -337,6 +359,38 @@
 		margin: 0.5rem 0 0;
 		color: var(--ink-muted);
 		font-size: var(--text-small);
+	}
+
+	/*
+	 * The profile icons, one compact row of 24px targets (the WCAG minimum) with a few pixels
+	 * between them: ten fit across a 320 CSS px window. Muted until hovered or focused; nothing
+	 * depends on the hover.
+	 */
+	.profiles {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.1875rem;
+		margin: 0.5rem 0 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.profiles a {
+		display: grid;
+		place-items: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		border-radius: 50%;
+		color: var(--ink-muted);
+		font-size: 1rem;
+	}
+
+	@media (hover: hover) {
+		.profiles a:hover {
+			color: var(--ink);
+			background: color-mix(in srgb, var(--ink) 12%, transparent);
+		}
 	}
 
 	/* The handle: Fira Code, white, with a short cyan to green trace under it like the line under the name. */

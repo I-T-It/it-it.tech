@@ -9,6 +9,7 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { company, emailEncoded } from '#lib/content/company.js';
 import { getContent } from '#lib/content/index.js';
+import { profiles, visibleProfiles } from '#lib/content/profiles.js';
 import { decodeEmail, EMAIL_FALLBACK_TEXT } from '#lib/email.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
 import { chips, obstacles, socket } from '#lib/pcb/registry.svelte.js';
@@ -135,9 +136,103 @@ describe('Hero', () => {
 	it('has no CTAs: no button, no filled or outline button-link, no mail link', async () => {
 		await mount(Hero);
 		expect(hero().querySelectorAll('button, .cta, .email, [href^="mailto"]')).toHaveLength(0);
-		// The only link is the scroll indicator.
+		// The links are the profile icons and the scroll indicator.
 		const links = Array.from(hero().querySelectorAll('a'));
-		expect(links.map((a) => a.getAttribute('href'))).toEqual(['#availability']);
+		expect(links.map((a) => a.getAttribute('href'))).toEqual([
+			...visibleProfiles().map((p) => p.url),
+			'#availability'
+		]);
+	});
+
+	describe('profile row', () => {
+		const row = () => hero().querySelector<HTMLElement>('ul.profiles')!;
+		const links = () => Array.from(row().querySelectorAll<HTMLAnchorElement>('a'));
+
+		it('shows one icon link for each of the ten profiles, in order', async () => {
+			await mount(Hero);
+			expect(links().map((a) => a.getAttribute('href'))).toEqual(profiles.map((p) => p.url));
+			expect(links()).toHaveLength(10);
+		});
+
+		it('sits under the handle line, inside the block the traces keep out of', async () => {
+			await mount(Hero);
+			const follow = hero().querySelector('.follow')!.getBoundingClientRect();
+			expect(row().getBoundingClientRect().top).toBeGreaterThanOrEqual(follow.bottom);
+			expect(obstacles()[0].contains(row())).toBe(true);
+		});
+
+		for (const locale of ['nl', 'en'] as const) {
+			it(`names every link for screen readers and says it leaves the site, in ${locale}`, async () => {
+				setLocale(locale);
+				const screen = await mount(Hero);
+				const on = locale === 'nl' ? 'Robbin op' : 'Robbin on';
+				const notice = locale === 'nl' ? '(externe site)' : '(external site)';
+				for (const profile of profiles) {
+					const link = screen.getByRole('link', { name: `${on} ${profile.name} ${notice}` });
+					await expect.element(link).toHaveAttribute('href', profile.url);
+				}
+			});
+		}
+
+		it('opens as an identity link: rel me, and noopener', async () => {
+			await mount(Hero);
+			for (const link of links()) {
+				const rel = (link.getAttribute('rel') ?? '').split(/\s+/);
+				expect(rel, link.href).toContain('me');
+				expect(rel, link.href).toContain('noopener');
+			}
+		});
+
+		it('draws the icons as decoration: SVG paths, hidden from screen readers, no text of their own', async () => {
+			await mount(Hero);
+			for (const link of links()) {
+				const svg = link.querySelector('svg')!;
+				expect(svg.getAttribute('aria-hidden'), link.href).toBe('true');
+				expect(svg.querySelector('path')).not.toBeNull();
+			}
+			// No icon font, no external image: nothing but inline SVG.
+			expect(row().querySelector('img, i, use')).toBeNull();
+		});
+
+		it('gives every link a target of at least 24 by 24 CSS px', async () => {
+			await mount(Hero);
+			for (const link of links()) {
+				const box = link.getBoundingClientRect();
+				expect(box.width, link.href).toBeGreaterThanOrEqual(24);
+				expect(box.height, link.href).toBeGreaterThanOrEqual(24);
+			}
+		});
+
+		it('shows a focus ring of 2px or more on the focused icon', async () => {
+			await mount(Hero);
+			links()[2].focus();
+			expect(document.activeElement).toBe(links()[2]);
+			const style = getComputedStyle(links()[2]);
+			expect(style.outlineStyle).toBe('solid');
+			expect(parseFloat(style.outlineWidth)).toBeGreaterThanOrEqual(2);
+		});
+
+		it('is one compact row on a desktop window and on a 320 CSS px phone', async () => {
+			for (const width of [1280, 320]) {
+				await page.viewport(width, 800);
+				await mount(Hero, true);
+				const tops = new Set(links().map((a) => Math.round(a.getBoundingClientRect().top)));
+				expect(tops.size, `${width}px`).toBe(1);
+				const right = Math.max(...links().map((a) => a.getBoundingClientRect().right));
+				expect(right).toBeLessThanOrEqual(width);
+			}
+		});
+
+		it('has a name for the list itself', async () => {
+			await mount(Hero);
+			expect(row().getAttribute('aria-label')).toBe('Online profielen');
+		});
+
+		it('names the list in English on the English page', async () => {
+			setLocale('en');
+			await mount(Hero);
+			expect(row().getAttribute('aria-label')).toBe('Online profiles');
+		});
 	});
 
 	it('ends with the scroll indicator', async () => {

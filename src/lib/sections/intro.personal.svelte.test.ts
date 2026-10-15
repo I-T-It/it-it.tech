@@ -8,6 +8,7 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { company } from '#lib/content/company.js';
 import { getContent } from '#lib/content/index.js';
+import { profiles, visibleProfiles } from '#lib/content/profiles.js';
 import { EMAIL_FALLBACK_TEXT } from '#lib/email.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
 import { chips, obstacles, socket } from '#lib/pcb/registry.svelte.js';
@@ -110,13 +111,34 @@ describe('Hero', () => {
 		});
 	}
 
-	it('has no CTAs: only the scroll indicator is a link', async () => {
+	it('has no CTAs: the links are the profile icons and the scroll indicator, no email', async () => {
 		await mount(Hero);
 		expect(hero().querySelectorAll('button, .cta, .email, [href^="mailto"]')).toHaveLength(0);
 		const links = Array.from(hero().querySelectorAll('a'));
-		expect(links.map((a) => a.getAttribute('href'))).toEqual(['#availability']);
+		expect(links.map((a) => a.getAttribute('href'))).toEqual([
+			...visibleProfiles().map((p) => p.url),
+			'#availability'
+		]);
 		expect(hero().lastElementChild).toBe(hero().querySelector('a.scroll-indicator'));
 	});
+
+	for (const locale of ['nl', 'en'] as const) {
+		it(`shows the ten profile icons with names and rel me in ${locale}`, async () => {
+			setLocale(locale);
+			const screen = await mount(Hero);
+			const on = locale === 'nl' ? 'Robbin op' : 'Robbin on';
+			const notice = locale === 'nl' ? '(externe site)' : '(external site)';
+			const row = hero().querySelector<HTMLElement>('ul.profiles')!;
+			expect(row.querySelectorAll('a')).toHaveLength(10);
+			for (const profile of profiles) {
+				const link = screen.getByRole('link', { name: `${on} ${profile.name} ${notice}` });
+				await expect.element(link).toHaveAttribute('href', profile.url);
+				expect(link.element().getAttribute('rel')).toBe('me noopener');
+				expect(link.element().getBoundingClientRect().width).toBeGreaterThanOrEqual(24);
+			}
+			expect(obstacles()[0].contains(row)).toBe(true);
+		});
+	}
 
 	it('shows the photo with its alt text, and no logo', async () => {
 		const screen = await mount(Hero);
@@ -275,7 +297,7 @@ describe('Hero focal point', () => {
 		await page.viewport(1280, 720);
 		await mount(Hero, true);
 		const frame = socket()!.el.getBoundingClientRect();
-		expect(frame.width).toBeGreaterThanOrEqual(240);
+		expect(frame.width).toBeGreaterThanOrEqual(220);
 		const box = hero().getBoundingClientRect();
 		expect(box.height).toBeCloseTo(720, 0);
 	});
