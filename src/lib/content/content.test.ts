@@ -21,7 +21,8 @@ function leaves(value: unknown, path = ''): [string, string][] {
 
 /** Paths of all leaves, strings and others alike, to compare the shape of two content files. */
 function shape(value: unknown, path = ''): string[] {
-	if (Array.isArray(value)) return [path + '[]', ...value.flatMap((v, i) => shape(v, `${path}[${i}]`))];
+	if (Array.isArray(value))
+		return [path + '[]', ...value.flatMap((v, i) => shape(v, `${path}[${i}]`))];
 	if (value && typeof value === 'object') {
 		return Object.entries(value).flatMap(([k, v]) => shape(v, path ? `${path}.${k}` : k));
 	}
@@ -33,7 +34,8 @@ const isUrlPath = (path: string) => /(^|\.)url$/.test(path);
 
 /** Characters are built from code points so that this file holds no invisible or exotic character. */
 const chars = (codes: number[]) => String.fromCharCode(...codes);
-const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+const range = (from: number, to: number) =>
+	Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
 /** No-break space, the zero-width and general punctuation spaces, line separators, braille blank, BOM. */
 const INVISIBLE = new RegExp(
@@ -489,7 +491,10 @@ describe('what the content must never hold', () => {
 			for (const [path, value] of copy(c)) {
 				const where = `${name}:${path}`;
 				expect([where, phone.test(value)]).toEqual([where, false]);
-				expect([where, /\b\d{1,2}[- /]\d{1,2}[- /](19|20)\d{2}\b/.test(value)]).toEqual([where, false]);
+				expect([where, /\b\d{1,2}[- /]\d{1,2}[- /](19|20)\d{2}\b/.test(value)]).toEqual([
+					where,
+					false
+				]);
 				expect([where, /\b\d{4} ?[A-Z]{2}\b/.test(value)]).toEqual([where, false]);
 			}
 		}

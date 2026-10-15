@@ -88,12 +88,12 @@ export const nl: SiteContent = {
 			{
 				id: 'technisch-leiderschap',
 				title: 'Technisch leiderschap',
-				text: 'Met mijn brede technische kennis maak ik technische beslissingen en voer ik ze door, in het vertrouwen dat ze werken. Ik kan zelfstandig een project opzetten en afronden volgens hoge kwaliteitsstandaarden. Daarnaast coach ik graag collega\'s en til ik ze mee naar een hoger niveau.'
+				text: "Met mijn brede technische kennis maak ik technische beslissingen en voer ik ze door, in het vertrouwen dat ze werken. Ik kan zelfstandig een project opzetten en afronden volgens hoge kwaliteitsstandaarden. Daarnaast coach ik graag collega's en til ik ze mee naar een hoger niveau."
 			},
 			{
 				id: 'oplossingsgericht',
 				title: 'Oplossingsgericht',
-				text: 'Tijdens het refinen van taken zie ik snel de oplossing voor complexe uitdagingen. Daardoor weet ik ook goed hoeveel moeite nodig is om zo\'n uitdaging tot een succes te maken.'
+				text: "Tijdens het refinen van taken zie ik snel de oplossing voor complexe uitdagingen. Daardoor weet ik ook goed hoeveel moeite nodig is om zo'n uitdaging tot een succes te maken."
 			},
 			{
 				id: 'laravel-expert',
@@ -105,7 +105,8 @@ export const nl: SiteContent = {
 
 	experience: {
 		title: 'Ervaring',
-		intro: 'De nieuwste rol staat bovenaan. Open een rol voor de situatie, de taken en het resultaat.',
+		intro:
+			'De nieuwste rol staat bovenaan. Open een rol voor de situatie, de taken en het resultaat.',
 		labels: {
 			present: 'heden',
 			via: 'via {employer}',
@@ -619,7 +620,8 @@ export const nl: SiteContent = {
 
 	talks: {
 		title: 'Talks en workshops',
-		intro: 'Talks, workshops en trainingen over Flutter, Svelte, front-end en PHP, de nieuwste bovenaan.',
+		intro:
+			'Talks, workshops en trainingen over Flutter, Svelte, front-end en PHP, de nieuwste bovenaan.',
 		talks: [
 			{
 				id: 'php-2005-called',
