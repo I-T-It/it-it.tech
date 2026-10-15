@@ -107,9 +107,35 @@ describe('Hero', () => {
 		const photo = screen.getByRole('img', { name: content.nl.hero.photoAlt });
 		await expect.element(photo).toBeVisible();
 		expect(hero().querySelector('svg.logo')).toBeNull();
-		const img = hero().querySelector('img')!;
-		await expect.poll(() => img.complete && img.naturalWidth).toBeGreaterThan(0);
 	});
+
+	// Not a wait for the image to load: how fast the dev server makes the AVIF, WebP and JPEG
+	// versions varies, and the <img> load event with it. Asking for each file proves that it exists
+	// and is served as an image, with no timing in the assertion.
+	it('offers the photo as AVIF and WebP with a JPEG behind them, and every file is served', async () => {
+		await mount(Hero);
+		const picture = hero().querySelector('picture')!;
+		const types = Array.from(picture.querySelectorAll('source')).map((s) => s.type);
+		expect(types).toEqual(expect.arrayContaining(['image/avif', 'image/webp']));
+
+		const img = picture.querySelector('img')!;
+		expect(img.getAttribute('src')).toBeTruthy();
+		expect(img.getAttribute('width')).toBeTruthy();
+		expect(img.getAttribute('height')).toBeTruthy();
+
+		const files = [
+			img.getAttribute('src')!,
+			...Array.from(picture.querySelectorAll('source')).map(
+				(s) => s.getAttribute('srcset')!.split(',')[0].trim().split(' ')[0]
+			)
+		];
+		expect(files.length).toBeGreaterThanOrEqual(3);
+		for (const file of files) {
+			const response = await fetch(new URL(file, document.baseURI));
+			expect(response.ok, file).toBe(true);
+			expect(response.headers.get('content-type'), file).toMatch(/^image\//);
+		}
+	}, 30_000);
 
 	it('says the alt text in English too', async () => {
 		setLocale('en');
