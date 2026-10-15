@@ -629,7 +629,7 @@ export const nl: SiteContent = {
 				title: '2005 Called! They Want Your Opinion About PHP Back!',
 				summary:
 					'Waarom PHP slecht was, waarom dat niet meer zo is en waarom het nog steeds een goede taal is om projecten in te bouwen.',
-				lang: 'nl',
+				langs: ['nl'],
 				titleLang: 'en'
 			},
 			{
@@ -638,7 +638,7 @@ export const nl: SiteContent = {
 				title: 'Falling in Love with Front-end all over again',
 				summary:
 					'De magie van Svelte, en hoe het zich verhoudt tot andere frameworks zoals Angular, React en Vue.js.',
-				lang: 'en',
+				langs: ['en'],
 				titleLang: 'en'
 			},
 			{
@@ -646,7 +646,7 @@ export const nl: SiteContent = {
 				kind: 'talk',
 				title: 'Writing multi-platform apps with native performance',
 				summary: 'De Flutter-workshop als talk, zonder de stappen om zelf mee te bouwen.',
-				lang: 'nl',
+				langs: ['nl'],
 				titleLang: 'en'
 			},
 			{
@@ -654,7 +654,7 @@ export const nl: SiteContent = {
 				kind: 'workshop',
 				title: 'Workshop Flutter',
 				summary: 'Hoe je begint met het bouwen van je eerste Flutter-app voor reviews.',
-				lang: 'nl',
+				langs: ['nl', 'en'],
 				titleLang: 'nl'
 			}
 		],

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { getContent } from '#lib/content/index.js';
-import type { Job, Locale } from '#lib/content/types.js';
+import type { Job, Locale, TalkOffer } from '#lib/content/types.js';
 import { chips } from '#lib/pcb/registry.svelte.js';
 import { overwriteGetLocale } from '#lib/paraglide/runtime.js';
 import EducationLanguages from './EducationLanguages.svelte';
@@ -974,7 +974,9 @@ describe('Talks (U7)', () => {
 			expect(facts('php-2005-called')).toEqual(['Taal: Nederlands']);
 			// The Flutter talk has an English title and is given in Dutch.
 			expect(facts('flutter-talk')).toEqual(['Taal: Nederlands']);
-			expect(facts('flutter-workshop')).toEqual(['Taal: Nederlands']);
+			// The workshop can be given in either language.
+			expect(facts('flutter-workshop')).toEqual(['Taal: Nederlands of Engels']);
+			expect(facts('frontend-love')).toEqual(['Taal: Engels']);
 		});
 
 		it('says Dutch for the Flutter talk and keeps its English title marked on the Dutch page', async () => {
@@ -989,22 +991,46 @@ describe('Talks (U7)', () => {
 
 		it('adds the duration and the audience to the facts where an offer has them', () => {
 			const labels = talks().labels;
-			const base = {
+			const base: TalkOffer = {
 				id: 'x',
 				kind: 'talk',
 				title: 'T',
 				summary: 'S',
-				lang: 'en',
+				langs: ['en'],
 				titleLang: 'en'
-			} as const;
-			expect(offerFacts(base, labels)).toEqual([{ label: 'Taal', value: 'Engels' }]);
+			};
+			expect(offerFacts(base, labels, 'nl')).toEqual([{ label: 'Taal', value: 'Engels' }]);
 			expect(
-				offerFacts({ ...base, duration: '45 minuten', audience: 'Developers' }, labels)
+				offerFacts({ ...base, duration: '45 minuten', audience: 'Developers' }, labels, 'nl')
 			).toEqual([
 				{ label: 'Taal', value: 'Engels' },
 				{ label: 'Duur', value: '45 minuten' },
 				{ label: 'Doelgroep', value: 'Developers' }
 			]);
+		});
+
+		it('lists the languages of an offer with "of" or "or", in the order of the content', () => {
+			const base = {
+				id: 'x',
+				kind: 'workshop',
+				title: 'T',
+				summary: 'S',
+				titleLang: 'nl'
+			} as const;
+			const value = (langs: ('nl' | 'en')[], locale: 'nl' | 'en') =>
+				offerFacts({ ...base, langs }, talks(locale).labels, locale)[0].value;
+			expect(value(['nl', 'en'], 'nl')).toBe('Nederlands of Engels');
+			expect(value(['en', 'nl'], 'nl')).toBe('Engels of Nederlands');
+			expect(value(['nl', 'en'], 'en')).toBe('Dutch or English');
+			expect(value(['nl'], 'en')).toBe('Dutch');
+		});
+
+		it('says Dutch or English for the workshop on the English page', async () => {
+			setLocale('en');
+			await render(Talks, {});
+			expect(offer('flutter-workshop').querySelector('.facts')?.textContent).toMatch(
+				/Language\s*Dutch or English/
+			);
 		});
 
 		it('says how often and when an offer was last given, in a time element', async () => {

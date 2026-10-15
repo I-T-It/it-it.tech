@@ -154,8 +154,11 @@ export interface TalkOffer {
 	duration?: string;
 	/** Free text, e.g. "Developers". Left out until it is known. */
 	audience?: string;
-	/** The language the talk is given in. Shown on the card. Not the language of the title. */
-	lang: Locale;
+	/**
+	 * The languages the talk can be given in, at least one, in the order they are shown ("Dutch or
+	 * English"). Not the language of the title.
+	 */
+	langs: Locale[];
 	/**
 	 * The language of the title as it was written. The Dutch page marks an English title
 	 * `lang="en"`, so a screen reader switches voice (WCAG 3.1.2). A talk can be given in Dutch

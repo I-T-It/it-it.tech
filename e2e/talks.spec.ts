@@ -58,6 +58,14 @@ test.describe('talks and workshops', () => {
 		}
 	});
 
+	test('gives Workshop Flutter in Dutch or English', async ({ page }) => {
+		await page.goto('./');
+		const card = page.locator('[data-offer="flutter-workshop"]');
+		await expect(card.locator('.facts')).toContainText('Nederlands of Engels');
+		await page.goto('en/');
+		await expect(card.locator('.facts')).toContainText('Dutch or English');
+	});
+
 	test('shows the PHP talk at Sopra Steria in June 2024, in Dutch', async ({ page }) => {
 		await page.goto('./');
 		const row = page.locator('[data-given="php-2005-called"]');

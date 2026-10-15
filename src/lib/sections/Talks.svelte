@@ -1,5 +1,6 @@
 <script module lang="ts">
 	import type { Locale, TalkGiven, TalkOffer, Talks } from '#lib/content/types.js';
+	import { localeTag } from '#lib/format/period.js';
 
 	/** Newest date first. The content promises it already; equal dates keep their order. */
 	export function newestGivenFirst<T extends Pick<TalkGiven, 'date'>>(given: readonly T[]): T[] {
@@ -38,9 +39,16 @@
 		value: string;
 	}
 
-	/** What a visitor wants to know first: the language, then the duration and the audience when known. */
-	export function offerFacts(offer: TalkOffer, labels: Talks['labels']): Fact[] {
-		const facts: Fact[] = [{ label: labels.facts.language, value: labels.language[offer.lang] }];
+	/**
+	 * What a visitor wants to know first: the languages ("Nederlands of Engels", "Dutch or
+	 * English", in the order of the content), then the duration and the audience when known.
+	 */
+	export function offerFacts(offer: TalkOffer, labels: Talks['labels'], locale: Locale): Fact[] {
+		const languages = new Intl.ListFormat(localeTag(locale), {
+			style: 'long',
+			type: 'disjunction'
+		}).format(offer.langs.map((lang) => labels.language[lang]));
+		const facts: Fact[] = [{ label: labels.facts.language, value: languages }];
 		if (offer.duration) facts.push({ label: labels.facts.duration, value: offer.duration });
 		if (offer.audience) facts.push({ label: labels.facts.audience, value: offer.audience });
 		return facts;
@@ -122,7 +130,7 @@
 					<h4 class="title" lang={foreignTitleLang(offer, locale)}>{offer.title}</h4>
 					<p class="summary">{offer.summary}</p>
 					<dl class="facts">
-						{#each offerFacts(offer, labels) as fact (fact.label)}
+						{#each offerFacts(offer, labels, locale) as fact (fact.label)}
 							<div>
 								<dt>{fact.label}</dt>
 								<dd>{fact.value}</dd>
