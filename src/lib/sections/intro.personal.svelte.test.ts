@@ -293,9 +293,22 @@ describe('Hero power-up', () => {
 			for (const port of socket()!.ports()) {
 				expect(getComputedStyle(port).boxShadow).not.toBe('none');
 			}
+			for (const pad of hero().querySelectorAll('.pads .pad')) {
+				expect(getComputedStyle(pad).opacity).toBe('1');
+			}
 		} finally {
 			document.documentElement.classList.remove('reduced', 'js');
 		}
+	});
+
+	it('shows the whole frame from the first frame without scripts', async () => {
+		await mount(Hero);
+		for (const pad of hero().querySelectorAll('.pads .pad')) {
+			expect(getComputedStyle(pad).opacity).toBe('1');
+		}
+		const courtyard = hero().querySelector<SVGElement>('.courtyard')!;
+		expect(courtyard.getAnimations({ subtree: true })).toHaveLength(0);
+		expect(getComputedStyle(courtyard).maskImage).toBe('none');
 	});
 
 	it('marks two ports, one on each side, for the lead traces of the board', async () => {
@@ -333,13 +346,35 @@ describe('Hero power-up', () => {
 		it('waits for the board to power the socket, then draws the outline and lights the ports', async () => {
 			document.documentElement.classList.add('js');
 			await mount(Hero);
-			const outline = hero().querySelector<SVGPolylineElement>('.courtyard .outline')!;
-			expect(getComputedStyle(outline).animationDelay).toBe('6s');
+			const courtyard = hero().querySelector<SVGElement>('.courtyard')!;
+			// Waiting: the outline is masked out entirely, from both contact points.
+			expect(getComputedStyle(courtyard).animationDelay).toBe('6s');
+			expect(getComputedStyle(courtyard).getPropertyValue('--reveal').trim()).toBe('-10%');
 			socket()!.el.setAttribute('data-power', 'on');
-			expect(getComputedStyle(outline).animationName).toMatch(/outline-draw-powered/);
-			expect(getComputedStyle(outline).animationDelay).toBe('0s');
+			expect(getComputedStyle(courtyard).animationName).toMatch(/outline-reveal-powered/);
+			expect(getComputedStyle(courtyard).animationDelay).toBe('0s');
 			const port = socket()!.ports()[0];
 			expect(getComputedStyle(port).animationName).toMatch(/port-on-powered/);
+		});
+
+		it('keeps the pad ring dark until the leads connect, then lights it in from where they touch', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			const pads = [...hero().querySelectorAll<HTMLElement>('.pads .pad')];
+			// Waiting: every pad, the pin-1 mark too, is out of sight.
+			for (const pad of pads) expect(getComputedStyle(pad).opacity).toBe('0');
+			socket()!.el.setAttribute('data-power', 'on');
+			const start = (pad: HTMLElement) =>
+				(pad.getAnimations() as CSSAnimation[])
+					.filter((a) => /pad-in-powered/.test(a.animationName))
+					.map((a) => Number(a.effect!.getComputedTiming().delay))[0];
+			for (const pad of pads) expect(start(pad), pad.style.gridArea).toBeGreaterThanOrEqual(0);
+			// The pads at the contact points light first, the ones furthest round the ring last.
+			const lead = pads.find((pad) => pad.hasAttribute('data-lead'))!;
+			const far = pads.find((pad) => pad.style.gridRow === '11' && pad.style.gridColumn === '11')!;
+			expect(start(lead)).toBeLessThan(start(far));
+			for (const pad of pads) for (const a of pad.getAnimations()) a.finish();
+			for (const pad of pads) expect(getComputedStyle(pad).opacity).toBe('1');
 		});
 
 		it('keeps the photo dark until the leads connect, then etches it in from where they touch', async () => {

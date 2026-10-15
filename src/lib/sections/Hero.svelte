@@ -37,6 +37,34 @@
 	 */
 	const LEADS = new Set(['8,1', '4,11']);
 
+	/** A pad's place on the ring, clockwise from the top left corner: 0 to 39. */
+	const around = (row: number, col: number) =>
+		row === 1
+			? col - 1
+			: col === GRID
+				? GRID - 1 + row - 1
+				: row === GRID
+					? 2 * (GRID - 1) + GRID - col
+					: 3 * (GRID - 1) + GRID - row;
+	const RING = 4 * (GRID - 1);
+	const leadPlaces = [...LEADS].map((key) =>
+		around(...(key.split(',').map(Number) as [number, number]))
+	);
+	/**
+	 * When a pad lights once the leads connect: the ones at the contact points first, round the
+	 * ring from there, the ones furthest from both last.
+	 */
+	const lightDelay = (row: number, col: number) => {
+		const place = around(row, col);
+		const steps = Math.min(
+			...leadPlaces.map((lead) => {
+				const gap = Math.abs(place - lead);
+				return Math.min(gap, RING - gap);
+			})
+		);
+		return `${(0.1 + (steps / (RING / 2)) * 1.1).toFixed(2)}s`;
+	};
+
 	const ring = Array.from({ length: GRID * GRID }, (_, i) => ({
 		row: Math.floor(i / GRID) + 1,
 		col: (i % GRID) + 1
@@ -48,7 +76,8 @@
 			pin1: row === 1 && col === 1,
 			side: col <= (GRID + 1) / 2 ? 'left' : 'right',
 			port: PORTS[`${row},${col}`],
-			lead: LEADS.has(`${row},${col}`)
+			lead: LEADS.has(`${row},${col}`),
+			delay: lightDelay(row, col)
 		}));
 
 	/** Where a lead port's row meets the outline, in the outline's 0 to 100 box. */
@@ -99,6 +128,7 @@
 							data-side={pad.side}
 							data-port={pad.port}
 							data-lead={pad.lead ? '' : undefined}
+							style:--light-delay={pad.delay}
 							style:grid-row={pad.row}
 							style:grid-column={pad.col}
 						></span>
@@ -477,12 +507,39 @@
 			animation-delay: 6s;
 		}
 
-		:global(html.js:not(.reduced)) .pad[data-port] {
-			animation-delay: 6.8s;
+		/*
+		 * The pad ring waits out of sight too, then lights from the contact points round the ring
+		 * (--light-delay, set per pad); a port then lights up as well.
+		 */
+		:global(html.js:not(.reduced)) .pad {
+			animation: pad-in 0.4s ease-out calc(6s + var(--light-delay, 0s)) backwards;
 		}
 
-		:global(html.js:not(.reduced)) .courtyard .outline {
-			animation: outline-draw 1.2s cubic-bezier(0.45, 0, 0.2, 1) 6s backwards;
+		:global(html.js:not(.reduced)) .pad[data-port] {
+			animation:
+				pad-in 0.4s ease-out calc(6s + var(--light-delay, 0s)) backwards,
+				port-on 0.5s ease-out calc(6.3s + var(--light-delay, 0s)) backwards;
+		}
+
+		/*
+		 * The outline shows from the two contact points outward, along the frame both ways: a mask
+		 * of two circles on those points that grow. (A dash animation won't do: the stroke does not
+		 * scale, and its dashes would not line up with the path's length.)
+		 */
+		:global(html.js:not(.reduced)) .courtyard {
+			--reveal: 150%;
+			mask-image:
+				radial-gradient(
+					circle at 0.5% 68%,
+					#000 var(--reveal),
+					transparent calc(var(--reveal) + 10%)
+				),
+				radial-gradient(
+					circle at 99.5% 32%,
+					#000 var(--reveal),
+					transparent calc(var(--reveal) + 10%)
+				);
+			animation: outline-reveal 1.2s cubic-bezier(0.45, 0, 0.2, 1) 6s backwards;
 		}
 
 		/*
@@ -507,13 +564,18 @@
 			animation-delay: 0.3s;
 		}
 
-		:global(html.js:not(.reduced) [data-power='on']) .pad[data-port] {
-			animation-name: port-on-powered;
-			animation-delay: 0.8s;
+		:global(html.js:not(.reduced) [data-power='on']) .pad {
+			animation-name: pad-in-powered;
+			animation-delay: var(--light-delay, 0s);
 		}
 
-		:global(html.js:not(.reduced) [data-power='on']) .courtyard .outline {
-			animation-name: outline-draw-powered;
+		:global(html.js:not(.reduced) [data-power='on']) .pad[data-port] {
+			animation-name: pad-in-powered, port-on-powered;
+			animation-delay: var(--light-delay, 0s), calc(0.3s + var(--light-delay, 0s));
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .courtyard {
+			animation-name: outline-reveal-powered;
 			animation-delay: 0s;
 		}
 
@@ -593,6 +655,21 @@
 		}
 	}
 
+	/* A pad of the frame lights up: from nothing to its own look, a little bright on the way. */
+	@keyframes pad-in {
+		from {
+			opacity: 0;
+			transform: scale(0.4);
+		}
+	}
+
+	@keyframes pad-in-powered {
+		from {
+			opacity: 0;
+			transform: scale(0.4);
+		}
+	}
+
 	@keyframes port-on-powered {
 		from {
 			background: color-mix(in srgb, var(--pad-color) 32%, transparent);
@@ -600,26 +677,28 @@
 		}
 	}
 
-	/* Each half of the outline from its lead's contact point on. */
-	@keyframes outline-draw {
+	/* The outline's reach from the contact points: from -10%, so no soft edge shows yet. */
+	@property --reveal {
+		syntax: '<percentage>';
+		inherits: false;
+		initial-value: 150%;
+	}
+
+	@keyframes outline-reveal {
 		from {
-			stroke-dasharray: 1;
-			stroke-dashoffset: 1;
+			--reveal: -10%;
 		}
 		to {
-			stroke-dasharray: 1;
-			stroke-dashoffset: 0;
+			--reveal: 150%;
 		}
 	}
 
-	@keyframes outline-draw-powered {
+	@keyframes outline-reveal-powered {
 		from {
-			stroke-dasharray: 1;
-			stroke-dashoffset: 1;
+			--reveal: -10%;
 		}
 		to {
-			stroke-dasharray: 1;
-			stroke-dashoffset: 0;
+			--reveal: 150%;
 		}
 	}
 
