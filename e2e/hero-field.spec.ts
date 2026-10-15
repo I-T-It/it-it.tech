@@ -122,7 +122,7 @@ test.describe('hero field', () => {
 		await expect(page.locator('#hero .socket')).toHaveAttribute('data-power', 'on');
 	});
 
-	test('runs the leads in first, powers the socket, then builds the field from the corners', async ({
+	test('builds the field with the leads in it, and the socket and the field finish together', async ({
 		page
 	}) => {
 		await page.goto('./');
@@ -130,15 +130,20 @@ test.describe('hero field', () => {
 		const socket = page.locator('#hero .socket');
 		await expect(canvas).toHaveAttribute('data-hero-ellipse', /\d/);
 		const e = await ellipseOf(page);
-		// The leads arrive about a second after the board starts: the socket is powered then.
-		await expect(socket).toHaveAttribute('data-power', 'on', { timeout: 4000 });
-		const powered = await paint(page, e);
-		expect(powered.inside).toBeGreaterThan(0);
-		await expect(canvas).toHaveAttribute('data-pcb-state', 'idle', { timeout: 12_000 });
-		const done = await paint(page, e);
-		expect(done.insideShare).toBeLessThan(0.02);
+		const start = Date.now();
 		const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
-		// The field came after the power: the corners were (nearly) empty then.
-		expect(sum(done.corners)).toBeGreaterThan(sum(powered.corners) + 200);
+		// The field builds from the start: the corners fill while the leads are on their way.
+		await expect.poll(async () => sum((await paint(page, e)).corners)).toBeGreaterThan(200);
+		await expect(socket).not.toHaveAttribute('data-power', 'on');
+		// The leads arrive part way through the build and power the socket.
+		await expect(socket).toHaveAttribute('data-power', 'on', { timeout: 8000 });
+		const poweredAt = Date.now() - start;
+		expect((await paint(page, e)).inside).toBeGreaterThan(0);
+		// The field ends about when the logo or photo does, 2.2 s after the power.
+		await expect(canvas).toHaveAttribute('data-pcb-state', 'idle', { timeout: 8000 });
+		const idleAt = Date.now() - start;
+		expect(idleAt - poweredAt).toBeGreaterThan(1200);
+		expect(idleAt - poweredAt).toBeLessThan(3500);
+		expect((await paint(page, e)).insideShare).toBeLessThan(0.02);
 	});
 });

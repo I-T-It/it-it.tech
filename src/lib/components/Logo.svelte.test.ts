@@ -1,6 +1,7 @@
 import '../../app.css';
 import { afterEach, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { SOCKET_DRAW_MS } from '#lib/pcb/growth.js';
 import Logo from './Logo.svelte';
 
 const root = document.documentElement;
@@ -183,7 +184,8 @@ describe('motion', () => {
 			root.classList.add('js');
 			await render(Logo, { animate: true });
 			const trace = getComputedStyle(document.querySelector('.trace')!);
-			expect(trace.animationDelay).toBe('3s');
+			// The leads arrive after about 4 s; should the board never come, it draws after 6 s.
+			expect(trace.animationDelay).toBe('6s');
 			expect(Number(trace.strokeDashoffset.replace('px', ''))).toBe(-1);
 			expect(getComputedStyle(document.querySelector('.letters')!).opacity).toBe('0');
 		});
@@ -198,6 +200,16 @@ describe('motion', () => {
 			expect(getComputedStyle(document.querySelector('.letters')!).animationName).toMatch(
 				/fade-powered/
 			);
+		});
+
+		it('takes as long to draw as the board gives it: it ends with the field', async () => {
+			root.classList.add('js');
+			await render(Logo, { animate: true });
+			svg().parentElement!.setAttribute('data-power', 'on');
+			const ends = svg()
+				.getAnimations({ subtree: true })
+				.map((animation) => Number(animation.effect!.getComputedTiming().endTime));
+			expect(Math.max(...ends)).toBe(SOCKET_DRAW_MS);
 		});
 
 		it('is the finished logo under reduced motion, powered or not', async () => {

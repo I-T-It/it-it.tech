@@ -452,21 +452,23 @@
 		}
 
 		/*
-		 * With scripts the board powers the socket: its two lead traces run into the lead ports,
-		 * and when they arrive it sets data-power="on" on the socket. Until then the glow, the ports
-		 * and the photo's outline wait; then the outline draws from the two contact points, the
-		 * glow rises and the ports light. Should the board never come, all that runs after 3 s.
+		 * With scripts the board powers the socket: its two lead traces run into the lead ports with
+		 * the rest of the field, and when they arrive (about 4 s in) it sets data-power="on" on the
+		 * socket. Until then the glow, the ports and the photo's outline wait; then the outline
+		 * draws from the two contact points, the glow rises and the ports light, all within 2.2 s,
+		 * so they end with the field (SOCKET_DRAW_MS in growth.ts). Should the board never come,
+		 * all that runs after 6 s.
 		 */
 		:global(html.js:not(.reduced)) .socket::before {
-			animation-delay: 3s;
+			animation-delay: 6s;
 		}
 
 		:global(html.js:not(.reduced)) .pad[data-port] {
-			animation-delay: 3.8s;
+			animation-delay: 6.8s;
 		}
 
 		:global(html.js:not(.reduced)) .courtyard .outline {
-			animation: outline-draw 1.2s cubic-bezier(0.45, 0, 0.2, 1) 3s backwards;
+			animation: outline-draw 1.2s cubic-bezier(0.45, 0, 0.2, 1) 6s backwards;
 		}
 
 		/*

@@ -11,6 +11,7 @@ import { getContent } from '#lib/content/index.js';
 import { profiles, visibleProfiles } from '#lib/content/profiles.js';
 import { EMAIL_FALLBACK_TEXT } from '#lib/email.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
+import { SOCKET_DRAW_MS } from '#lib/pcb/growth.js';
 import { chips, obstacles, socket } from '#lib/pcb/registry.svelte.js';
 import Availability from './Availability.svelte';
 import Contact from './Contact.svelte';
@@ -332,12 +333,23 @@ describe('Hero power-up', () => {
 			document.documentElement.classList.add('js');
 			await mount(Hero);
 			const outline = hero().querySelector<SVGPolylineElement>('.courtyard .outline')!;
-			expect(getComputedStyle(outline).animationDelay).toBe('3s');
+			expect(getComputedStyle(outline).animationDelay).toBe('6s');
 			socket()!.el.setAttribute('data-power', 'on');
 			expect(getComputedStyle(outline).animationName).toMatch(/outline-draw-powered/);
 			expect(getComputedStyle(outline).animationDelay).toBe('0s');
 			const port = socket()!.ports()[0];
 			expect(getComputedStyle(port).animationName).toMatch(/port-on-powered/);
+		});
+
+		it('is done drawing when the board is: within the time the board gives it', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			socket()!.el.setAttribute('data-power', 'on');
+			const ends = socket()!
+				.el.getAnimations({ subtree: true })
+				.map((animation) => Number(animation.effect!.getComputedTiming().endTime));
+			expect(ends.length).toBeGreaterThan(0);
+			expect(Math.max(...ends)).toBeLessThanOrEqual(SOCKET_DRAW_MS);
 		});
 	});
 });

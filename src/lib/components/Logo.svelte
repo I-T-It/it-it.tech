@@ -145,23 +145,24 @@
 
 	/*
 	 * In the hero the board powers the logo: the board's two lead traces run into the ports, and
-	 * when they arrive the board sets data-power="on" on the socket round the logo. The logo waits,
-	 * dark, until then and draws from there. Should the board never come, it draws after 3 s.
+	 * when they arrive (about 4 s in) the board sets data-power="on" on the socket round the logo.
+	 * The logo waits, dark, until then and draws from there in 2.2 s, ending with the board's
+	 * field (SOCKET_DRAW_MS in growth.ts). Should the board never come, it draws after 6 s.
 	 */
 	:global(html.js:not(.reduced)) .animate .trace {
-		animation-delay: 3s;
+		animation-delay: 6s;
 	}
 
 	:global(html.js:not(.reduced)) .animate .trace-green {
-		animation-delay: 3.12s;
+		animation-delay: 6.12s;
 	}
 
 	:global(html.js:not(.reduced)) .animate .pad {
-		animation-delay: 4.45s;
+		animation-delay: 7.45s;
 	}
 
 	:global(html.js:not(.reduced)) .animate .letters {
-		animation-delay: 4.6s;
+		animation-delay: 7.6s;
 	}
 
 	/* A new name starts the animation over, from the moment the power comes on. */
