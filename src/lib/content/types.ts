@@ -200,15 +200,6 @@ export interface Talks extends SectionHead {
 			/** Contains "{count}" and "{last}", the date of the most recent time. */
 			many: string;
 		};
-		book: {
-			/** Label of the mail link on the company build, one per kind. */
-			talk: string;
-			workshop: string;
-			/** Label of the link to I.T. It on the personal build. */
-			company: string;
-		};
-		/** Subject of the mail, contains "{title}". Not a secret; the address is. */
-		emailSubject: string;
 	};
 }
 

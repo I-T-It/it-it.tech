@@ -9,21 +9,7 @@ import { overwriteGetLocale } from '#lib/paraglide/runtime.js';
 import EducationLanguages from './EducationLanguages.svelte';
 import Experience, { newestFirst } from './Experience.svelte';
 import Skills, { sortSkills } from './Skills.svelte';
-import Talks, {
-	bookingSubject,
-	foreignTitleLang,
-	newestGivenFirst,
-	offerFacts,
-	offerStats
-} from './Talks.svelte';
-
-// The talks book by mail on the company build; the personal build is in talks.personal.svelte.test.ts.
-// The variant is a build-time constant, so the mock holds what the sections read (importActual does
-// not load site.ts in browser mode).
-vi.mock('../site.js', () => ({
-	site: 'company',
-	COMPANY_SITE_URL: 'https://company.example/'
-}));
+import Talks, { foreignTitleLang, newestGivenFirst, offerFacts, offerStats } from './Talks.svelte';
 
 const root = document.documentElement;
 const CYAN = 'rgb(0, 231, 255)';
@@ -995,61 +981,28 @@ describe('Talks (U7)', () => {
 		});
 	});
 
-	describe('booking', () => {
+	describe('information only', () => {
 		// Built from parts: the address and the mail scheme are never written out (see CLAUDE.md).
-		const address = ['info', '@', 'it-it', '.', 'tech'].join('');
-		const scheme = ['mail', 'to'].join('') + ':';
-		const cta = (id: string) => offer(id).querySelector<HTMLAnchorElement>('a.email.cta')!;
+		const scheme = ['mail', 'to'].join('');
 
-		it('gives every offer one protected email link, named by what it books', async () => {
-			await render(Talks, {});
-			for (const o of talks().offers) {
-				expect(offer(o.id).querySelectorAll('a'), o.id).toHaveLength(1);
-				expect(cta(o.id).textContent, o.id).toContain(talks().labels.book[o.kind]);
+		it.each(['nl', 'en'] as const)(
+			'has no booking button, no email link and no link inside an offer (%s)',
+			async (locale) => {
+				setLocale(locale);
+				await render(Talks, {});
+				const chip = document.querySelector('section#talks')!;
+				expect(chip.querySelectorAll('button, .cta, .email')).toHaveLength(0);
+				expect(chip.querySelectorAll(`[href^="${scheme}"]`)).toHaveLength(0);
+				expect(chip.querySelectorAll('[data-offer] a')).toHaveLength(0);
+				expect(chip.textContent).not.toContain('[at]');
 			}
-			expect(cta('svelte-talk').textContent).toContain('Boek deze talk');
-			expect(cta('flutter-workshop').textContent).toContain('Boek deze workshop');
-		});
+		);
 
-		it('mails the address with the title of that talk in the subject, once mounted', async () => {
+		it('links nothing but the events in the history', async () => {
 			await render(Talks, {});
-			for (const o of talks().offers) {
-				await expect
-					.poll(() => cta(o.id).getAttribute('href'), { message: o.id })
-					.toBe(`${scheme}${address}?subject=${encodeURIComponent('Talk/workshop: ' + o.title)}`);
-			}
-		});
-
-		it('writes the subject in English with the English title on the English page', async () => {
-			setLocale('en');
-			await render(Talks, {});
-			await expect
-				.poll(() => cta('flutter-workshop').getAttribute('href'))
-				.toBe(
-					`${scheme}${address}?subject=${encodeURIComponent('Talk/workshop: Flutter workshop')}`
-				);
-			expect(cta('flutter-workshop').textContent).toContain('Book this workshop');
-		});
-
-		it('gives every offer an anchor, which the personal build links to', async () => {
-			await render(Talks, {});
-			for (const o of talks().offers) expect(offer(o.id).id, o.id).toBe(`offer-${o.id}`);
-		});
-
-		it('is an outline button in the green of the freelance path, not a filled one', async () => {
-			await render(Talks, {});
-			const link = cta('svelte-talk');
-			expect(link.classList.contains('cta-freelance')).toBe(true);
-			expect(link.classList.contains('cta-filled')).toBe(false);
-			expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(24);
-		});
-
-		it('fills the subject template with the title', () => {
-			expect(bookingSubject('Talk/workshop: {title}', 'Flutter-talk')).toBe(
-				'Talk/workshop: Flutter-talk'
-			);
-			// A title that holds a placeholder is not expanded a second time.
-			expect(bookingSubject('X: {title}', '{title}')).toBe('X: {title}');
+			const links = Array.from(document.querySelectorAll('section#talks a'));
+			expect(links).toHaveLength(talks().given.filter((g) => g.url).length);
+			for (const link of links) expect(link.closest('[data-given]')).not.toBeNull();
 		});
 	});
 });

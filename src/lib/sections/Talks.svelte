@@ -32,18 +32,12 @@
 		return offer.lang === 'en' && locale !== 'en' ? 'en' : undefined;
 	}
 
-	/** The mail subject of one offer: the template of the content with the title in it. */
-	export function bookingSubject(template: string, title: string): string {
-		// A function as replacement: a "$&" in a title must not be read as a pattern.
-		return template.replace('{title}', () => title);
-	}
-
 	export interface Fact {
 		label: string;
 		value: string;
 	}
 
-	/** What a booker asks first: the language, then the duration and the audience when known. */
+	/** What a visitor wants to know first: the language, then the duration and the audience when known. */
 	export function offerFacts(offer: TalkOffer, labels: Talks['labels']): Fact[] {
 		const facts: Fact[] = [{ label: labels.facts.language, value: labels.language[offer.lang] }];
 		if (offer.duration) facts.push({ label: labels.facts.duration, value: offer.duration });
@@ -61,21 +55,16 @@
 
 <script lang="ts">
 	import Chip from '#lib/components/Chip.svelte';
-	import ProtectedEmail from '#lib/components/ProtectedEmail.svelte';
 	import { getContent } from '#lib/content/index.js';
 	import { formatDay } from '#lib/format/period.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
-	import { COMPANY_SITE_URL, site } from '#lib/site.js';
 
 	const locale = getLocale();
 	const content = getContent(locale).talks;
 	const { labels } = content;
 	const given = newestGivenFirst(content.given);
 	const offers = new Map(content.offers.map((offer) => [offer.id, offer]));
-
-	/** I.T. It in the language of this page. The personal build books through it instead of mailing. */
-	const companyUrl = COMPANY_SITE_URL + (locale === 'en' ? 'en/' : '');
 
 	/** What an occurrence is called: its own title, or the title of the offer it belongs to. */
 	function titleOf(talk: TalkGiven): { text: string; lang?: Locale } {
@@ -86,10 +75,9 @@
 </script>
 
 <!--
-	U7 in two parts under one chip: what is ready to give (the catalogue, each offer with a way to
-	book it) and when it was given (the history, newest first). The company build books by mail,
-	with the title of the talk in the subject; the personal build shows no address and links to
-	that offer on the company site, which is where the mail link is.
+	U7 in two parts under one chip: what is ready to give (the catalogue) and when it was given (the
+	history, newest first). The offers are information only: no booking button and no address, on
+	either build. How to reach him is in the contact chip.
 -->
 <Chip id="talks" designator="U7" labelledby="talks-title" side="both">
 	<h2 id="talks-title">{content.title}</h2>
@@ -102,7 +90,7 @@
 		<ul class="offers">
 			{#each content.offers as offer (offer.id)}
 				{@const stats = offerStats(offer.id, content.given)}
-				<li id="offer-{offer.id}" class="offer" data-offer={offer.id} data-kind={offer.kind}>
+				<li class="offer" data-offer={offer.id} data-kind={offer.kind}>
 					<p class="kind">{labels.kind[offer.kind]}</p>
 					<h4 class="title" lang={foreignTitleLang(offer, locale)}>{offer.title}</h4>
 					<p class="summary">{offer.summary}</p>
@@ -120,22 +108,6 @@
 							{before}<time datetime={stats.last}>{formatDay(stats.last, locale)}</time>{after}
 						</p>
 					{/if}
-					<div class="actions">
-						{#if site === 'company'}
-							<ProtectedEmail
-								variant="cta"
-								label={labels.book[offer.kind]}
-								subject={bookingSubject(labels.emailSubject, offer.title)}
-								class="cta-freelance"
-							/>
-						{:else}
-							<!-- eslint-disable svelte/no-navigation-without-resolve -- an external address, not a route -->
-							<a class="cta cta-freelance" href="{companyUrl}#offer-{offer.id}"
-								>{labels.book.company}<span class="sr-only">{' ' + m.external_site()}</span></a
-							>
-							<!-- eslint-enable svelte/no-navigation-without-resolve -->
-						{/if}
-					</div>
 				</li>
 			{/each}
 		</ul>
@@ -275,19 +247,12 @@
 		margin: 0;
 	}
 
+	/* How often it was given sits at the foot of every card, whatever the length of the text above. */
 	.times {
-		margin-bottom: 0;
+		margin: auto 0 0;
 		color: var(--ink-muted);
 		font-family: var(--font-display);
 		font-size: 0.8125rem;
-	}
-
-	/* The button sits at the foot of every card, whatever the length of the text above it. */
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		margin-top: auto;
-		padding-top: 1rem;
 	}
 
 	.given li {

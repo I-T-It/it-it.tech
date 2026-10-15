@@ -137,7 +137,7 @@ describe('NL and EN parity', () => {
 			/groups\[\d+\]\.(title|skills\[\d+\]\.title)$/.test(path) ||
 			/^talks\.offers\[\d+\]\.title$/.test(path) ||
 			/^talks\.given\[\d+\]\.event$/.test(path) ||
-			/^talks\.labels\.(kind\.(talk|workshop)|emailSubject)$/.test(path) ||
+			/^talks\.labels\.kind\.(talk|workshop)$/.test(path) ||
 			/education\[\d+\]\.institution$/.test(path) ||
 			/^contact\.(title|labels\.(linkedin|github))$/.test(path) ||
 			path === 'experience.labels.via' ||
@@ -471,10 +471,6 @@ describe('talks', () => {
 			expect(labels.times.one).toContain('{last}');
 			expect(labels.times.many).toContain('{last}');
 			expect(labels.times.many).toContain('{count}');
-			expect(labels.emailSubject).toContain('{title}');
-			expect(labels.book.talk.length).toBeGreaterThan(3);
-			expect(labels.book.workshop.length).toBeGreaterThan(3);
-			expect(labels.book.company.length).toBeGreaterThan(3);
 			expect(Object.keys(labels.language).sort()).toEqual(['en', 'nl']);
 		}
 		expect(nl.talks.labels.offers).toBe('Klaar om te geven');
@@ -483,8 +479,17 @@ describe('talks', () => {
 		expect(en.talks.labels.given).toBe('Given');
 	});
 
-	it('has the mail subject of the plan for a talk, without an address in it', () => {
-		for (const [, c] of both) expect(c.talks.labels.emailSubject).toBe('Talk/workshop: {title}');
+	it('has no booking label and no mail subject: the offers are information only', () => {
+		for (const [, c] of both) {
+			expect(Object.keys(c.talks.labels).sort()).toEqual([
+				'facts',
+				'given',
+				'kind',
+				'language',
+				'offers',
+				'times'
+			]);
+		}
 	});
 });
 

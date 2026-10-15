@@ -1,10 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { expectNoAxeViolations } from './axe.js';
 
-type Site = 'company' | 'personal';
-
-// Built from parts: the address and the mail scheme are never written out (see CLAUDE.md).
-const address = ['info', '@', 'it-it', '.', 'tech'].join('');
+// Built from parts: the mail scheme is never written out (see CLAUDE.md).
 const scheme = ['mail', 'to'].join('');
 
 const OFFERS = [
@@ -60,36 +57,19 @@ test.describe('talks and workshops', () => {
 		}
 	});
 
-	test('books by mail on the company build and by I.T. It on the personal build', async ({
+	test('is information only on both builds: no booking, no address, links to events only', async ({
 		page
-	}, testInfo) => {
-		const site = testInfo.project.name as Site;
-		await page.goto('./');
-		const talks = page.locator('section#talks');
-
-		if (site === 'company') {
-			const cta = talks.locator('[data-offer="svelte-talk"] a.email.cta');
-			await expect(cta).toHaveText('Boek deze talk');
-			await expect(cta).toHaveAttribute(
-				'href',
-				`${scheme}:${address}?subject=${encodeURIComponent('Talk/workshop: Svelte-talk')}`
-			);
-			await expect(talks.locator('a.email.cta')).toHaveCount(OFFERS.length);
-		} else {
-			await expect(talks.locator(`a.email, [href^="${scheme}"]`)).toHaveCount(0);
+	}) => {
+		for (const path of ['./', 'en/']) {
+			await page.goto(path);
+			const talks = page.locator('section#talks');
+			await expect(talks.locator('button, .cta, .email')).toHaveCount(0);
+			await expect(talks.locator(`[href^="${scheme}"]`)).toHaveCount(0);
 			await expect(talks.getByText('[at]')).toHaveCount(0);
-			const link = talks.locator('[data-offer="svelte-talk"] a');
-			await expect(link).toHaveAccessibleName('Boek via I.T. It (externe site)');
-			// The company site, not this one: until the domains are live that is its github.io address.
-			expect(await link.getAttribute('href')).toMatch(/\/it-it\.tech\/#offer-svelte-talk$/);
+			await expect(talks.locator('[data-offer] a')).toHaveCount(0);
+			await expect(talks.locator('a')).toHaveCount(4);
+			await expect(talks.locator('a:not([data-given] a)')).toHaveCount(0);
 		}
-	});
-
-	test('gives every offer an anchor to jump to', async ({ page }) => {
-		await page.goto('./#offer-flutter-workshop');
-		const offer = page.locator('#offer-flutter-workshop');
-		await expect(offer).toHaveAttribute('data-offer', 'flutter-workshop');
-		await expect(offer).toBeInViewport();
 	});
 
 	test('fits a 320px window without a sideways scroll', async ({ page }) => {

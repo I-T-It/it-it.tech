@@ -738,13 +738,7 @@ export const nl: SiteContent = {
 			times: {
 				one: 'Eén keer gegeven, op {last}',
 				many: '{count} keer gegeven, laatst op {last}'
-			},
-			book: {
-				talk: 'Boek deze talk',
-				workshop: 'Boek deze workshop',
-				company: 'Boek via I.T. It'
-			},
-			emailSubject: 'Talk/workshop: {title}'
+			}
 		}
 	},
 

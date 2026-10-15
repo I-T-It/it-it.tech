@@ -734,13 +734,7 @@ export const en: SiteContent = {
 			times: {
 				one: 'Given once, on {last}',
 				many: 'Given {count} times, most recently on {last}'
-			},
-			book: {
-				talk: 'Book this talk',
-				workshop: 'Book this workshop',
-				company: 'Book through I.T. It'
-			},
-			emailSubject: 'Talk/workshop: {title}'
+			}
 		}
 	},
 
