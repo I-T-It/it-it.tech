@@ -964,15 +964,14 @@ describe('Talks (U7)', () => {
 			expect(offer('flutter-talk').querySelector('.kind')?.textContent).toBe('Talk');
 		});
 
-		it('names the language of every offer and shows no duration or audience yet', async () => {
+		it('shows no language line on a card, and no list of facts while there is no duration or audience', async () => {
 			await render(Talks, {});
-			const facts = (id: string) =>
-				Array.from(offer(id).querySelectorAll('.facts > div')).map((d) =>
-					[d.querySelector('dt')?.textContent, d.querySelector('dd')?.textContent].join(': ')
-				);
-			// Every talk and workshop can be given in either language.
+			// The shared note says it: every talk and workshop is in Dutch or English.
 			for (const o of talks().offers) {
-				expect(facts(o.id), o.id).toEqual(['Taal: Nederlands of Engels']);
+				expect(o.langs, o.id).toEqual(['nl', 'en']);
+				expect(offer(o.id).querySelector('.facts'), o.id).toBeNull();
+				expect(offer(o.id).textContent, o.id).not.toContain('Nederlands of Engels');
+				expect(offer(o.id).textContent, o.id).not.toContain('Taal');
 			}
 		});
 
@@ -998,10 +997,9 @@ describe('Talks (U7)', () => {
 			);
 		});
 
-		it('says Dutch for the Flutter talk and keeps its English title marked on the Dutch page', async () => {
+		it('keeps the English title of the Flutter talk marked on the Dutch page', async () => {
 			await render(Talks, {});
 			const el = offer('flutter-talk');
-			expect(el.querySelector('.facts')?.textContent).toContain('Nederlands');
 			expect(el.querySelector('h4')?.getAttribute('lang')).toBe('en');
 			expect(el.querySelector('h4')?.textContent).toBe(
 				'Writing multi-platform apps with native performance'
@@ -1018,38 +1016,17 @@ describe('Talks (U7)', () => {
 				langs: ['en'],
 				titleLang: 'en'
 			};
-			expect(offerFacts(base, labels, 'nl')).toEqual([{ label: 'Taal', value: 'Engels' }]);
+			// The language is not one of them: the shared note under the heading says it.
+			expect(offerFacts(base, labels)).toEqual([]);
+			expect(offerFacts({ ...base, duration: '45 minuten' }, labels)).toEqual([
+				{ label: 'Duur', value: '45 minuten' }
+			]);
 			expect(
-				offerFacts({ ...base, duration: '45 minuten', audience: 'Developers' }, labels, 'nl')
+				offerFacts({ ...base, duration: '45 minuten', audience: 'Developers' }, labels)
 			).toEqual([
-				{ label: 'Taal', value: 'Engels' },
 				{ label: 'Duur', value: '45 minuten' },
 				{ label: 'Doelgroep', value: 'Developers' }
 			]);
-		});
-
-		it('lists the languages of an offer with "of" or "or", in the order of the content', () => {
-			const base = {
-				id: 'x',
-				kind: 'workshop',
-				title: 'T',
-				summary: 'S',
-				titleLang: 'nl'
-			} as const;
-			const value = (langs: ('nl' | 'en')[], locale: 'nl' | 'en') =>
-				offerFacts({ ...base, langs }, talks(locale).labels, locale)[0].value;
-			expect(value(['nl', 'en'], 'nl')).toBe('Nederlands of Engels');
-			expect(value(['en', 'nl'], 'nl')).toBe('Engels of Nederlands');
-			expect(value(['nl', 'en'], 'en')).toBe('Dutch or English');
-			expect(value(['nl'], 'en')).toBe('Dutch');
-		});
-
-		it('says Dutch or English for the workshop on the English page', async () => {
-			setLocale('en');
-			await render(Talks, {});
-			expect(offer('flutter-workshop').querySelector('.facts')?.textContent).toMatch(
-				/Language\s*Dutch or English/
-			);
 		});
 
 		it('says how often and when an offer was last given, in a time element', async () => {

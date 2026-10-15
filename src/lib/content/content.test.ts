@@ -629,6 +629,8 @@ describe('talks', () => {
 				'offersNote',
 				'times'
 			]);
+			// A card names a duration and an audience; the language is in the shared note.
+			expect(Object.keys(c.talks.labels.facts).sort()).toEqual(['audience', 'duration']);
 		}
 	});
 });

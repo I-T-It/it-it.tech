@@ -1,6 +1,5 @@
 <script module lang="ts">
 	import type { Locale, TalkGiven, TalkOffer, Talks } from '#lib/content/types.js';
-	import { localeTag } from '#lib/format/period.js';
 
 	/** Newest date first. The content promises it already; equal dates keep their order. */
 	export function newestGivenFirst<T extends Pick<TalkGiven, 'date'>>(given: readonly T[]): T[] {
@@ -40,15 +39,11 @@
 	}
 
 	/**
-	 * What a visitor wants to know first: the languages ("Nederlands of Engels", "Dutch or
-	 * English", in the order of the content), then the duration and the audience when known.
+	 * The facts of a card: the duration and the audience, where they are known. The languages are
+	 * not here: one note under the heading of the catalogue says them for every offer.
 	 */
-	export function offerFacts(offer: TalkOffer, labels: Talks['labels'], locale: Locale): Fact[] {
-		const languages = new Intl.ListFormat(localeTag(locale), {
-			style: 'long',
-			type: 'disjunction'
-		}).format(offer.langs.map((lang) => labels.language[lang]));
-		const facts: Fact[] = [{ label: labels.facts.language, value: languages }];
+	export function offerFacts(offer: TalkOffer, labels: Talks['labels']): Fact[] {
+		const facts: Fact[] = [];
 		if (offer.duration) facts.push({ label: labels.facts.duration, value: offer.duration });
 		if (offer.audience) facts.push({ label: labels.facts.audience, value: offer.audience });
 		return facts;
@@ -126,18 +121,21 @@
 		<ul class="offers">
 			{#each content.offers as offer (offer.id)}
 				{@const stats = offerStats(offer.id, content.given)}
+				{@const facts = offerFacts(offer, labels)}
 				<li class="offer" data-offer={offer.id} data-kind={offer.kind}>
 					<p class="kind">{labels.kind[offer.kind]}</p>
 					<h4 class="title" lang={foreignTitleLang(offer, locale)}>{offer.title}</h4>
 					<p class="summary">{offer.summary}</p>
-					<dl class="facts">
-						{#each offerFacts(offer, labels, locale) as fact (fact.label)}
-							<div>
-								<dt>{fact.label}</dt>
-								<dd>{fact.value}</dd>
-							</div>
-						{/each}
-					</dl>
+					{#if facts.length}
+						<dl class="facts">
+							{#each facts as fact (fact.label)}
+								<div>
+									<dt>{fact.label}</dt>
+									<dd>{fact.value}</dd>
+								</div>
+							{/each}
+						</dl>
+					{/if}
 					{#if stats.count && stats.last}
 						{@const [before, after] = timesParts(labels.times, stats.count)}
 						<p class="times">

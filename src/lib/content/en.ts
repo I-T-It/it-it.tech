@@ -727,7 +727,7 @@ export const en: SiteContent = {
 			given: 'Given',
 			kind: { talk: 'Talk', workshop: 'Workshop' },
 			language: { nl: 'Dutch', en: 'English' },
-			facts: { language: 'Language', duration: 'Duration', audience: 'Audience' },
+			facts: { duration: 'Duration', audience: 'Audience' },
 			times: {
 				one: 'Given once: {last}',
 				many: 'Given {count} times, most recently: {last}'

@@ -58,21 +58,20 @@ test.describe('talks and workshops', () => {
 		}
 	});
 
-	test('gives every talk and workshop in Dutch or English, with one note on the slides', async ({
+	test('says once, in a note, that every talk and workshop is Dutch or English', async ({
 		page
 	}) => {
 		await page.goto('./');
 		const talks = page.locator('section#talks');
 		await expect(talks.locator('.offers-note')).toHaveCount(1);
 		await expect(talks.locator('.offers-note')).toContainText('De slides zijn in het Engels');
-		await expect(talks.locator('[data-offer] .facts')).toHaveText(
-			OFFERS.map(() => /Taal\s*Nederlands of Engels/)
-		);
+		// No card repeats it.
+		await expect(talks.locator('[data-offer] .facts')).toHaveCount(0);
+		await expect(talks.locator('[data-offer]').getByText('Nederlands of Engels')).toHaveCount(0);
 		await page.goto('en/');
 		await expect(talks.locator('.offers-note')).toContainText('The slides are in English');
-		await expect(talks.locator('[data-offer] .facts')).toHaveText(
-			OFFERS.map(() => /Language\s*Dutch or English/)
-		);
+		await expect(talks.locator('[data-offer] .facts')).toHaveCount(0);
+		await expect(talks.locator('[data-offer]').getByText('Dutch or English')).toHaveCount(0);
 	});
 
 	test('shows the PHP talk at Sopra Steria in June 2024, in Dutch', async ({ page }) => {
@@ -90,13 +89,14 @@ test.describe('talks and workshops', () => {
 		await expect(row.locator('.title')).not.toHaveAttribute('lang', /.*/);
 	});
 
-	test('gives the Flutter talk in Dutch under its English title', async ({ page }) => {
+	test('shows the Flutter talk given in Dutch at FrontMania, under its English title', async ({
+		page
+	}) => {
 		const title = 'Writing multi-platform apps with native performance';
 		await page.goto('./');
 		const card = page.locator('[data-offer="flutter-talk"]');
 		await expect(card.locator('h4')).toHaveText(title);
 		await expect(card.locator('h4')).toHaveAttribute('lang', 'en');
-		await expect(card.locator('.facts')).toContainText('Nederlands');
 		await expect(page.locator('[data-given="flutter-frontmania"] .spoken')).toContainText(
 			'Nederlands'
 		);
@@ -104,7 +104,7 @@ test.describe('talks and workshops', () => {
 		await page.goto('en/');
 		await expect(card.locator('h4')).toHaveText(title);
 		await expect(card.locator('h4')).not.toHaveAttribute('lang', /.*/);
-		await expect(card.locator('.facts')).toContainText('Dutch');
+		await expect(page.locator('[data-given="flutter-frontmania"] .spoken')).toContainText('Dutch');
 	});
 
 	test('is information only on both builds: no booking, no address, links to events only', async ({

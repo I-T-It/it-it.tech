@@ -155,8 +155,9 @@ export interface TalkOffer {
 	/** Free text, e.g. "Developers". Left out until it is known. */
 	audience?: string;
 	/**
-	 * The languages the talk can be given in, at least one, in the order they are shown ("Dutch or
-	 * English"). Not the language of the title.
+	 * The languages the talk can be given in, at least one. Kept as data: the page says it once
+	 * for every offer in `labels.offersNote`, and a card shows no language of its own. Not the
+	 * language of the title.
 	 */
 	langs: Locale[];
 	/**
@@ -212,7 +213,8 @@ export interface Talks extends SectionHead {
 		kind: Record<TalkOffer['kind'], string>;
 		/** The name of a language, for the `lang` of an offer. */
 		language: Record<Locale, string>;
-		facts: { language: string; duration: string; audience: string };
+		/** Labels of the facts on a card. The languages are not one: the note says them. */
+		facts: { duration: string; audience: string };
 		times: {
 			/** Contains "{last}", the date of the one time it was given. */
 			one: string;

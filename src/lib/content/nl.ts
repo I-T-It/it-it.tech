@@ -729,7 +729,7 @@ export const nl: SiteContent = {
 			given: 'Gegeven',
 			kind: { talk: 'Talk', workshop: 'Workshop' },
 			language: { nl: 'Nederlands', en: 'Engels' },
-			facts: { language: 'Taal', duration: 'Duur', audience: 'Doelgroep' },
+			facts: { duration: 'Duur', audience: 'Doelgroep' },
 			times: {
 				one: 'Eén keer gegeven: {last}',
 				many: '{count} keer gegeven, laatst: {last}'
