@@ -110,6 +110,28 @@ describe('Hero', () => {
 		});
 	}
 
+	for (const locale of ['nl', 'en'] as const) {
+		it(`says where to follow him online, with the handle set apart, in ${locale}`, async () => {
+			setLocale(locale);
+			await mount(Hero);
+			const follow = hero().querySelector<HTMLElement>('.follow')!;
+			expect(follow.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+				locale === 'nl'
+					? 'Volg me online, overal: @Roboroads'
+					: 'Follow me online, everywhere: @Roboroads'
+			);
+			const handle = follow.querySelector<HTMLElement>('.handle')!;
+			expect(handle.textContent).toBe(company.githubHandle);
+			expect(getComputedStyle(handle).fontFamily).toContain('Fira Code');
+			// Text, not a link: the hero stays free of anything to click but the indicator.
+			expect(follow.querySelector('a')).toBeNull();
+			// It sits in the block the traces keep out of, under the lead line.
+			expect(obstacles()[0].contains(follow)).toBe(true);
+			const lead = hero().querySelector('.lead')!.getBoundingClientRect();
+			expect(follow.getBoundingClientRect().top).toBeGreaterThanOrEqual(lead.bottom);
+		});
+	}
+
 	it('has no CTAs: no button, no filled or outline button-link, no mail link', async () => {
 		await mount(Hero);
 		expect(hero().querySelectorAll('button, .cta, .email, [href^="mailto"]')).toHaveLength(0);

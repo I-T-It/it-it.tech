@@ -57,7 +57,7 @@
 					<div class="title-row">
 						<h2 id="freelance-title">{freelance.title}</h2>
 						{#if site === 'personal'}
-							<Logo size="clamp(5.5rem, 22vw, 7rem)" title={hero.logoAlt} />
+							<Logo size="clamp(5rem, 20vw, 7rem)" title={hero.logoAlt} />
 						{/if}
 					</div>
 					{#each freelance.body as paragraph (paragraph)}

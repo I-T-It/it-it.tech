@@ -94,6 +94,22 @@ describe('Hero', () => {
 			.toBeVisible();
 	});
 
+	for (const locale of ['nl', 'en'] as const) {
+		it(`says where to follow him online, with the handle set apart, in ${locale}`, async () => {
+			setLocale(locale);
+			await mount(Hero);
+			const follow = hero().querySelector<HTMLElement>('.follow')!;
+			expect(follow.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+				locale === 'nl'
+					? 'Volg me online, overal: @Roboroads'
+					: 'Follow me online, everywhere: @Roboroads'
+			);
+			expect(follow.querySelector('.handle')!.textContent).toBe(company.githubHandle);
+			expect(follow.querySelector('a')).toBeNull();
+			expect(obstacles()[0].contains(follow)).toBe(true);
+		});
+	}
+
 	it('has no CTAs: only the scroll indicator is a link', async () => {
 		await mount(Hero);
 		expect(hero().querySelectorAll('button, .cta, .email, [href^="mailto"]')).toHaveLength(0);
@@ -259,7 +275,7 @@ describe('Hero focal point', () => {
 		await page.viewport(1280, 720);
 		await mount(Hero, true);
 		const frame = socket()!.el.getBoundingClientRect();
-		expect(frame.width).toBeGreaterThanOrEqual(260);
+		expect(frame.width).toBeGreaterThanOrEqual(240);
 		const box = hero().getBoundingClientRect();
 		expect(box.height).toBeCloseTo(720, 0);
 	});

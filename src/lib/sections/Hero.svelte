@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { company } from '#lib/content/company.js';
 	import { getContent } from '#lib/content/index.js';
+	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { registerObstacle, registerSocket } from '#lib/pcb/registry.svelte.js';
 	import { site } from '#lib/site.js';
@@ -92,6 +94,8 @@
 			<span class="rule" aria-hidden="true"></span>
 			<p class="tagline" lang="en">{content.profile.tagline}</p>
 			<p class="lead">{lead}</p>
+			<!-- The same name everywhere he is online, as in his talks. Text, not a link. -->
+			<p class="follow">{m.hero_follow()} <span class="handle">{company.githubHandle}</span></p>
 		</div>
 	</div>
 
@@ -127,7 +131,7 @@
 		 * Free board between the socket and the text: the traces that arrive from below turn
 		 * into the bottom ports through it. The board keeps a cell clear round both.
 		 */
-		gap: clamp(3.5rem, 8svh, 5rem);
+		gap: clamp(3rem, 7svh, 5rem);
 		width: 100%;
 		padding-block: clamp(0.25rem, 1.5svh, 1rem);
 	}
@@ -158,11 +162,11 @@
 
 	/*
 	 * The photo in its footprint, and the focal point of the personal page: a square as big as the
-	 * window allows, up to 26rem. 100svh - 27rem is what the text block, the corridor and the scroll
+	 * window allows, up to 26rem. 100svh - 28.5rem is what the text block, the corridor and the scroll
 	 * indicator leave of the window, so the hero stays one window high; on a phone the width wins.
 	 */
 	.photo-socket {
-		--size: clamp(10rem, min(46vw, calc(100svh - 27rem)), 26rem);
+		--size: clamp(10rem, min(42vw, calc(100svh - 28.5rem)), 26rem);
 		width: var(--size);
 		height: var(--size);
 	}
@@ -272,7 +276,7 @@
 		/* The end pads hang 4px outside the line: stay that far inside the hero, which clips sideways. */
 		width: min(calc(100% - 10px), 24rem);
 		height: 2px;
-		margin-block: 1rem 1.25rem;
+		margin-block: 0.875rem 1rem;
 		background: linear-gradient(90deg, var(--trace-cyan), var(--ink) 50%, var(--trace-green));
 	}
 
@@ -321,11 +325,29 @@
 	}
 
 	.lead {
-		margin: 1.25rem 0 0;
+		margin: 1rem 0 0;
 		max-width: 36rem;
 		color: var(--ink-muted);
 		font-size: 1.125rem;
 		text-wrap: pretty;
+	}
+
+	/* One line under the lead, like a note on a drawing: small, muted, the handle in the display face. */
+	.follow {
+		margin: 0.5rem 0 0;
+		color: var(--ink-muted);
+		font-size: var(--text-small);
+	}
+
+	/* The handle: Fira Code, white, with a short cyan to green trace under it like the line under the name. */
+	.handle {
+		padding-bottom: 2px;
+		background: linear-gradient(90deg, var(--trace-cyan), var(--trace-green)) bottom / 100% 2px
+			no-repeat;
+		color: var(--ink);
+		font-family: var(--font-display);
+		font-weight: 500;
+		letter-spacing: 0.02em;
 	}
 
 	/*
