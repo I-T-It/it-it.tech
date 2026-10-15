@@ -271,21 +271,51 @@ describe('layoutBoard hero field', () => {
 		}
 	});
 
-	it('fills what open board is left with short traces from a via to a via', () => {
-		expect(dots.length).toBeGreaterThan(20);
+	/** The headings of a trace's runs. */
+	const headings = (trace: Trace) =>
+		trace.points
+			.slice(1)
+			.map((p, i) => dirOf(p.x - trace.points[i].x, p.y - trace.points[i].y) as number);
+
+	it('fills the open board with buses of parallel traces, from a via to a via', () => {
+		expect(dots.length).toBeGreaterThan(12);
+		const buses = new Map<string, Trace[]>();
 		for (const trace of dots) {
 			expect(trace.startVia, trace.id).toBe(true);
 			expect(trace.end).toEqual({ kind: 'via' });
 			expect(onEdge(trace.points[0], area, board.width), trace.id).toBe(false);
-			expect(onEdge(trace.points.at(-1)!, area, board.width), trace.id).toBe(false);
-			expect(trace.length, trace.id).toBeGreaterThanOrEqual(2 * PITCH);
-			expect(trace.length, trace.id).toBeLessThanOrEqual(16 * PITCH * Math.SQRT2);
 			expect(trace.points.length, trace.id).toBeLessThanOrEqual(3);
+			buses.set(trace.bus, [...(buses.get(trace.bus) ?? []), trace]);
 		}
-		// Some of them in pairs, side by side.
-		const buses = new Map<string, number>();
-		for (const trace of dots) buses.set(trace.bus, (buses.get(trace.bus) ?? 0) + 1);
-		expect([...buses.values()].some((n) => n === 2)).toBe(true);
+		// Bus-like: most traces run beside others, every trace of a bus the same way.
+		const inBuses = [...buses.values()].filter((bus) => bus.length >= 2).flat();
+		expect(inBuses.length).toBeGreaterThan(dots.length * 0.7);
+		for (const bus of buses.values()) {
+			for (const trace of bus) expect(headings(trace), trace.id).toEqual(headings(bus[0]));
+			expect(bus.length).toBeLessThanOrEqual(4);
+		}
+	});
+
+	it('mixes short, middle and long filler runs', () => {
+		const cells = dots.map((t) => t.length / PITCH);
+		expect(cells.some((n) => n < 6)).toBe(true);
+		expect(cells.some((n) => n >= 6 && n < 11)).toBe(true);
+		expect(cells.some((n) => n >= 11)).toBe(true);
+	});
+
+	it('mirrors some filler buses: a twin beside it that bends the other way', () => {
+		const twins = new Set(dots.filter((t) => t.bus.endsWith('m')).map((t) => t.bus));
+		expect(twins.size).toBeGreaterThan(0);
+		for (const twin of twins) {
+			const a = dots.find((t) => t.bus === twin.slice(0, -1))!;
+			const b = dots.find((t) => t.bus === twin)!;
+			const [ha, hb] = [headings(a), headings(b)];
+			expect(hb[0], twin).toBe(ha[0]);
+			if (ha.length > 1) {
+				// One turns clockwise, the other as far the other way.
+				expect((ha[1] - ha[0] + 8) % 8, twin).toBe((hb[0] - hb[1] + 8) % 8);
+			}
+		}
 	});
 
 	it('never lets a trace turn back on itself', () => {

@@ -16,14 +16,15 @@
  *
  * `heroField` (called by `layoutBoard`) routes the field on the board's grid, in three passes:
  * - Rim buses: it walks round the ellipse and plugs buses of 3 to 5 traces, two cells apart, into
- *   its rim, with a gap of 4 to 6 cells between buses. Each trace leaves the rim straight along
+ *   its rim, with a gap of 6 to 9 cells between buses. Each trace leaves the rim straight along
  *   the heading nearest to the ellipse's outward normal and runs to the window edge that heading
  *   points at, shifted along that edge toward the nearest corner by a seeded share of the way, so
  *   buses bend at 45 degrees on their way into the corners. It runs from the edge to the rim and
  *   ends there in a via; one in five starts at a via on the board instead, part of the way in.
  * - Fill buses: from every window edge, buses of 2 to 4 traces run into the open board left
  *   between the rim buses, bend once or not at all, and end in vias.
- * - Dots: short traces from a via to a via fill what open board is left.
+ * - Filler buses: buses of 2 to 4 parallel traces from a via to a via, of every length, running
+ *   the way the field round them runs, some with a mirrored twin, fill what open board is left.
  * Nothing enters the ellipse (it is blocked on the grid, 6 px wider than it is, so the glow stays
  * out too), no trace turns back on itself, and the field keeps to the hero's rows above the first
  * chip and out of anything blocked already (the hero's controls, the spine). The same input and
@@ -61,8 +62,8 @@ export const HERO_VIA_SHARE = 0.2;
 /** The field keeps this many px off the ellipse, so the glow of a trace stays outside it. */
 const KEEP_OFF = 6;
 /** Cells between two rim buses along the rim. */
-const GAP_MIN = 4;
-const GAP_MAX = 6;
+const GAP_MIN = 6;
+const GAP_MAX = 9;
 /** Cells between two traces of a bus. */
 const SPACING = 2;
 /** Turns cost more in the field than elsewhere: fewer, cleaner bends. */
@@ -93,16 +94,29 @@ const FILL_MAX_RUN = 48;
 const LINK_TRIES = 8;
 /** The field runs on at most this many rows below the hero, toward the first chip. */
 const BELOW_MAX_ROWS = 24;
-/** One try at a dot trace per this many cells of field. */
-const DOT_TRY_CELLS = 4;
-/** A dot trace's first run, in cells... */
-const DOT_RUN_MIN = 2;
-const DOT_RUN_MAX = 9;
-/** ...and its run after the bend, when it bends. */
-const DOT_BEND_MIN = 2;
-const DOT_BEND_MAX = 6;
-/** Share of the dot traces that get a twin beside them. */
-const DOT_PAIR_SHARE = 0.35;
+/** One try at a filler bus per this many cells of field. */
+const FILLER_TRY_CELLS = 3;
+/** Traces per filler bus. */
+const FILLER_BUS_MIN = 2;
+const FILLER_BUS_MAX = 4;
+/** Share of the filler buses that run across the field instead of out from the ellipse. */
+const FILLER_ACROSS_SHARE = 0.2;
+/** Share of the filler buses that bend once. */
+const FILLER_BEND_SHARE = 0.6;
+/** Share of the bent filler buses that get a mirrored twin. */
+const FILLER_TWIN_SHARE = 0.45;
+/**
+ * Filler runs in cells, laid in this order: mirrored pairs, then long, middling and short buses.
+ * The third value marks the mirrored pairs.
+ */
+const FILLER_LENGTHS: readonly (readonly [number, number, boolean])[] = [
+	[7, 14, true],
+	[11, 18, false],
+	[6, 10, false],
+	[3, 5, false]
+];
+/** A filler bus runs along the nearest trace within this many cells. */
+const FLOW_REACH = 8;
 /** Candidate heights tried when fitting the ellipse. */
 const FIT_STEPS = 240;
 
@@ -295,7 +309,7 @@ export function heroField(options: HeroFieldOptions): HeroRoute[] {
 	};
 	spineLinks(field, keep, options.spineTops ?? []);
 	rimBuses(field, keep, createRng(deriveSeed(options.seed, 'hero')));
-	dotTraces(field, createRng(deriveSeed(options.seed, 'hero:dots')));
+	fillerBuses(field, keep, createRng(deriveSeed(options.seed, 'hero:filler')));
 	fillBuses(field, createRng(deriveSeed(options.seed, 'hero:fill')));
 	return field.out;
 }
@@ -589,56 +603,202 @@ function fillBuses(field: Field, rng: Rng): void {
 	}
 }
 
+/** One run of a filler bus: corners of each of its traces, in cells. */
+type BusShape = Cell[][];
+
 /**
- * The third pass: short traces from a via to a via, scattered over the open board that is left.
- * Each runs straight for 2 to 9 cells, then on for 2 to 6 more after a 45-degree bend, or not; a
- * straight one gets a twin beside it a third of the time. No search: a shape that does not fit
- * where it lands is dropped.
+ * The corners of a bus of `n` traces, two cells apart, that run `first` cells along `dir` and,
+ * when `turn` is not 0, `second` more after a 45-degree turn. Trace i starts `2 i` cells to the
+ * clockwise side of `start`. On a straight heading the traces on the inside of the turn turn
+ * earlier, so the bus keeps its spacing round the bend.
  */
-function dotTraces(field: Field, rng: Rng): void {
+function busShape(
+	start: Cell,
+	dir: Dir,
+	n: number,
+	first: number,
+	turn: number,
+	second: number
+): BusShape {
+	const side = ((dir + 2) & 7) as Dir;
+	const bent = ((dir + turn + 8) & 7) as Dir;
+	// Clockwise turns bend toward the higher traces: those are inside and turn first.
+	const step = turn === 0 || dir & 1 ? 0 : turn > 0 ? -2 : 2;
+	const out: BusShape = [];
+	for (let i = 0; i < n; i++) {
+		const from = { col: start.col + DX[side] * 2 * i, row: start.row + DY[side] * 2 * i };
+		const run = first + step * i;
+		const corner = { col: from.col + DX[dir] * run, row: from.row + DY[dir] * run };
+		if (turn === 0) {
+			out.push([from, corner]);
+			continue;
+		}
+		// The inside traces turn sooner, so they run on that much longer after the turn.
+		const after = second - step * i;
+		out.push([
+			from,
+			corner,
+			{ col: corner.col + DX[bent] * after, row: corner.row + DY[bent] * after }
+		]);
+	}
+	return out;
+}
+
+/**
+ * The third pass: filler buses, from a via to a via, over the open board that is left. A bus is
+ * 2 to 4 traces, two cells apart, running the way the field round it runs (out from the ellipse,
+ * now and then across), short, middling or long, straight or with one 45-degree bend. A bent bus
+ * sometimes gets a mirrored twin beside it that bends the other way. No search: a bus that does
+ * not fit where it lands is dropped, a twin that does not fit is left out.
+ */
+function fillerBuses(field: Field, keep: Ellipse, rng: Rng): void {
 	const { grid, window: w } = field;
+	const p = grid.pitch;
 	const cells = (w.col1 - w.col0 + 1) * (w.row1 - w.row0 + 1);
-	const tries = Math.round(cells / DOT_TRY_CELLS);
+	// The runs of the field so far, to lay filler parallel to.
+	const runs: { a: Point; b: Point; dir: Dir }[] = [];
+	for (const route of field.out) {
+		for (let i = 1; i < route.points.length; i++) {
+			const a = route.points[i - 1];
+			const b = route.points[i];
+			const d = dirOf(b.x - a.x, b.y - a.y);
+			if (d !== -1) runs.push({ a, b, dir: d });
+		}
+	}
+	/** The heading of the run nearest to `q`; out from the ellipse when there is none close by. */
+	const flowAt = (q: Point): Dir => {
+		let best = FLOW_REACH * p;
+		let dir: Dir | null = null;
+		for (const run of runs) {
+			const dx = run.b.x - run.a.x;
+			const dy = run.b.y - run.a.y;
+			const span = dx * dx + dy * dy;
+			const t =
+				span > 0
+					? Math.max(0, Math.min(1, ((q.x - run.a.x) * dx + (q.y - run.a.y) * dy) / span))
+					: 0;
+			const d = Math.hypot(q.x - (run.a.x + t * dx), q.y - (run.a.y + t * dy));
+			if (d < best) {
+				best = d;
+				dir = run.dir;
+			}
+		}
+		return (
+			dir ?? outwardDir(keep, Math.atan2((q.y - keep.cy) / keep.ry, (q.x - keep.cx) / keep.rx))
+		);
+	};
+	const tries = Math.round(cells / FILLER_TRY_CELLS);
 	// Away from the window edges, where the other traces come in.
 	const inside = (c: Cell) => c.col > w.col0 && c.col < w.col1 && c.row > w.row0 && c.row < w.row1;
-	const fits = (path: Cell[]) => path.every((c) => inside(c) && grid.isFree(c.col, c.row));
+	/** True when every trace fits on free board and keeps two cells from the others. */
+	const fits = (shape: BusShape) => {
+		const near = new Set<number>();
+		for (const corners of shape) {
+			const walked = walkCells(corners);
+			for (const c of walked) {
+				if (!inside(c) || !grid.isFree(c.col, c.row) || near.has(grid.index(c.col, c.row))) {
+					return false;
+				}
+			}
+			for (const c of walked) {
+				for (let dr = -1; dr <= 1; dr++) {
+					for (let dc = -1; dc <= 1; dc++) near.add(grid.index(c.col + dc, c.row + dr));
+				}
+			}
+		}
+		return true;
+	};
 	let made = 0;
-	for (let k = 0; k < tries; k++) {
-		const start = { col: rng.int(w.col0 + 1, w.col1 - 1), row: rng.int(w.row0 + 1, w.row1 - 1) };
-		const dir = rng.int(0, 7) as Dir;
-		const first = rng.int(DOT_RUN_MIN, DOT_RUN_MAX);
-		const turn = rng.next() < 0.5 ? 0 : rng.next() < 0.5 ? -1 : 1;
-		const second = turn === 0 ? 0 : rng.int(DOT_BEND_MIN, DOT_BEND_MAX);
-		const twin = rng.next() < DOT_PAIR_SHARE;
-		if (!grid.isFree(start.col, start.row)) continue;
-		const shape = (from: Cell): Cell[] => {
-			const bent = ((dir + turn + 8) & 7) as Dir;
-			const corner = { col: from.col + DX[dir] * first, row: from.row + DY[dir] * first };
-			const end = { col: corner.col + DX[bent] * second, row: corner.row + DY[bent] * second };
-			return second > 0 ? [from, corner, end] : [from, corner];
-		};
-		const path = shape(start);
-		if (!fits(walkCells(path))) continue;
-		grid.markPath(path);
-		const bus = `hero:d${made}`;
-		const add = (corners: Cell[], index: number) =>
+	const add = (shape: BusShape, bus: string) => {
+		const lane = field.nextBus();
+		shape.forEach((corners, i) => {
+			grid.markPath(corners, lane);
 			field.out.push({
-				id: `${bus}.${index}`,
+				id: `${bus}.${i}`,
 				bus,
 				points: simplify(corners.map((c) => grid.centre(c.col, c.row))),
 				startVia: true
 			});
-		add(path, 0);
-		if (twin && second === 0) {
-			// A straight one gets a twin two cells to its side.
+		});
+	};
+	// Mirrored pairs first, they need the most room; then long buses, so they get the long
+	// stretches of open board; then middling, then short.
+	for (const [shortest, longest, pairs] of FILLER_LENGTHS) {
+		for (let k = 0; k < tries / FILLER_LENGTHS.length; k++) {
+			const start = { col: rng.int(w.col0 + 1, w.col1 - 1), row: rng.int(w.row0 + 1, w.row1 - 1) };
+			// The way the field runs here: along the nearest trace, now and then across it.
+			const across = rng.next() < FILLER_ACROSS_SHARE ? 2 : 0;
+			const reverse = rng.next() < 0.5 ? 4 : 0;
+			const n = pairs ? FILLER_BUS_MIN : rng.int(FILLER_BUS_MIN, FILLER_BUS_MAX);
+			const bendRoll = rng.next();
+			const turnRoll = rng.next();
+			const split = rng.range(0.4, 0.65);
+			const twin = rng.next() < FILLER_TWIN_SHARE;
+			const pick = rng.next();
+			if (!grid.isFree(start.col, start.row)) continue;
+			const dir = ((flowAt(grid.centre(start.col, start.row)) + across + reverse) & 7) as Dir;
+			// No longer than the free board ahead of every trace of the bus allows.
 			const side = ((dir + 2) & 7) as Dir;
-			const other = shape({ col: start.col + DX[side] * 2, row: start.row + DY[side] * 2 });
-			if (fits(walkCells(other))) {
-				grid.markPath(other);
-				add(other, 1);
+			let room = longest;
+			for (let i = 0; i < n && room >= shortest; i++) {
+				const from = { col: start.col + DX[side] * 2 * i, row: start.row + DY[side] * 2 * i };
+				room = Math.min(room, freeRun(grid, w, from, dir) - 1);
+			}
+			if (room < shortest) continue;
+			const cells = shortest + Math.floor(pick * (room - shortest + 1));
+			const bend = pairs || bendRoll < FILLER_BEND_SHARE;
+			placeFiller(start, dir, n, cells, bend, turnRoll, split, pairs || twin, pairs);
+		}
+	}
+
+	/**
+	 * Lays one filler bus, bent if asked and it fits, else straight; with `twin`, a bent one gets a
+	 * mirror image beside it when both fit. With `pairOnly`, only a mirrored pair will do.
+	 */
+	function placeFiller(
+		start: Cell,
+		dir: Dir,
+		n: number,
+		cells: number,
+		bend: boolean,
+		turnRoll: number,
+		split: number,
+		twin: boolean,
+		pairOnly: boolean
+	): void {
+		for (const bends of pairOnly ? [true] : bend ? [true, false] : [false]) {
+			const turn = bends ? (turnRoll < 0.5 ? -1 : 1) : 0;
+			const step = turn === 0 || dir & 1 ? 0 : turn > 0 ? -2 : 2;
+			// Every trace of a bent bus keeps at least two cells either side of its turn.
+			const firstMin = step < 0 ? 2 * n : 2;
+			const secondMin = step > 0 ? 2 * n : 2;
+			const first = bends ? Math.max(firstMin, Math.round(cells * split)) : cells;
+			const second = bends ? Math.max(secondMin, cells - first) : 0;
+			if (bends && first + second > cells + 2) continue;
+			const shape = busShape(start, dir, n, first, turn, second);
+			const bus = `hero:d${made}`;
+			if (twin && bends) {
+				// A mirror image beside it, on the side it bends away from, bending the other way:
+				// the two traces nearest each other turn at the same point.
+				const side = ((dir + 2) & 7) as Dir;
+				const offset = turn > 0 ? -2 * n : 2 * n;
+				const from = { col: start.col + DX[side] * offset, row: start.row + DY[side] * offset };
+				const shift = step * (n - 1);
+				const mirrored = busShape(from, dir, n, first + shift, -turn, second - shift);
+				if (fits([...shape, ...mirrored])) {
+					made++;
+					add(shape, bus);
+					add(mirrored, `${bus}m`);
+					return;
+				}
+			}
+			if (pairOnly) continue;
+			if (fits(shape)) {
+				made++;
+				add(shape, bus);
+				return;
 			}
 		}
-		made++;
 	}
 }
 
