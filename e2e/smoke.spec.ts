@@ -54,7 +54,8 @@ test.describe('skeleton', () => {
 		await expect(html).toHaveAttribute('data-site', site);
 		await expect(page.getByRole('heading', { level: 1 })).toHaveText('Robbin Schepers');
 
-		const ids = await page.locator('main > section').evaluateAll((els) => els.map((el) => el.id));
+		// The two availability chips sit in the #availability wrapper, so not only direct children.
+		const ids = await page.locator('main section').evaluateAll((els) => els.map((el) => el.id));
 		expect(ids).toEqual(sectionOrder[site]);
 		await expect(page.locator('main h2')).toHaveCount(9);
 
