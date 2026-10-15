@@ -134,6 +134,15 @@ describe('heroEllipse', () => {
 		});
 	}
 
+	it('leaves at least 32 px of clear board round every corner of the content', () => {
+		for (const { area, content } of Object.values(CONTENT)) {
+			const e = heroEllipse(content, area)!;
+			for (const rect of content) {
+				for (const p of corners(rect, 32)) expect(ellipseDistance(e, p)).toBeLessThanOrEqual(1);
+			}
+		}
+	});
+
 	it('centres on the content', () => {
 		const { area, content } = CONTENT['1440x900'];
 		const e = heroEllipse(content, area)!;
@@ -141,7 +150,7 @@ describe('heroEllipse', () => {
 		expect(e.cy).toBeCloseTo((161 + 667) / 2, 0);
 	});
 
-	for (const name of ['1440x900', '1920x1080', '1280x720', '768x1024']) {
+	for (const name of ['1440x900', '1920x1080']) {
 		it(`is 80% of the window wide and only as tall as the content needs at ${name}`, () => {
 			const { area, content } = CONTENT[name];
 			const e = heroEllipse(content, area)!;
@@ -157,17 +166,19 @@ describe('heroEllipse', () => {
 	it('leaves field above and below the content on a desktop window', () => {
 		const { area, content } = CONTENT['1440x900'];
 		const m = margins(heroEllipse(content, area)!, area);
-		expect(m.top).toBeGreaterThan(48);
-		expect(m.bottom).toBeGreaterThan(48);
+		expect(m.top).toBeGreaterThan(24);
+		expect(m.bottom).toBeGreaterThan(24);
 		expect(m.left).toBeCloseTo(144, 6);
 	});
 
-	it('grows wider than 80% of a phone, as wide as its content needs', () => {
-		const { area, content } = CONTENT['375x667'];
-		const e = heroEllipse(content, area)!;
-		expect(e.rx * 2).toBeGreaterThan(HERO_WIDTH * area.width);
-		expect(e.ry).toBeLessThan(area.height);
-	});
+	for (const name of ['375x667', '768x1024', '1280x720']) {
+		it(`grows wider than 80% where the content needs it, at ${name}`, () => {
+			const { area, content } = CONTENT[name];
+			const e = heroEllipse(content, area)!;
+			expect(e.rx * 2).toBeGreaterThan(HERO_WIDTH * area.width);
+			expect(e.ry).toBeLessThan(area.height);
+		});
+	}
 
 	it('returns null without content', () => {
 		expect(heroEllipse([], CONTENT['1440x900'].area)).toBeNull();

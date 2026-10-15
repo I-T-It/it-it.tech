@@ -45,7 +45,7 @@ export interface Ellipse {
 }
 
 /** Px between the hero content and the ellipse round it. */
-export const HERO_CLEARANCE = 12;
+export const HERO_CLEARANCE = 32;
 /** The ellipse is this share of the window wide, when that holds the content. */
 export const HERO_WIDTH = 0.8;
 /** On a window too narrow for that: the band of field (px) the ellipse tries to leave all round. */
