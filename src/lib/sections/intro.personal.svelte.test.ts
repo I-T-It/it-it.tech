@@ -72,11 +72,13 @@ afterEach(async () => {
 const hero = () => document.querySelector<HTMLElement>('section#hero')!;
 
 describe('Hero', () => {
-	it('is the page heading with the name, then the English tagline, and no lead line', async () => {
+	it('is the page heading with the display name, then the English tagline, and no lead line', async () => {
 		const screen = await mount(Hero);
 		await expect
-			.element(screen.getByRole('heading', { level: 1 }))
-			.toHaveTextContent('Robbin Schepers');
+			.element(screen.getByRole('heading', { level: 1, name: 'Robbin "Roboroads" Schepers' }))
+			.toBeVisible();
+		expect(hero().querySelector('h1 .nick')!.textContent).toBe('Roboroads');
+		expect(getComputedStyle(hero().querySelector('h1 .nick')!).fontFamily).toContain('Fira Code');
 		const tagline = Array.from(hero().querySelectorAll<HTMLElement>('[lang]')).find(
 			(el) => el.textContent?.trim() === 'Professional Computer Nerd'
 		);

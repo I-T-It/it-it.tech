@@ -107,19 +107,30 @@
 		<a
 			class="brand"
 			href={home}
-			aria-label={m.header_home({ name: site === 'company' ? company.name : company.founder })}
+			aria-label={m.header_home({
+				name: site === 'company' ? company.name : company.displayName
+			})}
 		>
 			{#if site === 'company'}
 				<Logo size={72} />
 			{:else}
-				<!-- His photo in front of the name: the personal page is about him. The link is named by the text (aria-label), so the photo is decoration. -->
+				<!--
+					His photo in front of his name: the personal page is about him. The link is named by
+					the display name (aria-label), so the photo is decoration. Below 40rem only the
+					nickname shows: the full name does not fit next to the menu, and the nickname is part
+					of the link name, so what is shown is contained in it (2.5.3).
+				-->
 				<span class="wordmark"
 					><enhanced:img
 						class="avatar"
 						src="../assets/robbin-schepers.jpg"
 						alt=""
 						sizes="28px"
-					/>{company.founder}</span
+					/><span class="name"
+						><span class="wide">{company.givenName} "</span>{company.nickname}<span class="wide"
+							>" {company.familyName}</span
+						></span
+					></span
 				>
 			{/if}
 		</a>
@@ -264,10 +275,14 @@
 			0 0 8px color-mix(in srgb, var(--trace-cyan) 60%, transparent);
 	}
 
-	/* On the narrowest windows (320 CSS px) the name, Contact and the toggle need the whole row. */
-	@media (max-width: 21rem) {
-		.avatar {
-			display: none;
+	/* The rest of the name, shown when there is room next to the menu. */
+	.wide {
+		display: none;
+	}
+
+	@media (min-width: 40rem) {
+		.wide {
+			display: inline;
 		}
 	}
 

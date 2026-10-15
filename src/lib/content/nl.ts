@@ -17,12 +17,12 @@ export const nl: SiteContent = {
 		personal: {
 			title: 'Robbin "Roboroads" Schepers - Professionele Computer Nerd',
 			description:
-				'Robbin Schepers is developer en werkt overdag in loondienst. In de avonden en het weekend bouwt hij webapplicaties en apps met zijn bedrijf I.T. It.'
+				'Robbin "Roboroads" Schepers is developer en werkt overdag in loondienst. In de avonden en het weekend bouwt hij webapplicaties en apps met zijn bedrijf I.T. It.'
 		}
 	},
 
 	profile: {
-		name: 'Robbin Schepers',
+		name: 'Robbin "Roboroads" Schepers',
 		tagline: 'Professional Computer Nerd'
 	},
 

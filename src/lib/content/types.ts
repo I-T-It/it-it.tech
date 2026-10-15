@@ -23,7 +23,7 @@ export interface SectionHead {
 }
 
 export interface Profile {
-	/** "Robbin Schepers", the h1 on both builds. */
+	/** The display name, Robbin "Roboroads" Schepers: the h1 on both builds (`company.displayName`). */
 	name: string;
 	/** "Professional Computer Nerd", English in both locales. */
 	tagline: string;

@@ -92,7 +92,12 @@
 		{/if}
 
 		<div class="copy" {@attach registerObstacle}>
-			<h1 id="hero-title">{content.profile.name}</h1>
+			<!-- Robbin "Roboroads" Schepers: the nickname set like the handle, the quotes quietly. -->
+			<h1 id="hero-title">
+				{company.givenName}
+				<span class="q">"</span><span class="nick">{company.nickname}</span><span class="q">"</span>
+				{company.familyName}
+			</h1>
 			<span class="rule" aria-hidden="true"></span>
 			<p class="tagline" lang="en">{content.profile.tagline}</p>
 			<!-- The same name everywhere he is online, as in his talks. Text, not a link. -->
@@ -279,14 +284,23 @@
 	}
 
 	/*
-	 * The name on one line from 375 CSS px up (2rem is 15 characters of Fira Code in 288px), which
-	 * the hero needs to keep its photo, handle line and icon row inside one phone window. From
-	 * about 400px the size of the other headings takes over.
+	 * Robbin "Roboroads" Schepers is 27 characters of Fira Code: 4.6vw keeps it on one line from
+	 * about 600px up to 3.75rem, and on a phone it wraps to two lines at 1.75rem, which the
+	 * hero's height budget (photo, handle line, icon row, one phone window) allows.
 	 */
 	h1 {
 		margin: 0;
-		font-size: clamp(2rem, 8vw, var(--text-h1));
+		font-size: clamp(1.75rem, 4.6vw, 3.75rem);
 		letter-spacing: -0.02em;
+	}
+
+	/* The nickname like the handle below it: Fira Code (the whole heading is) in the accent colour. */
+	.nick {
+		color: var(--trace-cyan);
+	}
+
+	.q {
+		color: var(--ink-muted);
 	}
 
 	/* A trace under the name: cyan from the left, green from the right, a pad at each end. */

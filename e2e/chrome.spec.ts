@@ -18,8 +18,8 @@ test.describe('header', () => {
 			await expect(brand.locator('svg.logo')).toBeVisible();
 			await expect(brand.locator('.wordmark')).toHaveCount(0);
 		} else {
-			await expect(brand).toHaveAccessibleName('Robbin Schepers, naar boven');
-			await expect(brand.locator('.wordmark')).toHaveText('Robbin Schepers');
+			await expect(brand).toHaveAccessibleName('Robbin "Roboroads" Schepers, naar boven');
+			await expect(brand.locator('.wordmark')).toHaveText('Robbin "Roboroads" Schepers');
 			await expect(brand.locator('svg')).toHaveCount(0);
 		}
 	});

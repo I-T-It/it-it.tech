@@ -16,12 +16,12 @@ export const en: SiteContent = {
 		personal: {
 			title: 'Robbin "Roboroads" Schepers - Professional Computer Nerd',
 			description:
-				'Robbin Schepers is a developer with a day job. In the evenings and at weekends he builds web applications and apps with his company I.T. It.'
+				'Robbin "Roboroads" Schepers is a developer with a day job. In the evenings and at weekends he builds web applications and apps with his company I.T. It.'
 		}
 	},
 
 	profile: {
-		name: 'Robbin Schepers',
+		name: 'Robbin "Roboroads" Schepers',
 		tagline: 'Professional Computer Nerd'
 	},
 

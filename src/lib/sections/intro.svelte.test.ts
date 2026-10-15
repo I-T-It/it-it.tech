@@ -77,13 +77,42 @@ afterEach(async () => {
 const hero = () => document.querySelector<HTMLElement>('section#hero')!;
 
 describe('Hero', () => {
-	it('is the page heading: one h1 with the name', async () => {
+	it('is the page heading: one h1 with the display name, Robbin "Roboroads" Schepers', async () => {
 		const screen = await mount(Hero);
 		await expect
-			.element(screen.getByRole('heading', { level: 1 }))
-			.toHaveTextContent('Robbin Schepers');
+			.element(screen.getByRole('heading', { level: 1, name: 'Robbin "Roboroads" Schepers' }))
+			.toBeVisible();
 		expect(hero().querySelectorAll('h1')).toHaveLength(1);
 		expect(hero().getAttribute('aria-labelledby')).toBe(hero().querySelector('h1')!.id);
+		expect(hero().querySelector('h1')!.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+			company.displayName
+		);
+	});
+
+	it('sets the nickname in the heading like the handle: Fira Code, in the accent colour', async () => {
+		await mount(Hero);
+		const nick = hero().querySelector<HTMLElement>('h1 .nick')!;
+		expect(nick.textContent).toBe('Roboroads');
+		const style = getComputedStyle(nick);
+		expect(style.fontFamily).toContain('Fira Code');
+		// --trace-cyan, #00e7ff.
+		expect(style.color).toBe('rgb(0, 231, 255)');
+		// The quotes are part of the heading text and set quietly beside the nickname.
+		const quotes = hero().querySelectorAll<HTMLElement>('h1 .q');
+		expect(Array.from(quotes).map((q) => q.textContent)).toEqual(['"', '"']);
+		expect(getComputedStyle(quotes[0]).color).not.toBe(style.color);
+	});
+
+	it('keeps the name on one line on a desktop window and on at most two lines on a phone', async () => {
+		await page.viewport(1440, 900);
+		await mount(Hero, true);
+		const h1 = hero().querySelector('h1')!;
+		const size = parseFloat(getComputedStyle(h1).fontSize);
+		expect(h1.getBoundingClientRect().height).toBeLessThan(size * 1.6);
+		await page.viewport(375, 667);
+		expect(h1.getBoundingClientRect().height).toBeLessThan(
+			parseFloat(getComputedStyle(h1).fontSize) * 2.8
+		);
 	});
 
 	it('sets the tagline in English, marked as English on a Dutch page', async () => {

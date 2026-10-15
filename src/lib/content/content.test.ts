@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { company } from './company.js';
 import { en } from './en.js';
 import { getContent } from './index.js';
 import { nl } from './nl.js';
@@ -456,7 +457,10 @@ describe('variant copy', () => {
 
 	it('leads the company page with I.T. It and the personal page with Robbin', () => {
 		for (const [, c] of both) {
-			expect(c.profile.name).toBe('Robbin Schepers');
+			// The h1 is the display name, the same in both languages and on both builds.
+			expect(c.profile.name).toBe(company.displayName);
+			expect(c.meta.personal.title.startsWith(company.displayName)).toBe(true);
+			expect(c.meta.personal.description.startsWith(company.displayName)).toBe(true);
 			expect(c.profile.tagline).toBe('Professional Computer Nerd');
 			expect(c.meta.company.title.startsWith('I.T. It')).toBe(true);
 			expect(c.meta.personal.title.startsWith('Robbin "Roboroads" Schepers')).toBe(true);
