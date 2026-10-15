@@ -7,3 +7,8 @@ bun.lockb
 
 # Miscellaneous
 /static/
+
+# Written by the inlang compiler on every install, only settings.json is ours
+/project.inlang/.lix/
+/project.inlang/.meta.json
+/project.inlang/README.md
