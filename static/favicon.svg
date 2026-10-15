@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+	<defs>
+		<linearGradient id="board" x1="0" y1="0" x2="1" y2="0">
+			<stop offset="0" stop-color="#001333" />
+			<stop offset="1" stop-color="#0b1f02" />
+		</linearGradient>
+	</defs>
+	<rect width="100" height="100" rx="18" fill="url(#board)" />
+	<g fill="none" stroke-width="3.4" stroke-linejoin="miter">
+		<polyline stroke="#00e7ff" points="31.9,91.7 17.5,91.7 8.2,82.6 8.2,8.1 65.2,8.1 74.3,17.3 74.3,42.4" />
+		<polyline stroke="#3fd83f" points="78.4,8.1 82.7,8.1 92.1,17.4 92.1,92 39,92 39,43.8" />
+	</g>
+	<circle cx="74.3" cy="43.8" r="3.6" fill="#d9fbff" />
+	<circle cx="39" cy="43.8" r="3.6" fill="#c9f4c9" />
+	<g fill="#ffffff">
+		<!-- I -->
+		<rect x="15" y="19.3" width="16.1" height="3.3" />
+		<rect x="15" y="42.1" width="16.1" height="3.3" />
+		<rect x="20.5" y="19.3" width="5.2" height="26.1" />
+		<!-- T -->
+		<rect x="46.8" y="19.3" width="20.3" height="3.3" />
+		<rect x="54.4" y="19.3" width="5.2" height="26.1" />
+		<!-- I -->
+		<rect x="45.4" y="56" width="16.4" height="3.3" />
+		<rect x="45.4" y="79.3" width="16.4" height="3.3" />
+		<rect x="51" y="56" width="5.2" height="26.6" />
+		<!-- t -->
+		<rect x="67.9" y="63" width="16" height="3.3" />
+		<rect x="72.8" y="56" width="5.2" height="26.6" />
+		<rect x="72.8" y="79.3" width="12.7" height="3.3" />
+	</g>
+</svg>

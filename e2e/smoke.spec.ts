@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectNoAxeViolations } from './axe.js';
+import { revealHeader } from './header.js';
 
 type Site = 'company' | 'personal';
 
@@ -82,10 +83,13 @@ test.describe('skeleton', () => {
 		await expect(en).toHaveAttribute('href', `${new URL(baseURL!).pathname}en/`);
 		await expect(nl).toHaveAttribute('href', new URL(baseURL!).pathname);
 
+		// The header waits above the window at the top of the page: scroll until it is there.
+		await revealHeader(page);
 		await en.click();
 		await expect(page).toHaveURL(`${baseURL}en/`);
 		await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 
+		await revealHeader(page);
 		await page.locator('nav a[hreflang="nl"]').click();
 		await expect(page).toHaveURL(baseURL!);
 		await expect(page.locator('html')).toHaveAttribute('lang', 'nl');
