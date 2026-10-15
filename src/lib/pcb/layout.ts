@@ -122,6 +122,8 @@ export interface SocketInput {
 	rect: Rect;
 	/** Port centres in document px, in DOM order. */
 	ports: readonly Point[];
+	/** With a hero: the indexes of the ports the two lead traces run into. */
+	leads?: readonly number[];
 }
 
 export interface HeroInput {
