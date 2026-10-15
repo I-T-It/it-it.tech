@@ -21,36 +21,87 @@
 		{ id: 'contact', label: () => m.nav_contact(), desktop: false }
 	];
 
+	interface Props {
+		/**
+		 * Hide the header while the visitor is at the top of the page and slide it in once they
+		 * have scrolled a bit. Turn it off for pages too short to scroll, like the 404.
+		 */
+		hideAtTop?: boolean;
+	}
+
+	let { hideAtTop = true }: Props = $props();
+
 	let header: HTMLElement;
+	let sentinel: HTMLElement;
+
+	/** True once the visitor has scrolled past the sentinel (40% of the window, at most 200px). */
+	let scrolled = $state(false);
+	/** True while keyboard focus is inside the header. Focus always opens it (2.4.7, 2.4.11). */
+	let focused = $state(false);
+
+	const hidden = $derived(hideAtTop && !scrolled && !focused);
 
 	/**
-	 * Keeps --header-height equal to the real height of the sticky header, so scroll-padding-top
-	 * on <html> keeps focused elements and anchor targets from hiding behind it (2.4.11). On a
-	 * short window the header is not sticky and takes no room: 0.
+	 * Keeps --header-height equal to the height of the header while it covers the page, so
+	 * scroll-padding-top on <html> keeps focused elements and anchor targets from hiding behind it
+	 * (2.4.11). It is 0 while the header is hidden at the top, and on a short window where the
+	 * header is not sticky and takes no room.
 	 */
+	function measure() {
+		const position = getComputedStyle(header).position;
+		const covers = position === 'sticky' || position === 'fixed';
+		const concealed = hidden && position === 'fixed';
+		document.documentElement.style.setProperty(
+			'--header-height',
+			covers && !concealed ? `${header.getBoundingClientRect().height}px` : '0px'
+		);
+	}
+
 	onMount(() => {
-		const root = document.documentElement;
-		const measure = () => {
-			const sticky = getComputedStyle(header).position === 'sticky';
-			root.style.setProperty(
-				'--header-height',
-				sticky ? `${header.getBoundingClientRect().height}px` : '0px'
-			);
-		};
-		measure();
 		const observer = new ResizeObserver(measure);
 		observer.observe(header);
 		// A short window turns sticky off without resizing the header.
 		window.addEventListener('resize', measure);
+
+		// Scroll position without a scroll listener: the sentinel is a block at the top of the page,
+		// and the header shows once it has left the window.
+		const watcher =
+			typeof IntersectionObserver === 'undefined'
+				? undefined
+				: new IntersectionObserver((entries) => {
+						scrolled = !entries[entries.length - 1].isIntersecting;
+					});
+		if (watcher) watcher.observe(sentinel);
+		else scrolled = true;
+
+		const focusIn = () => (focused = true);
+		const focusOut = (event: FocusEvent) => {
+			if (!header.contains(event.relatedTarget as Node | null)) focused = false;
+		};
+		header.addEventListener('focusin', focusIn);
+		header.addEventListener('focusout', focusOut);
+
 		return () => {
 			observer.disconnect();
+			watcher?.disconnect();
 			window.removeEventListener('resize', measure);
-			root.style.removeProperty('--header-height');
+			header.removeEventListener('focusin', focusIn);
+			header.removeEventListener('focusout', focusOut);
+			document.documentElement.style.removeProperty('--header-height');
 		};
+	});
+
+	// Measure again whenever the header goes into or comes out of hiding.
+	$effect(() => {
+		void hidden;
+		measure();
 	});
 </script>
 
-<header class="site-header" bind:this={header}>
+<!-- Decoration: marks the point where the header appears. It takes no room and no clicks. -->
+<div class="top-sentinel" aria-hidden="true" bind:this={sentinel}></div>
+
+<header class="site-header" data-hidden={hidden ? 'true' : undefined} bind:this={header}>
 	<div class="bar">
 		<!-- eslint-disable svelte/no-navigation-without-resolve -- hrefs come from resolve() through `home` -->
 		<a
@@ -81,12 +132,55 @@
 </header>
 
 <style>
+	/* 40% of the first window, at most 200px: the scroll at which the header appears. */
+	.top-sentinel {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 1px;
+		height: min(40vh, 200px);
+		pointer-events: none;
+	}
+
+	/*
+	 * Without JS the header sticks in the flow of the page and is always there. With JS (html.js is
+	 * set before the first paint) it is fixed, so it takes no room and nothing moves when it
+	 * appears. At the top it waits above the window: moved and faded, not removed, so it stays in
+	 * the accessibility tree and the tab order, and focus inside it brings it down.
+	 */
 	.site-header {
 		position: sticky;
 		top: 0;
 		z-index: 50;
 		background: var(--header-fill);
 		backdrop-filter: blur(8px);
+	}
+
+	@media (min-height: 30.0625rem) {
+		:global(html.js) .site-header {
+			position: fixed;
+			inset: 0 0 auto;
+			transition:
+				transform 0.3s ease,
+				opacity 0.3s ease;
+		}
+
+		:global(html.js) .site-header[data-hidden='true']:not(:focus-within) {
+			transform: translateY(-100%);
+			opacity: 0;
+			pointer-events: none;
+		}
+	}
+
+	/* Reduced motion: it only shows and hides. */
+	@media (prefers-reduced-motion: reduce) {
+		:global(html.js) .site-header {
+			transition: none;
+		}
+	}
+
+	:global(html.js.reduced) .site-header {
+		transition: none;
 	}
 
 	/* A trace along the bottom edge: cyan from the left, green from the right. */

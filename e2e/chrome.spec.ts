@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectNoAxeViolations } from './axe.js';
+import { revealHeader } from './header.js';
 
 type Site = 'company' | 'personal';
 
@@ -10,6 +11,7 @@ test.describe('header', () => {
 	test('shows the mark of its variant', async ({ page }, testInfo) => {
 		const site = testInfo.project.name as Site;
 		await page.goto('./');
+		await revealHeader(page);
 		const brand = page.locator('header a.brand');
 		if (site === 'company') {
 			await expect(brand).toHaveAccessibleName('I.T. It, naar boven');
@@ -24,6 +26,7 @@ test.describe('header', () => {
 
 	test('names the menu and the toggle in English on the English page', async ({ page }) => {
 		await page.goto('en/');
+		await revealHeader(page);
 		await expect(page.getByRole('navigation', { name: 'Main menu' })).toBeVisible();
 		await expect(page.getByRole('navigation', { name: 'Language' })).toBeVisible();
 		const english = page.locator('header a[hreflang="en"]');
@@ -36,20 +39,25 @@ test.describe('header', () => {
 
 	test('the toggle keeps the section you are on', async ({ page, baseURL }) => {
 		await page.goto('./');
+		await revealHeader(page);
 		await page.getByRole('link', { name: 'Contact' }).first().click();
 		await expect(page).toHaveURL(/#contact$/);
 		const english = page.locator('header a[hreflang="en"]');
 		await expect(english).toHaveAttribute('href', `${new URL(baseURL!).pathname}en/#contact`);
 
+		await revealHeader(page);
 		await english.click();
 		await expect(page).toHaveURL(`${baseURL}en/#contact`);
 		await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 	});
 
-	test('sticks to the top and writes its height for scroll-padding', async ({ page }) => {
+	test('is fixed with JS and writes its height for scroll-padding once it shows', async ({
+		page
+	}) => {
 		await page.goto('./');
+		await revealHeader(page);
 		const header = page.locator('header');
-		await expect(header).toHaveCSS('position', 'sticky');
+		await expect(header).toHaveCSS('position', 'fixed');
 		const height = (await header.boundingBox())!.height;
 		await expect
 			.poll(() =>
@@ -57,6 +65,62 @@ test.describe('header', () => {
 			)
 			.toBe(`${height}px`);
 		await expect(page.locator('html')).toHaveCSS('scroll-padding-top', `${height}px`);
+	});
+
+	test('waits above the window at the top, still in the accessibility tree', async ({ page }) => {
+		await page.goto('./');
+		const header = page.locator('header');
+		await expect(header).toHaveAttribute('data-hidden', 'true');
+		await expect
+			.poll(async () => (await header.boundingBox())!.y + (await header.boundingBox())!.height)
+			.toBeLessThanOrEqual(0);
+		await expect(header).toHaveCSS('opacity', '0');
+		// Hidden to the eye only: the banner, its links and the toggle are still there.
+		await expect(page.getByRole('banner')).toHaveCount(1);
+		await expect(page.getByRole('link', { name: 'Contact' })).toHaveCount(1);
+		await expect(page.locator('header a[hreflang="en"]')).toHaveCount(1);
+		// 0 while hidden, so scroll-padding-top does not leave a gap at the top.
+		await expect(page.locator('html')).toHaveCSS('scroll-padding-top', '0px');
+	});
+
+	test('slides in after a short scroll and out again at the top', async ({ page }) => {
+		await page.goto('./');
+		const header = page.locator('header');
+		await revealHeader(page);
+		await page.evaluate(() => window.scrollTo(0, 0));
+		await expect(header).toHaveAttribute('data-hidden', 'true');
+		await expect(header).toHaveCSS('opacity', '0');
+	});
+
+	test('moves nothing on the page when it appears', async ({ page }) => {
+		await page.goto('./');
+		const mainTop = () => page.evaluate(() => document.querySelector('main')!.offsetTop);
+		const before = await mainTop();
+		await revealHeader(page);
+		expect(await mainTop()).toBe(before);
+	});
+
+	test('comes down when Tab reaches it, after the skip link', async ({ page }) => {
+		await page.goto('./');
+		await page.keyboard.press('Tab');
+		await expect(page.locator('a.skip-link')).toBeFocused();
+		await expect(page.locator('header')).toHaveAttribute('data-hidden', 'true');
+
+		await page.keyboard.press('Tab');
+		await expect(page.locator('header a.brand')).toBeFocused();
+		await expect(page.locator('header')).not.toHaveAttribute('data-hidden', 'true');
+		await expect.poll(async () => (await page.locator('header').boundingBox())!.y).toBe(0);
+		await expect(page.locator('header')).toHaveCSS('opacity', '1');
+		// Focus is visible on it.
+		await expect(page.locator('header a.brand')).toHaveCSS('outline-width', '2px');
+	});
+
+	test('only shows and hides under reduced motion, with no slide', async ({ page }) => {
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await page.goto('./');
+		await expect(page.locator('header')).toHaveCSS('transition-duration', '0s');
+		await revealHeader(page);
+		await expect(page.locator('header')).toHaveCSS('transition-duration', '0s');
 	});
 
 	test('never covers the element that takes focus', async ({ page }) => {
@@ -68,11 +132,13 @@ test.describe('header', () => {
 		await page.waitForFunction(
 			() => document.documentElement.style.getPropertyValue('--header-height') !== ''
 		);
-		// The stub page has nothing to focus. Add two links and room below them, then scroll so the
-		// first link sits behind the header: still inside the window, so the browser would not scroll
-		// to it. Shift+Tab from the second link moves focus to it. scroll-padding-top is what makes
-		// the browser bring it below the header.
+		// The stub page has nothing to focus. Add two links and room above and below them, then
+		// scroll so the first link sits behind the header: still inside the window, so the browser
+		// would not scroll to it. Shift+Tab from the second link moves focus to it. scroll-padding-top
+		// is what makes the browser bring it below the header.
 		await page.evaluate(() => {
+			const lead = document.createElement('div');
+			lead.style.height = '1000px';
 			const first = document.createElement('a');
 			first.id = 'first';
 			first.href = '#first';
@@ -83,11 +149,13 @@ test.describe('header', () => {
 			second.textContent = 'second';
 			const spacer = document.createElement('div');
 			spacer.style.height = '150vh';
-			document.querySelector('main')!.prepend(first, second, spacer);
+			document.querySelector('main')!.prepend(lead, first, second, spacer);
 			window.scrollTo(0, first.getBoundingClientRect().top + window.scrollY - 20);
 		});
 		const first = page.locator('#first');
 		const header = page.locator('header');
+		await expect(header).not.toHaveAttribute('data-hidden', 'true');
+		await expect.poll(async () => (await header.boundingBox())!.y).toBe(0);
 		expect((await first.boundingBox())!.y).toBeLessThan((await header.boundingBox())!.height);
 
 		await page.locator('#second').focus();
@@ -173,6 +241,10 @@ test.describe('without JavaScript', () => {
 	test('keeps the header, the toggle as plain links and the footer', async ({ page, baseURL }) => {
 		await page.goto('./');
 		await expect(page.getByRole('banner')).toBeVisible();
+		// Always there: sticky in the flow of the page, never moved or faded.
+		await expect(page.locator('header')).toHaveCSS('position', 'sticky');
+		await expect(page.locator('header')).toHaveCSS('opacity', '1');
+		expect((await page.locator('header').boundingBox())!.y).toBe(0);
 		await expect(page.locator('header a[hreflang="en"]')).toHaveAttribute(
 			'href',
 			`${new URL(baseURL!).pathname}en/`
@@ -191,6 +263,8 @@ test.describe('accessibility', () => {
 		for (const path of ['./', 'en/']) {
 			await page.goto(path);
 			await page.keyboard.press('Tab');
+			await expectNoAxeViolations(page);
+			await revealHeader(page);
 			await expectNoAxeViolations(page);
 		}
 	});
