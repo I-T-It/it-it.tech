@@ -37,8 +37,12 @@
  * `data-pcb-state` on the canvas: `init` (waiting for fonts), `running` (a frame is queued),
  * `idle`, `static` or `off`. In test runs (`debug`, by default when the browser is automated) the
  * canvas also carries `data-spine-front` (the front in document px), `data-pulses` (live pulses),
- * `data-hero-traces` (how many hero traces) and `data-hero-ellipse` (`cx cy rx ry` in document px,
- * only with a hero).
+ * `data-hero-traces` (how many hero traces), `data-hero-ellipse` (`cx cy rx ry` in document px,
+ * only with a hero) and `data-pcb-seed` (the layout seed).
+ *
+ * Seed: every visit draws its own board. The runtime picks a random seed when it is made and
+ * lays out with it every time, so a resize or a `<details>` toggle moves the traces but never
+ * reshuffles them. Test runs keep the layout's own seed for the viewport, or take `?seed=`.
  */
 
 import type { Point, Rect } from './geometry.js';
@@ -75,6 +79,27 @@ export interface RuntimeOptions {
 	reducedMotion?: MotionQuery;
 	/** The clock for growth and pulses, in ms. Default: `performance.now()`. */
 	now?: () => number;
+	/**
+	 * The layout seed, the same for every layout of this visit. Default: a random one, so every
+	 * visit gets its own board; in test runs (`debug`) the layout's own seed for the viewport, or
+	 * `?seed=` from the address.
+	 */
+	seed?: number;
+}
+
+/** A random 32-bit seed. */
+function randomSeed(): number {
+	if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+		return crypto.getRandomValues(new Uint32Array(1))[0];
+	}
+	return Math.floor(Math.random() * 2 ** 32);
+}
+
+/** `?seed=` from the address, or undefined. */
+function seedFromUrl(): number | undefined {
+	const value = new URLSearchParams(location.search).get('seed');
+	const seed = Number(value);
+	return value !== null && value !== '' && Number.isFinite(seed) ? seed >>> 0 : undefined;
 }
 
 function docRect(el: Element, scrollX: number, scrollY: number): Rect {
@@ -137,6 +162,8 @@ export class BoardRuntime {
 	maxFrameMs = 0;
 
 	#debug: boolean;
+	/** The layout seed of this visit; undefined: the layout's own. */
+	#seed: number | undefined;
 	#motion: MotionQuery | null;
 	#now: () => number;
 	#renderer: Renderer | null = null;
@@ -154,6 +181,7 @@ export class BoardRuntime {
 	constructor(canvas: HTMLCanvasElement, options: RuntimeOptions = {}) {
 		this.canvas = canvas;
 		this.#debug = options.debug ?? navigator.webdriver === true;
+		this.#seed = options.seed ?? (this.#debug ? seedFromUrl() : randomSeed());
 		this.#motion =
 			options.reducedMotion ??
 			(typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null);
@@ -275,6 +303,7 @@ export class BoardRuntime {
 			if (e) data.heroEllipse = [e.cx, e.cy, e.rx, e.ry].map((v) => v.toFixed(1)).join(' ');
 			else delete data.heroEllipse;
 			data.heroTraces = String(board.traces.filter((t) => t.kind === 'hero').length);
+			data.pcbSeed = String(board.seed);
 		}
 		return true;
 	}
@@ -335,7 +364,8 @@ export class BoardRuntime {
 			chips,
 			obstacles,
 			socket,
-			hero
+			hero,
+			seed: this.#seed
 		};
 	}
 

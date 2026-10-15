@@ -462,6 +462,31 @@ describe('layoutBoard hero field', () => {
 		expect(layoutBoard(heroPage('1440x900'))).toEqual(board);
 	});
 
+	it('draws a different field for every seed, each keeping the ellipse clear and quick', () => {
+		const keep = { ...ellipse, rx: ellipse.rx + 4, ry: ellipse.ry + 4 };
+		const shapes = new Set<string>();
+		let slowest = 0;
+		for (let seed = 1; seed <= 12; seed++) {
+			const page = heroPage('1440x900', { seed: seed * 7919 });
+			const start = performance.now();
+			const other = layoutBoard(page);
+			slowest = Math.max(slowest, performance.now() - start);
+			expect(
+				other.traces.filter((t) => t.kind === 'socket'),
+				`seed ${seed}`
+			).toHaveLength(2);
+			expect(heroTraces(other).length, `seed ${seed}`).toBeGreaterThan(60);
+			for (const trace of other.traces.filter((t) => t.kind !== 'socket')) {
+				for (const p of samples(trace, 4)) {
+					expect(ellipseDistance(keep, p), `seed ${seed} ${trace.id}`).toBeGreaterThanOrEqual(1);
+				}
+			}
+			shapes.add(JSON.stringify(heroTraces(other).map((t) => t.points)));
+		}
+		expect(shapes.size).toBe(12);
+		expect(slowest).toBeLessThan(100);
+	});
+
 	it('still wires the chips below the hero', () => {
 		for (const chip of board.chips) expect(chip.feeders.length, chip.id).toBeGreaterThan(0);
 	});

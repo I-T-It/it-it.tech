@@ -5,6 +5,7 @@ import { BOOT_FALLBACK_MS, FRONT_RATIO, HERO_MS, LEAD_MS, SOCKET_MS } from './gr
 import { ellipseDistance, type Ellipse } from './hero.js';
 import type { Trace } from './layout.js';
 import { MAX_DPR } from './renderer.js';
+import { boardSeed } from './rng.js';
 import {
 	registerChip,
 	registerHero,
@@ -726,6 +727,62 @@ describe('test-run attributes', () => {
 		await runtime.start();
 		expect(navigator.webdriver).toBe(true);
 		expect(canvas.dataset.spineFront).toBeDefined();
+	});
+});
+
+describe('seed', () => {
+	it('lays the board out from a fresh random seed on every visit', async () => {
+		buildPage();
+		const values = [0x1234_5678, 0x0bad_cafe];
+		vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+			(array as Uint32Array)[0] = values.shift()!;
+			return array;
+		});
+		const first = launch({ debug: false }).runtime;
+		const second = launch({ debug: false }).runtime;
+		await first.start();
+		await second.start();
+		expect(first.board!.seed).toBe(0x1234_5678);
+		expect(second.board!.seed).toBe(0x0bad_cafe);
+	});
+
+	it('keeps that seed for the whole visit, through every relayout', async () => {
+		const { sections } = buildPage();
+		vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+			(array as Uint32Array)[0] = 4242;
+			return array;
+		});
+		const { runtime } = launch({ debug: false });
+		await runtime.start();
+		vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+			(array as Uint32Array)[0] = 9999;
+			return array;
+		});
+		await page.viewport(WIDTH - 200, HEIGHT);
+		sections[1].style.height = '800px';
+		await until(() => runtime.layouts >= 2, RELAYOUT_DEBOUNCE_MS + 1500);
+		expect(runtime.board!.seed).toBe(4242);
+	});
+
+	it('stays the same in test runs, and takes ?seed= there', async () => {
+		buildPage();
+		const first = launch({ debug: true }).runtime;
+		await first.start();
+		expect(first.board!.seed).toBe(boardSeed(window.innerWidth));
+
+		const url = location.href;
+		history.replaceState(null, '', `${location.pathname}?seed=1234`);
+		cleanups.push(() => history.replaceState(null, '', url));
+		const second = launch({ debug: true }).runtime;
+		await second.start();
+		expect(second.board!.seed).toBe(1234);
+	});
+
+	it('takes a seed from its options', async () => {
+		buildPage();
+		const { runtime } = launch({ debug: false, seed: 77 });
+		await runtime.start();
+		expect(runtime.board!.seed).toBe(77);
 	});
 });
 
