@@ -1,7 +1,5 @@
 {
 	"$schema": "https://inlang.com/schema/inlang-message-format",
-	"page_title_company": "I.T. It by Robbin Schepers",
-	"page_title_personal": "Robbin Schepers, developer and founder of I.T. It",
 	"skip_to_content": "Skip to content",
 	"header_nav_label": "Main menu",
 	"header_home": "{name}, back to top",

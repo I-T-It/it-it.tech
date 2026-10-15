@@ -459,12 +459,19 @@ describe('variant copy', () => {
 			expect(c.profile.name).toBe('Robbin Schepers');
 			expect(c.profile.tagline).toBe('Professional Computer Nerd');
 			expect(c.meta.company.title.startsWith('I.T. It')).toBe(true);
-			expect(c.meta.company.title).toContain('Robbin Schepers');
-			expect(c.meta.personal.title.startsWith('Robbin Schepers')).toBe(true);
-			expect(c.meta.personal.title).toContain('I.T. It');
+			expect(c.meta.personal.title.startsWith('Robbin "Roboroads" Schepers')).toBe(true);
 			expect(c.meta.personal.description).toContain('I.T. It');
 			expect(c.meta.company.description).toContain('I.T. It');
 		}
+	});
+
+	it('titles the pages the way the user wrote them: a name or company, a hyphen, a line', () => {
+		expect(nl.meta.company.title).toBe('I.T. It - Voor alles met stekkers');
+		expect(en.meta.company.title).toBe('I.T. It - For everything with a plug');
+		expect(nl.meta.personal.title).toBe(
+			'Robbin "Roboroads" Schepers - Professionele Computer Nerd'
+		);
+		expect(en.meta.personal.title).toBe('Robbin "Roboroads" Schepers - Professional Computer Nerd');
 	});
 
 	it('keeps titles and descriptions within search result lengths', () => {

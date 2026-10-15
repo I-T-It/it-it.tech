@@ -9,12 +9,12 @@ export const en: SiteContent = {
 
 	meta: {
 		company: {
-			title: 'I.T. It: software and computer help by Robbin Schepers',
+			title: 'I.T. It - For everything with a plug',
 			description:
 				'I.T. It builds web applications and apps and helps with computer problems. Together we find the best solution. Weekday evenings from 18:00 and weekends.'
 		},
 		personal: {
-			title: 'Robbin Schepers, developer and founder of I.T. It',
+			title: 'Robbin "Roboroads" Schepers - Professional Computer Nerd',
 			description:
 				'Robbin Schepers is a developer with a day job. In the evenings and at weekends he builds web applications and apps with his company I.T. It.'
 		}

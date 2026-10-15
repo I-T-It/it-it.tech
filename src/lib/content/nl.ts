@@ -10,12 +10,12 @@ export const nl: SiteContent = {
 
 	meta: {
 		company: {
-			title: 'I.T. It: software en computerhulp van Robbin Schepers',
+			title: 'I.T. It - Voor alles met stekkers',
 			description:
 				'I.T. It bouwt webapplicaties en apps en helpt bij computerproblemen. Samen zoeken we de beste oplossing. Doordeweeks vanaf 18:00 en in het weekend.'
 		},
 		personal: {
-			title: 'Robbin Schepers, developer en oprichter van I.T. It',
+			title: 'Robbin "Roboroads" Schepers - Professionele Computer Nerd',
 			description:
 				'Robbin Schepers is developer en werkt overdag in loondienst. In de avonden en het weekend bouwt hij webapplicaties en apps met zijn bedrijf I.T. It.'
 		}

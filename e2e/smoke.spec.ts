@@ -118,6 +118,26 @@ test.describe('skeleton', () => {
 		await expectNoAxeViolations(page);
 	});
 
+	test('titles the page the way its variant says, in both languages', async ({
+		page
+	}, testInfo) => {
+		const site = testInfo.project.name as Site;
+		const titles: Record<Site, { nl: string; en: string }> = {
+			company: {
+				nl: 'I.T. It - Voor alles met stekkers',
+				en: 'I.T. It - For everything with a plug'
+			},
+			personal: {
+				nl: 'Robbin "Roboroads" Schepers - Professionele Computer Nerd',
+				en: 'Robbin "Roboroads" Schepers - Professional Computer Nerd'
+			}
+		};
+		await page.goto('./');
+		await expect(page).toHaveTitle(titles[site].nl);
+		await page.goto('en/');
+		await expect(page).toHaveTitle(titles[site].en);
+	});
+
 	test('keeps the variant out of the other build', async ({ page }, testInfo) => {
 		const other: Site = testInfo.project.name === 'company' ? 'personal' : 'company';
 		await page.goto('./');
