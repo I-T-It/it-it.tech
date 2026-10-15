@@ -93,6 +93,50 @@ describe('links', () => {
 	});
 });
 
+describe('size and spacing', () => {
+	it('draws a small mark, not a banner', async () => {
+		await page.viewport(1280, 800);
+		await render(SiteHeader, {});
+		const logo = header().querySelector('svg.logo')!.getBoundingClientRect();
+		expect(logo.width).toBeLessThanOrEqual(80);
+		expect(logo.height).toBeLessThanOrEqual(28);
+	});
+
+	it('keeps every control at least 8px from the top and bottom edge of the header', async () => {
+		for (const width of [320, 1280]) {
+			await page.viewport(width, 800);
+			await render(SiteHeader, {});
+			const bar = header().getBoundingClientRect();
+			for (const el of header().querySelectorAll('.brand, .menu a, .language a')) {
+				const box = el.getBoundingClientRect();
+				if (box.width === 0) continue;
+				expect(box.top - bar.top, `${el.className} top at ${width}`).toBeGreaterThanOrEqual(8);
+				expect(
+					bar.bottom - box.bottom,
+					`${el.className} bottom at ${width}`
+				).toBeGreaterThanOrEqual(8);
+			}
+		}
+	});
+
+	it('lines up with the content column at every width: same left and right edge as main', async () => {
+		const main = document.createElement('main');
+		document.body.append(main);
+		try {
+			for (const width of [320, 414, 800, 1280, 1920]) {
+				await page.viewport(width, 800);
+				await render(SiteHeader, {});
+				const column = main.getBoundingClientRect();
+				const bar = header().querySelector('.bar')!.getBoundingClientRect();
+				expect(bar.left, `left at ${width}`).toBeCloseTo(column.left, 0);
+				expect(bar.right, `right at ${width}`).toBeCloseTo(column.right, 0);
+			}
+		} finally {
+			main.remove();
+		}
+	});
+});
+
 describe('desktop anchors', () => {
 	it('shows Over, Ervaring, Vaardigheden and Talks on a wide screen', async () => {
 		await page.viewport(1280, 800);

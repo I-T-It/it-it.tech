@@ -59,7 +59,7 @@
 			aria-label={m.header_home({ name: site === 'company' ? company.name : company.founder })}
 		>
 			{#if site === 'company'}
-				<Logo size={108} />
+				<Logo size={72} />
 			{:else}
 				<span class="wordmark"><span class="dot" aria-hidden="true"></span>{company.founder}</span>
 			{/if}
@@ -110,13 +110,14 @@
 		justify-content: space-between;
 		gap: 0 0.5rem;
 		min-height: var(--header-min);
-		width: min(var(--content-max), calc(100% - 2rem));
+		padding-block: 0.5rem;
+		/* The same column as <main>, so the mark lines up with the content below it. */
+		width: min(var(--content-max), calc(100% - 2 * var(--gutter)));
 		margin-inline: auto;
 	}
 
 	@media (min-width: 40rem) {
 		.bar {
-			width: min(var(--content-max), calc(100% - 2 * var(--gutter)));
 			gap: 0 1.5rem;
 		}
 	}
@@ -136,7 +137,7 @@
 		align-items: center;
 		gap: 0.375rem;
 		font-family: var(--font-display);
-		font-size: 0.8125rem;
+		font-size: 0.75rem;
 		font-weight: 500;
 		white-space: nowrap;
 	}
@@ -144,14 +145,14 @@
 	@media (min-width: 40rem) {
 		.wordmark {
 			gap: 0.5rem;
-			font-size: 1rem;
+			font-size: 0.875rem;
 		}
 	}
 
 	/* The pin-1 dot of a chip, as the personal mark. */
 	.dot {
-		width: 0.4rem;
-		height: 0.4rem;
+		width: 0.375rem;
+		height: 0.375rem;
 		border-radius: 50%;
 		background: var(--trace-cyan);
 		box-shadow: 0 0 6px var(--trace-cyan);

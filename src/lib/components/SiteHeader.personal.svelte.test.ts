@@ -45,6 +45,41 @@ describe('personal mark', () => {
 	});
 });
 
+describe('size and spacing', () => {
+	it('sets the name small, at most 14px', async () => {
+		await page.viewport(1280, 800);
+		await render(SiteHeader, {});
+		const size = parseFloat(getComputedStyle(header().querySelector('.wordmark')!).fontSize);
+		expect(size).toBeLessThanOrEqual(14);
+	});
+
+	it('lines up with the content column, same edges as main', async () => {
+		const main = document.createElement('main');
+		document.body.append(main);
+		try {
+			for (const width of [320, 414, 1280]) {
+				await page.viewport(width, 800);
+				await render(SiteHeader, {});
+				const column = main.getBoundingClientRect();
+				const bar = header().querySelector('.bar')!.getBoundingClientRect();
+				expect(bar.left, `left at ${width}`).toBeCloseTo(column.left, 0);
+				expect(bar.right, `right at ${width}`).toBeCloseTo(column.right, 0);
+			}
+		} finally {
+			main.remove();
+		}
+	});
+
+	it('keeps the mark at least 8px from the top and bottom edge', async () => {
+		await page.viewport(1280, 800);
+		await render(SiteHeader, {});
+		const bar = header().getBoundingClientRect();
+		const box = header().querySelector('.brand')!.getBoundingClientRect();
+		expect(box.top - bar.top).toBeGreaterThanOrEqual(8);
+		expect(bar.bottom - box.bottom).toBeGreaterThanOrEqual(8);
+	});
+});
+
 describe('reflow at 320 CSS px', () => {
 	for (const locale of ['nl', 'en'] as const) {
 		it(`fits on one row without clipping: personal, ${locale}`, async () => {
