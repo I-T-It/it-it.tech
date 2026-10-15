@@ -27,17 +27,26 @@
  * the board in place, without any growth. No 2D context, or a layout that throws: the board stays
  * blank, `data-pcb-state="off"`, and every chip goes on so no content waits for the board.
  *
+ * The hero: when one is registered, the board fills it edge to edge with the hero field (see
+ * `hero.ts`). Its content is the socket and the obstacles inside it, kept in a clear ellipse; its
+ * links and buttons (the scroll indicator) are obstacles too. The field builds up from the first
+ * frame, once, over 6 s.
+ *
  * `data-pcb-state` on the canvas: `init` (waiting for fonts), `running` (a frame is queued),
  * `idle`, `static` or `off`. In test runs (`debug`, by default when the browser is automated) the
- * canvas also carries `data-spine-front` (the front in document px) and `data-pulses` (live pulses).
+ * canvas also carries `data-spine-front` (the front in document px), `data-pulses` (live pulses),
+ * `data-hero-traces` (how many hero traces) and `data-hero-ellipse` (`cx cy rx ry` in document px,
+ * only with a hero).
  */
 
 import type { Point, Rect } from './geometry.js';
 import { Growth } from './growth.js';
-import { layoutBoard, type Board, type LayoutInput } from './layout.js';
+import { heroEllipse } from './hero.js';
+import { layoutBoard, type Board, type HeroInput, type LayoutInput } from './layout.js';
 import { Pulses } from './pulses.js';
 import {
 	chips as registeredChips,
+	hero as registeredHero,
 	obstacles as registeredObstacles,
 	onChange,
 	socket as registeredSocket,
@@ -258,6 +267,13 @@ export class BoardRuntime {
 		this.board = board;
 		this.#renderer?.setBoard(board);
 		this.#handles = registeredChips();
+		if (this.#debug) {
+			const data = this.canvas.dataset;
+			const e = board.hero?.ellipse;
+			if (e) data.heroEllipse = [e.cx, e.cy, e.rx, e.ry].map((v) => v.toFixed(1)).join(' ');
+			else delete data.heroEllipse;
+			data.heroTraces = String(board.traces.filter((t) => t.kind === 'hero').length);
+		}
 		return true;
 	}
 
@@ -274,22 +290,42 @@ export class BoardRuntime {
 				pins: chip.pins().map((pin) => docCentre(pin, sx, sy))
 			}))
 			.filter((chip) => rendered(chip.rect));
-		const obstacles = registeredObstacles()
-			.filter((el) => el.isConnected)
-			.map((el) => docRect(el, sx, sy))
-			.filter(rendered);
+		const obstacleEls = registeredObstacles().filter((el) => el.isConnected);
+		const obstacles = obstacleEls.map((el) => docRect(el, sx, sy)).filter(rendered);
 		const port = registeredSocket();
 		const socketRect = port?.el.isConnected ? docRect(port.el, sx, sy) : null;
+		const socket =
+			port && socketRect && rendered(socketRect)
+				? { rect: socketRect, ports: port.ports().map((el) => docCentre(el, sx, sy)) }
+				: undefined;
+
+		// The hero: as wide as the board, its content (the socket and the obstacles in it) inside a
+		// clear ellipse, its links and buttons in the way of the field.
+		let hero: HeroInput | undefined;
+		const heroHandle = registeredHero();
+		const heroRect = heroHandle?.el.isConnected ? docRect(heroHandle.el, sx, sy) : null;
+		if (heroHandle && heroRect && rendered(heroRect)) {
+			const area = { x: 0, y: heroRect.y, width: root.clientWidth, height: heroRect.height };
+			const content = obstacleEls
+				.filter((el) => heroHandle.el.contains(el))
+				.map((el) => docRect(el, sx, sy));
+			if (socket && port && heroHandle.el.contains(port.el)) content.push(socket.rect);
+			const ellipse = heroEllipse(content.filter(rendered), area);
+			if (ellipse) hero = { rect: area, ellipse };
+			for (const el of heroHandle.controls()) {
+				const rect = docRect(el, sx, sy);
+				if (rendered(rect)) obstacles.push(rect);
+			}
+		}
+
 		return {
 			width: root.clientWidth,
 			height: root.scrollHeight,
 			viewportWidth: window.innerWidth,
 			chips,
 			obstacles,
-			socket:
-				port && socketRect && rendered(socketRect)
-					? { rect: socketRect, ports: port.ports().map((el) => docCentre(el, sx, sy)) }
-					: undefined
+			socket,
+			hero
 		};
 	}
 

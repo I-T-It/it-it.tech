@@ -4,7 +4,7 @@
 	import { visibleProfiles } from '#lib/content/profiles.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
-	import { registerObstacle, registerSocket } from '#lib/pcb/registry.svelte.js';
+	import { registerHero, registerObstacle, registerSocket } from '#lib/pcb/registry.svelte.js';
 	import { site } from '#lib/site.js';
 	import Icon from '#lib/components/Icon.svelte';
 	import Logo from '#lib/components/Logo.svelte';
@@ -51,7 +51,13 @@
 	says where the socket is and which block of text the traces must stay out from under.
 	No CTAs here: they live in the availability chips.
 -->
-<section id="hero" class="hero" data-designator="U0" aria-labelledby="hero-title">
+<section
+	id="hero"
+	class="hero"
+	data-designator="U0"
+	aria-labelledby="hero-title"
+	{@attach registerHero}
+>
 	<div class="stage">
 		{#if site === 'company'}
 			<div class="socket logo-socket" {@attach registerSocket}>
