@@ -970,13 +970,32 @@ describe('Talks (U7)', () => {
 				Array.from(offer(id).querySelectorAll('.facts > div')).map((d) =>
 					[d.querySelector('dt')?.textContent, d.querySelector('dd')?.textContent].join(': ')
 				);
-			// The PHP talk has an English title and is given in Dutch, like the Flutter talk.
-			expect(facts('php-2005-called')).toEqual(['Taal: Nederlands']);
-			// The Flutter talk has an English title and is given in Dutch.
-			expect(facts('flutter-talk')).toEqual(['Taal: Nederlands']);
-			// The workshop can be given in either language.
-			expect(facts('flutter-workshop')).toEqual(['Taal: Nederlands of Engels']);
-			expect(facts('frontend-love')).toEqual(['Taal: Engels']);
+			// Every talk and workshop can be given in either language.
+			for (const o of talks().offers) {
+				expect(facts(o.id), o.id).toEqual(['Taal: Nederlands of Engels']);
+			}
+		});
+
+		it('has one shared note under the heading of the catalogue, before the first offer', async () => {
+			await render(Talks, {});
+			const notes = document.querySelectorAll('section#talks .offers-note');
+			expect(notes).toHaveLength(1);
+			expect(notes[0].textContent).toBe(
+				'Alle talks en workshops geef ik in het Nederlands of Engels. De slides zijn in het Engels. Vertalen kan als dat nodig is.'
+			);
+			const heading = document.querySelector('section#talks .part-offers h3')!;
+			const first = document.querySelector('[data-offer]')!;
+			const { DOCUMENT_POSITION_FOLLOWING: after } = Node;
+			expect(heading.compareDocumentPosition(notes[0]) & after).toBeTruthy();
+			expect(notes[0].compareDocumentPosition(first) & after).toBeTruthy();
+		});
+
+		it('writes the shared note in English on the English page', async () => {
+			setLocale('en');
+			await render(Talks, {});
+			expect(document.querySelector('section#talks .offers-note')?.textContent).toBe(
+				'I give every talk and workshop in Dutch or English. The slides are in English and can be translated if needed.'
+			);
 		});
 
 		it('says Dutch for the Flutter talk and keeps its English title marked on the Dutch page', async () => {

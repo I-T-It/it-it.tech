@@ -122,6 +122,7 @@
 
 	<div class="part part-offers">
 		<h3>{labels.offers}</h3>
+		<p class="offers-note">{labels.offersNote}</p>
 		<ul class="offers">
 			{#each content.offers as offer (offer.id)}
 				{@const stats = offerStats(offer.id, content.given)}
@@ -201,6 +202,12 @@
 	/* A short trace under each heading: the catalogue is the freelance path, the history the job path. */
 	.part-offers {
 		--part-color: var(--trace-green);
+	}
+
+	/* One note for every offer: it follows the heading, the cards follow it. */
+	.offers-note {
+		margin-bottom: 1rem;
+		color: var(--ink-muted);
 	}
 
 	.part-given {

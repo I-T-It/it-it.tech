@@ -421,9 +421,9 @@ describe('talks', () => {
 		for (const [, c] of both) {
 			// Per offer: the kind, the languages it is given in, and the language of its title.
 			expect(c.talks.offers.map((o) => [o.id, o.kind, o.langs, o.titleLang])).toEqual([
-				['php-2005-called', 'talk', ['nl'], 'en'],
-				['frontend-love', 'talk', ['en'], 'en'],
-				['flutter-talk', 'talk', ['nl'], 'en'],
+				['php-2005-called', 'talk', ['nl', 'en'], 'en'],
+				['frontend-love', 'talk', ['nl', 'en'], 'en'],
+				['flutter-talk', 'talk', ['nl', 'en'], 'en'],
 				['flutter-workshop', 'workshop', ['nl', 'en'], 'nl']
 			]);
 		}
@@ -551,7 +551,6 @@ describe('talks', () => {
 			const talk = c.talks.offers.find((o) => o.id === 'flutter-talk')!;
 			expect(talk.title).toBe('Writing multi-platform apps with native performance');
 			expect(talk.titleLang).toBe('en');
-			expect(talk.langs).toEqual(['nl']);
 			const given = c.talks.given.find((g) => g.id === 'flutter-frontmania')!;
 			expect(given.offerId).toBe('flutter-talk');
 			expect(given.lang).toBe('nl');
@@ -563,14 +562,19 @@ describe('talks', () => {
 		}
 	});
 
-	it('has Workshop Flutter in Dutch or English, in that order, and the other offers in one language', () => {
+	it('has every talk and workshop in Dutch or English, in that order', () => {
 		for (const [, c] of both) {
-			const langs = (id: string) => c.talks.offers.find((o) => o.id === id)!.langs;
-			expect(langs('flutter-workshop')).toEqual(['nl', 'en']);
-			expect(langs('php-2005-called')).toEqual(['nl']);
-			expect(langs('frontend-love')).toEqual(['en']);
-			expect(langs('flutter-talk')).toEqual(['nl']);
+			for (const o of c.talks.offers) expect(o.langs, o.id).toEqual(['nl', 'en']);
 		}
+	});
+
+	it('has one shared note on the languages and the slides, for the catalogue', () => {
+		expect(nl.talks.labels.offersNote).toBe(
+			'Alle talks en workshops geef ik in het Nederlands of Engels. De slides zijn in het Engels. Vertalen kan als dat nodig is.'
+		);
+		expect(en.talks.labels.offersNote).toBe(
+			'I give every talk and workshop in Dutch or English. The slides are in English and can be translated if needed.'
+		);
 	});
 
 	it('has the PHP talk given at Sopra Steria in June 2024, in Dutch, under its English title', () => {
@@ -583,7 +587,6 @@ describe('talks', () => {
 			expect(given.url).toBeUndefined();
 			expect(given.lang).toBe('nl');
 			const offer = c.talks.offers.find((o) => o.id === 'php-2005-called')!;
-			expect(offer.langs).toEqual(['nl']);
 			expect(offer.titleLang).toBe('en');
 		}
 	});
@@ -623,6 +626,7 @@ describe('talks', () => {
 				'kind',
 				'language',
 				'offers',
+				'offersNote',
 				'times'
 			]);
 		}

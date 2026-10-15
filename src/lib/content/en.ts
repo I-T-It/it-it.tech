@@ -627,7 +627,7 @@ export const en: SiteContent = {
 				title: '2005 Called! They Want Your Opinion About PHP Back!',
 				summary:
 					'Why PHP was bad, why it no longer is, and why it is still a good language to build projects in today.',
-				langs: ['nl'],
+				langs: ['nl', 'en'],
 				titleLang: 'en'
 			},
 			{
@@ -636,7 +636,7 @@ export const en: SiteContent = {
 				title: 'Falling in Love with Front-end all over again',
 				summary:
 					'The magic of Svelte, and how it compares to other frameworks like Angular, React and Vue.js.',
-				langs: ['en'],
+				langs: ['nl', 'en'],
 				titleLang: 'en'
 			},
 			{
@@ -644,7 +644,7 @@ export const en: SiteContent = {
 				kind: 'talk',
 				title: 'Writing multi-platform apps with native performance',
 				summary: 'The Flutter workshop as a talk, without the do-it-yourself steps.',
-				langs: ['nl'],
+				langs: ['nl', 'en'],
 				titleLang: 'en'
 			},
 			{
@@ -722,6 +722,8 @@ export const en: SiteContent = {
 		],
 		labels: {
 			offers: 'Ready to give',
+			offersNote:
+				'I give every talk and workshop in Dutch or English. The slides are in English and can be translated if needed.',
 			given: 'Given',
 			kind: { talk: 'Talk', workshop: 'Workshop' },
 			language: { nl: 'Dutch', en: 'English' },

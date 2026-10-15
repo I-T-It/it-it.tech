@@ -205,6 +205,8 @@ export interface Talks extends SectionHead {
 	labels: {
 		/** h3 of the catalogue, e.g. "Klaar om te geven". */
 		offers: string;
+		/** One short note under the heading of the catalogue, for all offers: languages and slides. */
+		offersNote: string;
 		/** h3 of the history, e.g. "Gegeven". */
 		given: string;
 		kind: Record<TalkOffer['kind'], string>;

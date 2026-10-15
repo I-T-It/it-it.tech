@@ -58,12 +58,21 @@ test.describe('talks and workshops', () => {
 		}
 	});
 
-	test('gives Workshop Flutter in Dutch or English', async ({ page }) => {
+	test('gives every talk and workshop in Dutch or English, with one note on the slides', async ({
+		page
+	}) => {
 		await page.goto('./');
-		const card = page.locator('[data-offer="flutter-workshop"]');
-		await expect(card.locator('.facts')).toContainText('Nederlands of Engels');
+		const talks = page.locator('section#talks');
+		await expect(talks.locator('.offers-note')).toHaveCount(1);
+		await expect(talks.locator('.offers-note')).toContainText('De slides zijn in het Engels');
+		await expect(talks.locator('[data-offer] .facts')).toHaveText(
+			OFFERS.map(() => /Taal\s*Nederlands of Engels/)
+		);
 		await page.goto('en/');
-		await expect(card.locator('.facts')).toContainText('Dutch or English');
+		await expect(talks.locator('.offers-note')).toContainText('The slides are in English');
+		await expect(talks.locator('[data-offer] .facts')).toHaveText(
+			OFFERS.map(() => /Language\s*Dutch or English/)
+		);
 	});
 
 	test('shows the PHP talk at Sopra Steria in June 2024, in Dutch', async ({ page }) => {
