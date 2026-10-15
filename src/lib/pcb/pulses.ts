@@ -14,9 +14,10 @@
  *   drawn part of each trace (`reach`, default: all of it). It starts the pulse at the closest point.
  * - A trace takes at most one new pulse per 500 ms; while the closest trace waits, the next closest
  *   one in range gets the pulse. At most 16 pulses live at once.
- * - Pulses run at 600 px/s toward the chip end of their trace. A pulse that reaches a pin of a fully
- *   drawn trace reports a `PinHit` from `advance`; at a via, or at the end of the drawn part of a
- *   trace that still grows, it just dies. With the 500 ms limit a pin flashes at most twice a second.
+ * - Pulses run at 600 px/s toward the far end of their trace (the pin, port or via). A pulse that
+ *   reaches a pin of a fully drawn branch reports a `PinHit` from `advance`; at a via, a socket
+ *   port, or the end of the drawn part of a trace that still grows (or a spine above the front), it
+ *   just dies. With the 500 ms limit a pin flashes at most twice a second.
  */
 
 import { nearestOnPolyline, pointAt, type Point } from './geometry.js';

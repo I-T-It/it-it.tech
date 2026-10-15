@@ -2,12 +2,18 @@
  * Meeting point of the sections and the PCB board.
  *
  * Module-level and client-only: sections attach with `{@attach}`, which never runs during
- * prerender, so no context ancestor is needed. The board reads `chips()` and `obstacles()` after
- * `document.fonts.ready`, lays out around them and drives each chip's `state`.
+ * prerender, so no context ancestor is needed. The board reads `chips()`, `obstacles()` and
+ * `socket()` after `document.fonts.ready`, lays out around them and drives each chip's `state`.
  *
  * ```svelte
  * <section {@attach (el) => { const chip = registerChip(el, { id: 'about', designator: 'U3', side: 'both' }); return () => chip.destroy(); }}>
+ * <div {@attach registerSocket}>  <!-- the hero logo or photo frame, with [data-port] children -->
  * ```
+ *
+ * The socket is the hero element the socket traces plug into: the logo (company) or the photo's
+ * footprint (personal). Its ports are the `[data-port]` elements inside it, at any depth; the board
+ * ends one or more traces on the centre of each. The board keeps traces out of the socket's own
+ * rect, so it needs no `registerObstacle` as well.
  */
 
 export type ChipSide = 'both' | 'left' | 'right';
@@ -20,7 +26,7 @@ export interface ChipOptions {
 	id: string;
 	/** "U3". The chip prints it in the top left corner. */
 	designator: string;
-	/** Which sides of the chip get feeder traces. */
+	/** Which sides of the chip get branches from the spine. */
 	side: ChipSide;
 }
 
@@ -90,10 +96,18 @@ export class ChipHandle {
 	}
 }
 
+/** The hero element the socket traces plug into. */
+export interface SocketHandle {
+	readonly el: HTMLElement;
+	/** The port elements (`[data-port]`, at any depth), in DOM order, read live. */
+	ports(): HTMLElement[];
+}
+
 // Plain collections on purpose: nothing reads them reactively. Changes go out through onChange().
 /* eslint-disable svelte/prefer-svelte-reactivity */
 const chipMap = new Map<string, ChipHandle>();
 const obstacleList: { el: HTMLElement }[] = [];
+const socketList: SocketHandle[] = [];
 const listeners = new Set<() => void>();
 /* eslint-enable svelte/prefer-svelte-reactivity */
 
@@ -133,6 +147,30 @@ export function registerObstacle(el: HTMLElement): () => void {
 	};
 }
 
+/**
+ * Registers the hero socket. Its ports are its `[data-port]` children. Returns the function that
+ * unregisters it, safe to call more than once. When more than one is registered, the latest wins.
+ */
+export function registerSocket(el: HTMLElement): () => void {
+	const handle: SocketHandle = {
+		el,
+		ports: () => Array.from(el.querySelectorAll<HTMLElement>('[data-port]'))
+	};
+	socketList.push(handle);
+	notify();
+	return () => {
+		const index = socketList.indexOf(handle);
+		if (index === -1) return;
+		socketList.splice(index, 1);
+		notify();
+	};
+}
+
+/** The registered socket, or null when there is none. */
+export function socket(): SocketHandle | null {
+	return socketList.at(-1) ?? null;
+}
+
 /** Snapshot of the registered chips, in registration order. */
 export function chips(): ChipHandle[] {
 	return [...chipMap.values()];
@@ -144,8 +182,8 @@ export function obstacles(): HTMLElement[] {
 }
 
 /**
- * Calls `callback` whenever a chip or an obstacle is registered or unregistered. It does not fire
- * for `state` changes. Returns the function that stops the listening.
+ * Calls `callback` whenever a chip, an obstacle or the socket is registered or unregistered. It
+ * does not fire for `state` changes. Returns the function that stops the listening.
  */
 export function onChange(callback: () => void): () => void {
 	listeners.add(callback);

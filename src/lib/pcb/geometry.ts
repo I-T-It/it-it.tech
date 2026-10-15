@@ -4,7 +4,7 @@
  * Units: document CSS px, y pointing down. A trace is a polyline (`Point[]`) plus its cumulative
  * lengths (`cumulativeLengths`). Growth and pulses talk in "along" values: px along the line from
  * its first point. The renderer draws `slicePolyline(points, lengths, drawn)` and places a pulse at
- * `pointAt(points, lengths, along)`.
+ * `pointAt(points, lengths, along)`. The spine's drawn length is `lengthAbove(points, lengths, y)`.
  *
  * Headings (`Dir`) are the eight octilinear directions, clockwise from east:
  * 0 E, 1 SE, 2 S, 3 SW, 4 W, 5 NW, 6 N, 7 NE. Traces only turn by one step (45 degrees) per corner.
@@ -108,6 +108,27 @@ export function slicePolyline(
 	const out = points.slice(0, i + 1);
 	if (along > lengths[i]) out.push(pointAt(points, lengths, along));
 	return out;
+}
+
+/**
+ * How much of the line, from its first point, stays on or above document y `y` (y points down):
+ * the drawn length of a trace that grows downward to a front at `y`. It stops where the line
+ * first goes below `y`, and a horizontal run counts whole once `y` reaches it.
+ */
+export function lengthAbove(
+	points: readonly Point[],
+	lengths: readonly number[],
+	y: number
+): number {
+	if (points.length === 0 || points[0].y > y) return 0;
+	for (let i = 0; i + 1 < points.length; i++) {
+		const a = points[i];
+		const b = points[i + 1];
+		if (b.y <= y) continue;
+		// a is on or above y and b below it, so the segment goes down and crosses y.
+		return lengths[i] + ((lengths[i + 1] - lengths[i]) * (y - a.y)) / (b.y - a.y);
+	}
+	return lengths[lengths.length - 1];
 }
 
 export interface Nearest {

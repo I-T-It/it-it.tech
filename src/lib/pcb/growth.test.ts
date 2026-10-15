@@ -1,20 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { BOOT_FALLBACK_MS, Growth, GROWTH_SPEED, MAX_STAGGER_MS, TRIGGER_RATIO } from './growth.js';
+import {
+	BOOT_FALLBACK_MS,
+	FRONT_RATIO,
+	Growth,
+	GROWTH_SPEED,
+	MAX_STAGGER_MS,
+	SOCKET_MS
+} from './growth.js';
 import { makeTrace, type Board, type ChipWiring, type Trace } from './layout.js';
 
 const VH = 1000;
 const T = 10_000;
 
-/** A straight trace of `length` px that triggers at `triggerY`. */
+/** A straight branch (with `chipId`) or decoration of `length` px that latches at `triggerY`. */
 function line(id: string, length: number, triggerY: number, chipId: string | null = null): Trace {
 	return makeTrace({
 		id,
-		kind: chipId ? 'feeder' : 'decor',
+		kind: chipId ? 'branch' : 'decor',
 		side: 'left',
 		bus: id,
 		points: [
-			{ x: 0, y: triggerY + 10 },
-			{ x: length, y: triggerY + 10 }
+			{ x: 0, y: triggerY },
+			{ x: length, y: triggerY }
 		],
 		end: chipId ? { kind: 'pin', chipId, pin: 0 } : { kind: 'via' },
 		chipId,
@@ -22,8 +29,55 @@ function line(id: string, length: number, triggerY: number, chipId: string | nul
 	});
 }
 
+/** A spine trace through `points`. */
+function spine(id: string, points: { x: number; y: number }[]): Trace {
+	return makeTrace({
+		id,
+		kind: 'spine',
+		side: 'left',
+		bus: 'spine:L',
+		points,
+		end: { kind: 'via' },
+		chipId: null,
+		triggerY: points[0].y
+	});
+}
+
+/** A straight vertical spine from `top` to `bottom`. */
+function straightSpine(id: string, top: number, bottom: number): Trace {
+	return spine(id, [
+		{ x: 50, y: top },
+		{ x: 50, y: bottom }
+	]);
+}
+
+/** A socket trace of `length` px, coming in from the left edge. */
+function socketTrace(id: string, length: number): Trace {
+	return makeTrace({
+		id,
+		kind: 'socket',
+		side: 'left',
+		bus: 'socket:L',
+		points: [
+			{ x: 0, y: 400 },
+			{ x: length, y: 400 }
+		],
+		end: { kind: 'port', port: 0 },
+		chipId: null,
+		triggerY: 400
+	});
+}
+
 function board(traces: Trace[], chips: ChipWiring[] = []): Board {
-	return { seed: 7, width: 1000, height: 20_000, narrow: false, traces, chips };
+	return {
+		seed: 7,
+		width: 1000,
+		height: 20_000,
+		narrow: false,
+		heroBottom: 900,
+		traces,
+		chips
+	};
 }
 
 /** Calls update every `step` ms from `from` to `to`, both included. Returns the chip states seen. */
@@ -38,49 +92,133 @@ function run(g: Growth, from: number, to: number, scrollY = 0, chipId?: string, 
 
 describe('constants', () => {
 	it('match the design', () => {
+		expect(FRONT_RATIO).toBe(0.6);
 		expect(GROWTH_SPEED).toBe(140);
 		expect(MAX_STAGGER_MS).toBe(600);
-		expect(TRIGGER_RATIO).toBe(0.85);
 		expect(BOOT_FALLBACK_MS).toBe(2500);
+		expect(SOCKET_MS).toBe(2000);
 	});
 });
 
-describe('Growth traces', () => {
-	it('starts a trace once its top passes 85% of the viewport', () => {
-		const g = new Growth(board([line('in', 1000, 849), line('out', 1000, 851)]));
-		run(g, T, T + 2000);
-		expect(g.drawn('in')).toBeGreaterThan(0);
-		expect(g.drawn('out')).toBe(0);
-		run(g, T + 2000, T + 3000, 10);
-		expect(g.drawn('out')).toBeGreaterThan(0);
+describe('Growth spine', () => {
+	it('draws the spine down to the front at scrollY plus 60% of the viewport', () => {
+		const g = new Growth(board([straightSpine('s', 1000, 5000)]));
+		expect(g.front).toBe(0);
+		g.update(T, 0, VH);
+		expect(g.front).toBe(600);
+		expect(g.drawn('s')).toBe(0);
+		g.update(T, 1000, VH);
+		expect(g.front).toBe(1600);
+		expect(g.drawn('s')).toBe(600);
+		g.update(T, 9000, VH);
+		expect(g.drawn('s')).toBe(4000);
+		expect(g.isFull('s')).toBe(true);
 	});
 
-	it('grows at 140 px/s after a stagger of at most 600 ms', () => {
-		const traces = Array.from({ length: 20 }, (_, i) => line(`t${i}`, 5000, 100));
-		const g = new Growth(board(traces));
+	it('gives the same length for the same scrollY, whatever came before', () => {
+		const fresh = new Growth(board([straightSpine('s', 1000, 5000)]));
+		fresh.update(T, 1500, VH);
+		const travelled = new Growth(board([straightSpine('s', 1000, 5000)]));
+		run(travelled, T, T + 400, 0);
+		travelled.update(T + 500, 4000, VH);
+		travelled.update(T + 600, 200, VH);
+		travelled.update(T + 9000, 1500, VH);
+		expect(travelled.drawn('s')).toBe(fresh.drawn('s'));
+		expect(fresh.drawn('s')).toBe(1500 + 600 - 1000);
+	});
+
+	it('rises with scrollY and falls when scrolling back up', () => {
+		const g = new Growth(board([straightSpine('s', 1000, 5000)]));
+		const at = (scrollY: number, now: number) => {
+			g.update(now, scrollY, VH);
+			return g.drawn('s');
+		};
+		const down = [0, 800, 1600, 2400].map((y, i) => at(y, T + i * 16));
+		const up = [1600, 800, 300].map((y, i) => at(y, T + 100 + i * 16));
+		expect(down).toEqual([0, 400, 1200, 2000]);
+		expect(up).toEqual([1200, 400, 0]);
+	});
+
+	it('follows a spine that jogs sideways', () => {
+		const g = new Growth(
+			board([
+				spine('s', [
+					{ x: 0, y: 1000 },
+					{ x: 0, y: 2000 },
+					{ x: 100, y: 2100 },
+					{ x: 100, y: 3000 }
+				])
+			])
+		);
+		g.update(T, 2050 - 600, VH);
+		expect(g.drawn('s')).toBeCloseTo(1000 + 50 * Math.SQRT2);
+	});
+
+	it('needs no frames of its own: only scrolling moves it', () => {
+		const g = new Growth(board([straightSpine('s', 0, 5000)]));
+		expect(g.update(T, 1000, VH)).toBe(false);
+		expect(g.animating).toBe(false);
+	});
+
+	it('stays full after snapAll, wherever the page scrolls', () => {
+		const g = new Growth(board([straightSpine('s', 1000, 5000)]));
+		g.snapAll();
+		expect(g.drawn('s')).toBe(4000);
 		g.update(T, 0, VH);
-		for (const t of traces) expect(g.drawn(t.id)).toBe(0);
-		g.update(T + MAX_STAGGER_MS + 1000, 0, VH);
-		const drawn = traces.map((t) => g.drawn(t.id));
+		expect(g.drawn('s')).toBe(4000);
+	});
+
+	it('keeps a snapped spine trace full', () => {
+		const g = new Growth(board([straightSpine('s', 1000, 5000), straightSpine('t', 1000, 5000)]));
+		g.update(T, 0, VH);
+		g.snapToFull(['s']);
+		g.update(T + 16, 0, VH);
+		expect(g.drawn('s')).toBe(4000);
+		expect(g.drawn('t')).toBe(0);
+	});
+});
+
+describe('Growth latched traces', () => {
+	it('starts a branch once the front passes its junction and keeps it drawn', () => {
+		const g = new Growth(board([line('b', 140, 1500, 'c'), line('later', 140, 1700, 'c')]));
+		run(g, T, T + 2000, 0);
+		expect(g.drawn('b')).toBe(0);
+		g.update(T + 2000, 900, VH);
+		run(g, T + 2000, T + 3000, 900);
+		expect(g.isFull('b')).toBe(true);
+		expect(g.drawn('later')).toBe(0);
+		run(g, T + 3000, T + 4000, 0);
+		expect(g.isFull('b')).toBe(true);
+	});
+
+	it('grows branches at 140 px/s from the moment the front passes', () => {
+		const g = new Growth(board([line('a', 5000, 100, 'c'), line('b', 5000, 100, 'c')]));
+		g.update(T, 0, VH);
+		expect(g.drawn('a')).toBe(0);
+		g.update(T + 1000, 0, VH);
+		expect(g.drawn('a')).toBeCloseTo(GROWTH_SPEED);
+		expect(g.drawn('b')).toBeCloseTo(GROWTH_SPEED);
+	});
+
+	it('staggers decoration by up to 600 ms, the same way every time', () => {
+		const traces = Array.from({ length: 20 }, (_, i) => line(`t${i}`, 5000, 100));
+		const make = () => {
+			const g = new Growth(board(traces));
+			g.update(T, 0, VH);
+			g.update(T + MAX_STAGGER_MS + 1000, 0, VH);
+			return traces.map((t) => g.drawn(t.id));
+		};
+		const drawn = make();
 		for (const value of drawn) {
 			expect(value).toBeGreaterThanOrEqual(140 - 1e-9);
 			expect(value).toBeLessThanOrEqual(140 + MAX_STAGGER_MS * 0.14 + 1e-9);
 		}
 		expect(new Set(drawn).size).toBeGreaterThan(1);
-	});
-
-	it('staggers the same way every time', () => {
-		const make = () => {
-			const g = new Growth(board([line('a', 5000, 100), line('b', 5000, 100)]));
-			g.update(T, 0, VH);
-			g.update(T + 700, 0, VH);
-			return [g.drawn('a'), g.drawn('b')];
-		};
-		expect(make()).toEqual(make());
+		expect(make()).toEqual(drawn);
 	});
 
 	it('never shrinks, not when scrolling back up and not when time steps back', () => {
-		const g = new Growth(board([line('a', 5000, 800)]));
+		const g = new Growth(board([line('a', 5000, 500)]));
 		run(g, T, T + 1500);
 		const before = g.drawn('a');
 		expect(before).toBeGreaterThan(0);
@@ -91,7 +229,7 @@ describe('Growth traces', () => {
 	});
 
 	it('clamps to the trace length', () => {
-		const g = new Growth(board([line('a', 100, 0)]));
+		const g = new Growth(board([line('a', 100, 0, 'c')]));
 		g.update(T, 0, VH);
 		expect(g.drawn('a')).toBe(0);
 		g.update(T + 60_000, 0, VH);
@@ -113,7 +251,7 @@ describe('Growth traces', () => {
 	});
 
 	it('reports whether anything still moves', () => {
-		const g = new Growth(board([line('a', 140, 800), line('later', 140, 5000)]));
+		const g = new Growth(board([line('a', 140, 500, 'c'), line('later', 140, 5000, 'c')]));
 		expect(g.update(T, 0, VH)).toBe(true);
 		expect(g.animating).toBe(true);
 		expect(g.update(T + 5000, 0, VH)).toBe(false);
@@ -123,35 +261,80 @@ describe('Growth traces', () => {
 	});
 });
 
+describe('Growth socket', () => {
+	const lengths = [80, 300, 700, 1500, 3000];
+	const traces = () => lengths.map((length, i) => socketTrace(`socket:L${i}`, length));
+
+	it('grows every socket trace from the first update and finishes within 2 s', () => {
+		const g = new Growth(board(traces()));
+		expect(g.drawn('socket:L0')).toBe(0);
+		expect(g.update(T, 0, VH)).toBe(true);
+		for (const t of traces()) expect(g.drawn(t.id)).toBe(0);
+		g.update(T + SOCKET_MS / 2, 0, VH);
+		for (const t of traces()) {
+			expect(g.drawn(t.id)).toBeGreaterThan(0);
+			expect(g.isFull(t.id)).toBe(false);
+		}
+		let last = -1;
+		for (let now = T; now <= T + SOCKET_MS; now += 16) {
+			g.update(now, 0, VH);
+			const value = g.drawn('socket:L4');
+			expect(value).toBeGreaterThanOrEqual(last);
+			last = value;
+		}
+		expect(g.update(T + SOCKET_MS, 0, VH)).toBe(false);
+		for (const t of traces()) expect(g.isFull(t.id)).toBe(true);
+	});
+
+	it('runs on time alone, whatever the scroll position', () => {
+		const a = new Growth(board(traces()));
+		const b = new Growth(board(traces()));
+		a.update(T, 0, VH);
+		b.update(T, 6000, VH);
+		a.update(T + 700, 0, VH);
+		b.update(T + 700, 200, VH);
+		for (const t of traces()) expect(b.drawn(t.id)).toBe(a.drawn(t.id));
+		b.update(T + SOCKET_MS, 9000, VH);
+		for (const t of traces()) expect(b.isFull(t.id)).toBe(true);
+	});
+
+	it('keeps its clock across a relayout', () => {
+		const g = new Growth(board(traces()));
+		g.update(T, 0, VH);
+		g.update(T + 1000, 0, VH);
+		const half = g.drawn('socket:L3');
+		g.relayout(board(traces()));
+		expect(g.drawn('socket:L3')).toBe(half);
+		g.update(T + SOCKET_MS, 0, VH);
+		for (const t of traces()) expect(g.isFull(t.id)).toBe(true);
+	});
+});
+
 describe('Growth chips', () => {
-	const chip = (feeders: string[], top = 800): ChipWiring => ({
+	const chip = (feeders: string[], top = 500): ChipWiring => ({
 		id: 'c',
 		top,
 		feeders,
 		fallback: feeders.length === 0
 	});
 
-	it('boots when the first feeder arrives and goes on when all have', () => {
+	it('boots when the first branch arrives and goes on when all have', () => {
 		const g = new Growth(
-			board([line('f1', 140, 800, 'c'), line('f2', 280, 800, 'c')], [chip(['f1', 'f2'])])
+			board([line('f1', 140, 500, 'c'), line('f2', 280, 550, 'c')], [chip(['f1', 'f2'])])
 		);
 		expect(g.chipState('c')).toBe('off');
 		const seen = run(g, T, T + 4000, 0, 'c');
 		const firstBoot = seen.find((s) => s.state === 'booting')!;
 		const firstOn = seen.find((s) => s.state === 'on')!;
-		expect(firstBoot).toBeDefined();
-		expect(firstOn.at).toBeGreaterThan(firstBoot.at);
-		// f1 needs 1 s, f2 2 s, each after a stagger of up to 600 ms.
-		expect(firstBoot.at).toBeGreaterThanOrEqual(T + 1000);
-		expect(firstBoot.at).toBeLessThanOrEqual(T + 1600 + 20);
-		expect(firstOn.at).toBeGreaterThanOrEqual(T + 2000);
-		expect(firstOn.at).toBeLessThanOrEqual(T + 2600 + 20);
+		// f1 needs 1 s, f2 2 s.
+		expect(firstBoot.at).toBe(T + 1000);
+		expect(firstOn.at).toBe(T + 2000);
 		expect(seen.filter((s) => s.at < firstBoot.at).every((s) => s.state === 'off')).toBe(true);
 	});
 
-	it('goes on 2.5 s after booting when a feeder is slow', () => {
+	it('goes on 2.5 s after booting when a branch is slow', () => {
 		const g = new Growth(
-			board([line('f1', 140, 800, 'c'), line('slow', 5000, 800, 'c')], [chip(['f1', 'slow'])])
+			board([line('f1', 140, 500, 'c'), line('slow', 5000, 500, 'c')], [chip(['f1', 'slow'])])
 		);
 		const seen = run(g, T, T + 6000, 0, 'c');
 		const boot = seen.find((s) => s.state === 'booting')!.at;
@@ -161,7 +344,7 @@ describe('Growth chips', () => {
 		expect(g.isFull('slow')).toBe(false);
 	});
 
-	it('boots a chip without feeders on the timer alone', () => {
+	it('boots a chip without branches on the timer once the front passes its top', () => {
 		const g = new Growth(board([], [chip([])]));
 		g.update(T, 0, VH);
 		expect(g.chipState('c')).toBe('booting');
@@ -171,20 +354,38 @@ describe('Growth chips', () => {
 		expect(g.chipState('c')).toBe('on');
 	});
 
-	it('leaves chips below the trigger line off', () => {
-		const g = new Growth(board([], [chip([], 900)]));
+	it('leaves chips below the front off', () => {
+		const g = new Growth(board([], [chip([], 700)]));
 		run(g, T, T + 5000);
 		expect(g.chipState('c')).toBe('off');
 	});
 
-	it('snaps everything above the line when the page loads scrolled down', () => {
+	it('keeps chips on after scrolling back up', () => {
+		const g = new Growth(
+			board([straightSpine('s', 900, 5000), line('f1', 140, 2500, 'c')], [chip(['f1'], 2400)])
+		);
+		run(g, T, T + 2000, 2000);
+		expect(g.chipState('c')).toBe('on');
+		run(g, T + 2000, T + 3000, 0);
+		expect(g.chipState('c')).toBe('on');
+		expect(g.isFull('f1')).toBe(true);
+		expect(g.drawn('s')).toBe(0);
+	});
+
+	it('snaps branches and chips above the front when the page loads scrolled down', () => {
 		const g = new Growth(
 			board(
-				[line('f1', 500, 500, 'c'), line('d', 500, 3700), line('below', 500, 9000)],
-				[chip(['f1'], 500)]
+				[
+					straightSpine('s', 900, 9000),
+					line('f1', 500, 1200, 'c'),
+					line('d', 500, 3500),
+					line('below', 500, 9000, 'c')
+				],
+				[chip(['f1', 'below'], 1100)]
 			)
 		);
 		g.update(T, 3000, VH);
+		expect(g.drawn('s')).toBe(3600 - 900);
 		expect(g.drawn('f1')).toBe(500);
 		expect(g.drawn('d')).toBe(500);
 		expect(g.drawn('below')).toBe(0);
@@ -192,28 +393,36 @@ describe('Growth chips', () => {
 	});
 
 	it('does not snap when the page loads at the top', () => {
-		const g = new Growth(board([line('f1', 500, 500, 'c')], [chip(['f1'], 500)]));
+		const g = new Growth(board([line('f1', 500, 500, 'c')], [chip(['f1'])]));
 		g.update(T, 0, VH);
 		expect(g.drawn('f1')).toBe(0);
 		expect(g.chipState('c')).toBe('off');
 	});
 
-	it('turns a chip on when its feeders are snapped', () => {
-		const g = new Growth(board([line('f1', 500, 800, 'c')], [chip(['f1'])]));
+	it('turns a chip on when its branches are snapped', () => {
+		const g = new Growth(board([line('f1', 500, 500, 'c')], [chip(['f1'])]));
 		g.update(T, 0, VH);
 		g.snapToFull(['f1']);
 		expect(g.chipState('c')).toBe('on');
 	});
 
-	it('snaps the whole board for reduced motion', () => {
+	it('snaps the whole board, every kind, for reduced motion', () => {
 		const g = new Growth(
-			board([line('f1', 500, 9000, 'c'), line('d', 500, 9000)], [chip(['f1'], 9000)])
+			board(
+				[
+					straightSpine('s', 1000, 9000),
+					line('f1', 500, 9000, 'c'),
+					line('d', 500, 9000),
+					socketTrace('socket:T0', 400)
+				],
+				[chip(['f1'], 9000)]
+			)
 		);
 		g.snapAll();
-		expect(g.drawn('f1')).toBe(500);
-		expect(g.drawn('d')).toBe(500);
+		for (const id of ['s', 'f1', 'd', 'socket:T0']) expect(g.isFull(id), id).toBe(true);
 		expect(g.chipState('c')).toBe('on');
 		expect(g.update(T, 0, VH)).toBe(false);
+		for (const id of ['s', 'f1', 'd', 'socket:T0']) expect(g.isFull(id), id).toBe(true);
 	});
 
 	it('returns off for a chip it does not know', () => {
@@ -225,10 +434,10 @@ describe('Growth relayout', () => {
 	it('keeps booted chips full and carries progress over by trace id', () => {
 		const g = new Growth(
 			board(
-				[line('f1', 140, 800, 'c'), line('d', 5000, 800), line('g1', 5000, 800, 'e')],
+				[line('f1', 140, 500, 'c'), line('d', 5000, 500), line('g1', 5000, 500, 'e')],
 				[
-					{ id: 'c', top: 800, feeders: ['f1'], fallback: false },
-					{ id: 'e', top: 800, feeders: ['g1'], fallback: false }
+					{ id: 'c', top: 500, feeders: ['f1'], fallback: false },
+					{ id: 'e', top: 500, feeders: ['g1'], fallback: false }
 				]
 			)
 		);
@@ -238,13 +447,13 @@ describe('Growth relayout', () => {
 		const g1 = g.drawn('g1');
 		expect(d).toBeGreaterThan(0);
 
-		// The chip moved: its feeders got longer and one more came along.
+		// The chip moved: its branches got longer and one more came along.
 		g.relayout(
 			board(
 				[
 					line('f1', 400, 1200, 'c'),
 					line('f9', 400, 1200, 'c'),
-					line('d', 5000, 800),
+					line('d', 5000, 500),
 					line('g1', 5000, 1200, 'e'),
 					line('new', 500, 5000)
 				],
@@ -267,9 +476,25 @@ describe('Growth relayout', () => {
 	});
 
 	it('clamps carried progress to the new length', () => {
-		const g = new Growth(board([line('d', 5000, 800)]));
+		const g = new Growth(board([line('d', 5000, 500)]));
 		run(g, T, T + 3000);
-		g.relayout(board([line('d', 50, 800)]));
+		g.relayout(board([line('d', 50, 500)]));
 		expect(g.drawn('d')).toBe(50);
+	});
+
+	it('measures a relaid spine against the last front right away', () => {
+		const g = new Growth(board([straightSpine('s', 1000, 5000)]));
+		g.update(T, 1000, VH);
+		expect(g.drawn('s')).toBe(600);
+		g.relayout(board([straightSpine('s', 1200, 5000)]));
+		expect(g.drawn('s')).toBe(400);
+	});
+
+	it('stays static after a relayout under reduced motion', () => {
+		const g = new Growth(board([straightSpine('s', 1000, 5000)]));
+		g.snapAll();
+		g.relayout(board([straightSpine('s', 1000, 6000), line('new', 300, 9000)]));
+		expect(g.drawn('s')).toBe(5000);
+		expect(g.drawn('new')).toBe(300);
 	});
 });
