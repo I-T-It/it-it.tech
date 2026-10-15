@@ -62,7 +62,9 @@ const FIELD_TURN_COST = 1.5;
 /** Extra cells round a route's start and goal that its search may use. */
 const MARGIN = 4;
 /** A field route gives up after this many expanded states. */
-const MAX_EXPANSIONS = 3000;
+const MAX_EXPANSIONS = 2000;
+/** A rim bus closes after this many failed routes in a row. */
+const MAX_FAILURES = 2;
 /**
  * Rim traces longer than this many cells route without their bus lane: the lane weakens the
  * search's estimate, and on a long route that costs more states than the cap allows.
@@ -282,6 +284,7 @@ function rimBuses(field: Field, keep: Ellipse, rng: Rng): void {
 	let shift = busShift(rng);
 	let first: Cell | null = null;
 	let last: Cell | null = null;
+	let failures = 0;
 
 	for (let i = 0; i < steps; i++) {
 		const phi = phi0 + (2 * Math.PI * i) / steps;
@@ -305,7 +308,19 @@ function rimBuses(field: Field, keep: Ellipse, rng: Rng): void {
 		const next = { col: cell.col + DX[dir], row: cell.row + DY[dir] };
 		if (!inWindow(w, next.col, next.row) || !grid.isFree(next.col, next.row)) continue;
 		const path = routeOut(grid, next, dir, w, lane, shift);
-		if (!path) continue;
+		if (!path) {
+			// A bus that keeps failing has run into a crowded corner: close it, try another shape.
+			if (++failures >= MAX_FAILURES) {
+				failures = 0;
+				if (inBus > 0) bus++;
+				inBus = 0;
+				size = rng.int(HERO_BUS_MIN, HERO_BUS_MAX);
+				lane = field.nextBus();
+				shift = busShift(rng);
+			}
+			continue;
+		}
+		failures = 0;
 		const cells = walkCells([cell, ...path]).reverse();
 		const via = rng.next() < HERO_VIA_SHARE && cells.length > 2 * MIN_VIA_CELLS;
 		const from = via ? Math.floor(rng.range(0.3, 0.7) * (cells.length - MIN_VIA_CELLS)) : 0;
@@ -426,7 +441,7 @@ function fillBuses(field: Field, rng: Rng): void {
 				if (!inWindow(w, goal.col, goal.row) || !grid.isFree(goal.col, goal.row)) continue;
 				const path = route(grid, start, goal, {
 					startDir: inward,
-					bus: lane,
+					bus: reach > LANE_REACH ? 0 : lane,
 					window: around(w, start, goal),
 					maxExpansions: MAX_EXPANSIONS,
 					turnCost: FIELD_TURN_COST

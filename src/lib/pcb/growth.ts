@@ -27,6 +27,10 @@
  * - `socket`: by time from the first `update` (the page load), whatever the scroll position.
  *   Each trace waits a seeded 0 to 400 ms, then grows with an ease-out over 1.6 s, so every
  *   socket trace is full 2 s after the first `update`.
+ * - `hero`: by time from the first `update` too, once, slowly: the field builds up from the four
+ *   corners of the hero. A trace waits longer the further its start lies from the nearest corner
+ *   (up to 2.4 s, plus a seeded 0 to 300 ms), a trace that starts at a via on the board 1.5 s more,
+ *   then grows at 160 px/s, faster only where it must to be full 6 s after the first `update`.
  *
  * Chips: a chip goes `booting` when its first branch arrives (is fully drawn), and `on` when all
  * its branches have arrived or 2.5 s after it started booting, whichever comes first. A chip
@@ -38,8 +42,8 @@
  * `snapToFull(ids)` draws traces completely (a spine trace stays full from then on); `snapAll()`
  * does every kind and makes the board static (reduced motion). `relayout(board)` swaps in a new
  * board and keeps progress by trace id: booted chips keep their branches full, latched traces
- * keep their start and drawn length (clamped), socket traces keep the load clock, the spine is
- * measured against the last front, and a static board stays static.
+ * keep their start and drawn length (clamped), socket and hero traces keep the load clock, the
+ * spine is measured against the last front, and a static board stays static.
  *
  * Times are milliseconds on one clock (performance.now()), lengths CSS px.
  */
@@ -64,7 +68,20 @@ export const SOCKET_MS = 2000;
 /** A socket trace waits a seeded 0 to this many ms before it grows. */
 export const SOCKET_STAGGER_MS = 400;
 
+/** Every hero trace is full this many ms after the first update. */
+export const HERO_MS = 6000;
+/** Hero traces grow at this many px/s, or faster where they must to be full in time. */
+export const HERO_SPEED = 160;
+/** A hero trace starting at the middle of an edge waits this many ms more than one in a corner. */
+export const HERO_SPREAD_MS = 2400;
+/** Plus a seeded 0 to this many ms. */
+export const HERO_JITTER_MS = 300;
+/** A hero trace that starts at a via on the board waits this many ms more. */
+export const HERO_VIA_DELAY_MS = 1500;
+
 const SOCKET_GROW_MS = SOCKET_MS - SOCKET_STAGGER_MS;
+/** A hero trace finishes this many ms before HERO_MS at the latest, clear of rounding. */
+const HERO_SLACK_MS = 50;
 
 /**
  * The front in document px for a scroll position: `FRONT_RATIO` down the viewport, moving on to
@@ -79,13 +96,14 @@ export function frontAt(scrollY: number, viewportHeight: number, documentHeight:
 	return scrollY + viewportHeight * (FRONT_RATIO + (1 - FRONT_RATIO) * t);
 }
 
-type Mode = 'spine' | 'socket' | 'latch';
+type Mode = 'spine' | 'socket' | 'hero' | 'latch';
 
 interface TraceEntry {
 	trace: Trace;
 	mode: Mode;
+	/** Wait in ms: after the trigger (latched traces) or after the load (socket and hero traces). */
 	stagger: number;
-	/** Growth speed in px/s (latched traces). */
+	/** Growth speed in px/s (latched and hero traces). */
 	speed: number;
 	/** When growth begins: trigger (or load) time plus stagger; null until then. */
 	startAt: number | null;
@@ -107,7 +125,33 @@ interface ChipEntry {
 }
 
 function modeOf(trace: Trace): Mode {
-	return trace.kind === 'spine' ? 'spine' : trace.kind === 'socket' ? 'socket' : 'latch';
+	return trace.kind === 'spine' || trace.kind === 'socket' || trace.kind === 'hero'
+		? trace.kind
+		: 'latch';
+}
+
+/** Socket and hero traces run on the clock from the first update. */
+function timed(mode: Mode): boolean {
+	return mode === 'socket' || mode === 'hero';
+}
+
+/**
+ * How long a hero trace waits after the load: longer the further its start lies from the nearest
+ * corner of the hero (as wide as the board), longer still when it starts at a via.
+ */
+function heroDelay(board: Board, trace: Trace, random: number): number {
+	const area = board.hero?.rect ?? { x: 0, y: 0, width: board.width, height: board.heroBottom };
+	const start = trace.points[0] ?? { x: 0, y: 0 };
+	const xs = [0, board.width];
+	const ys = [area.y, area.y + area.height];
+	let nearest = Infinity;
+	for (const x of xs)
+		for (const y of ys) nearest = Math.min(nearest, Math.hypot(start.x - x, start.y - y));
+	const reach = Math.max(board.width, area.height) / 2;
+	const spread = reach > 0 ? Math.min(1, nearest / reach) : 0;
+	return (
+		(trace.startVia ? HERO_VIA_DELAY_MS : 0) + spread * HERO_SPREAD_MS + random * HERO_JITTER_MS
+	);
 }
 
 function easeOut(t: number): number {
@@ -131,7 +175,7 @@ export class Growth {
 		this.#load(board, new Map(), new Map());
 	}
 
-	/** True while a latched or socket trace still grows or a chip is booting. */
+	/** True while a latched, socket or hero trace still grows or a chip is booting. */
 	get animating(): boolean {
 		return this.#animating;
 	}
@@ -169,7 +213,7 @@ export class Growth {
 		if (this.#loadedAt === null) {
 			this.#loadedAt = now;
 			for (const entry of this.#traces.values()) {
-				if (entry.mode === 'socket') entry.startAt ??= now + entry.stagger;
+				if (timed(entry.mode)) entry.startAt ??= now + entry.stagger;
 			}
 			if (scrollY > 0) this.#snapAbove(front, now);
 		}
@@ -265,16 +309,28 @@ export class Growth {
 			const stagger =
 				mode === 'socket'
 					? random * SOCKET_STAGGER_MS
-					: trace.kind === 'decor'
-						? random * MAX_STAGGER_MS
-						: 0;
-			const loaded = mode === 'socket' && this.#loadedAt !== null;
+					: mode === 'hero'
+						? heroDelay(board, trace, random)
+						: trace.kind === 'decor'
+							? random * MAX_STAGGER_MS
+							: 0;
+			const speed =
+				mode === 'hero'
+					? Math.max(HERO_SPEED, trace.length / ((HERO_MS - HERO_SLACK_MS - stagger) / 1000))
+					: trace.kind === 'branch'
+						? BRANCH_SPEED
+						: GROWTH_SPEED;
+			const loadedAt = timed(mode) ? this.#loadedAt : null;
 			this.#traces.set(trace.id, {
 				trace,
 				mode,
 				stagger,
-				speed: trace.kind === 'branch' ? BRANCH_SPEED : GROWTH_SPEED,
-				startAt: old?.startAt ?? (loaded ? (this.#loadedAt ?? 0) + stagger : null),
+				speed,
+				// A hero trace keeps to its own wait, so it is still full in time.
+				startAt:
+					loadedAt !== null && (mode === 'hero' || old?.startAt == null)
+						? loadedAt + stagger
+						: (old?.startAt ?? null),
 				floorFrom: old?.floorFrom ?? null,
 				drawn: old ? (full ? trace.length : Math.min(old.drawn, trace.length)) : 0,
 				pinned: old?.pinned ?? false

@@ -6,10 +6,12 @@ import {
 	frontAt,
 	Growth,
 	GROWTH_SPEED,
+	HERO_MS,
+	HERO_VIA_DELAY_MS,
 	MAX_STAGGER_MS,
 	SOCKET_MS
 } from './growth.js';
-import { makeTrace, type Board, type ChipWiring, type Trace } from './layout.js';
+import { makeTrace, type Board, type ChipWiring, type HeroInput, type Trace } from './layout.js';
 
 const VH = 1000;
 const T = 10_000;
@@ -101,6 +103,106 @@ describe('constants', () => {
 		expect(MAX_STAGGER_MS).toBe(600);
 		expect(BOOT_FALLBACK_MS).toBe(2500);
 		expect(SOCKET_MS).toBe(2000);
+		expect(HERO_MS).toBe(6000);
+	});
+});
+
+describe('Growth hero field', () => {
+	const HERO: HeroInput = {
+		rect: { x: 0, y: 0, width: 1000, height: 900 },
+		ellipse: { cx: 500, cy: 450, rx: 300, ry: 250 }
+	};
+
+	/** A hero trace from `from`, `length` px to the right. */
+	function heroTrace(id: string, from: { x: number; y: number }, length: number, via = false) {
+		return makeTrace({
+			id,
+			kind: 'hero',
+			side: 'left',
+			bus: id,
+			points: [from, { x: from.x + length, y: from.y }],
+			end: { kind: 'via' },
+			chipId: null,
+			triggerY: from.y,
+			startVia: via || undefined
+		});
+	}
+
+	const corner = heroTrace('hero:0.0', { x: 0, y: 12 }, 400);
+	const middle = heroTrace('hero:1.0', { x: 0, y: 450 }, 150);
+	const dot = heroTrace('hero:2.0', { x: 120, y: 300 }, 100, true);
+	const long = heroTrace('hero:3.0', { x: 0, y: 30 }, 3000);
+	const heroBoard = () => ({ ...board([corner, middle, dot, long]), hero: HERO });
+
+	/** When each trace first shows, in ms after the load. */
+	function firstDrawn(g: Growth, ids: string[]): Record<string, number> {
+		const seen: Record<string, number> = {};
+		for (let t = 0; t <= HERO_MS; t += 20) {
+			g.update(T + t, 0, VH);
+			for (const id of ids) if (seen[id] === undefined && g.drawn(id) > 0) seen[id] = t;
+		}
+		return seen;
+	}
+
+	it('starts in the corners, then works along the edges, the dots on the board last', () => {
+		const seen = firstDrawn(new Growth(heroBoard()), [corner.id, middle.id, dot.id]);
+		expect(seen[corner.id]).toBeLessThanOrEqual(400);
+		expect(seen[middle.id]).toBeGreaterThan(seen[corner.id] + 500);
+		expect(seen[dot.id]).toBeGreaterThanOrEqual(HERO_VIA_DELAY_MS);
+	});
+
+	it('builds slowly, a few hundred px a second, never shrinking', () => {
+		const g = new Growth(heroBoard());
+		let last = 0;
+		for (let t = 0; t <= 2000; t += 20) {
+			g.update(T + t, 0, VH);
+			expect(g.drawn(corner.id)).toBeGreaterThanOrEqual(last);
+			last = g.drawn(corner.id);
+		}
+		expect(g.isFull(corner.id)).toBe(false);
+		expect(last).toBeGreaterThan(100);
+	});
+
+	it('has every trace in full by HERO_MS after the load, then lets the loop rest', () => {
+		const g = new Growth(heroBoard());
+		expect(g.update(T, 0, VH)).toBe(true);
+		g.update(T + HERO_MS - 100, 0, VH);
+		expect(g.animating).toBe(true);
+		expect(g.update(T + HERO_MS, 0, VH)).toBe(false);
+		for (const t of [corner, middle, dot, long]) expect(g.isFull(t.id), t.id).toBe(true);
+	});
+
+	it('runs on time alone, whatever the scroll position', () => {
+		const a = new Growth(heroBoard());
+		const b = new Growth(heroBoard());
+		a.update(T, 0, VH);
+		b.update(T, 4000, VH);
+		a.update(T + 1500, 0, VH);
+		b.update(T + 1500, 200, VH);
+		for (const t of [corner, middle, dot, long]) expect(b.drawn(t.id)).toBe(a.drawn(t.id));
+	});
+
+	it('is the same every time', () => {
+		const a = firstDrawn(new Growth(heroBoard()), [corner.id, middle.id, dot.id]);
+		const b = firstDrawn(new Growth(heroBoard()), [corner.id, middle.id, dot.id]);
+		expect(b).toEqual(a);
+	});
+
+	it('is drawn in full at once under reduced motion', () => {
+		const g = new Growth(heroBoard());
+		g.snapAll();
+		for (const t of [corner, middle, dot, long]) expect(g.isFull(t.id)).toBe(true);
+	});
+
+	it('keeps its clock across a relayout', () => {
+		const g = new Growth(heroBoard());
+		g.update(T, 0, VH);
+		g.update(T + 1000, 0, VH);
+		const drawn = g.drawn(corner.id);
+		g.relayout(heroBoard());
+		expect(g.drawn(corner.id)).toBe(drawn);
+		g.update(T + HERO_MS, 0, VH);
+		expect(g.isFull(long.id)).toBe(true);
 	});
 });
 
