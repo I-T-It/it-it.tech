@@ -144,8 +144,8 @@ export interface TalkOffer {
 	id: string;
 	kind: 'talk' | 'workshop';
 	/**
-	 * Title of the talk. A talk given in English keeps its English title in both locales; any
-	 * other title is translated.
+	 * Title of the talk. An English title stays as it is in both locales (`titleLang: 'en'`); a
+	 * Dutch title is translated for the English page.
 	 */
 	title: string;
 	/** Two sentences at most, in the language of the page. */
@@ -154,11 +154,14 @@ export interface TalkOffer {
 	duration?: string;
 	/** Free text, e.g. "Developers". Left out until it is known. */
 	audience?: string;
-	/**
-	 * The language the talk is given in. The Dutch page marks the title `lang="en"` when this is
-	 * `en`, so a screen reader switches voice (WCAG 3.1.2).
-	 */
+	/** The language the talk is given in. Shown on the card. Not the language of the title. */
 	lang: Locale;
+	/**
+	 * The language of the title as it was written. The Dutch page marks an English title
+	 * `lang="en"`, so a screen reader switches voice (WCAG 3.1.2). A talk can be given in Dutch
+	 * under an English title.
+	 */
+	titleLang: Locale;
 }
 
 /** One time a talk or workshop was given: one entry of the history in U7. */
@@ -168,6 +171,11 @@ export interface TalkGiven {
 	offerId?: string;
 	/** A day ("2023-03-14") or a month ("2023-03"). */
 	date: YearMonth;
+	/**
+	 * The language it was given in this time. Shown next to the event. Left out where it is not
+	 * known: it is never guessed from the offer.
+	 */
+	lang?: Locale;
 	/** Where it was given: a meetup, a conference or a company. Left out where it is not known. */
 	event?: string;
 	/**

@@ -58,6 +58,23 @@ test.describe('talks and workshops', () => {
 		}
 	});
 
+	test('gives the Flutter talk in Dutch under its English title', async ({ page }) => {
+		const title = 'Writing multi-platform apps with native performance';
+		await page.goto('./');
+		const card = page.locator('[data-offer="flutter-talk"]');
+		await expect(card.locator('h4')).toHaveText(title);
+		await expect(card.locator('h4')).toHaveAttribute('lang', 'en');
+		await expect(card.locator('.facts')).toContainText('Nederlands');
+		await expect(page.locator('[data-given="flutter-frontmania"] .spoken')).toContainText(
+			'Nederlands'
+		);
+
+		await page.goto('en/');
+		await expect(card.locator('h4')).toHaveText(title);
+		await expect(card.locator('h4')).not.toHaveAttribute('lang', /.*/);
+		await expect(card.locator('.facts')).toContainText('Dutch');
+	});
+
 	test('is information only on both builds: no booking, no address, links to events only', async ({
 		page
 	}) => {

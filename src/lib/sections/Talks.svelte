@@ -21,15 +21,16 @@
 	}
 
 	/**
-	 * The language to mark a title with, where it differs from the page. A talk given in English
-	 * keeps its English title in both locales, so on the Dutch page a screen reader must switch
-	 * voice for it (WCAG 3.1.2). The titles of the other talks are translated for each locale.
+	 * The language to mark a title with, where it differs from the page. An English title stays as
+	 * it is in both locales, so on the Dutch page a screen reader must switch voice for it (WCAG
+	 * 3.1.2). A Dutch title is translated for the English page. This is about the title only: a
+	 * talk can be given in Dutch under an English title.
 	 */
 	export function foreignTitleLang(
-		offer: Pick<TalkOffer, 'lang'>,
+		offer: Pick<TalkOffer, 'titleLang'>,
 		locale: Locale
 	): Locale | undefined {
-		return offer.lang === 'en' && locale !== 'en' ? 'en' : undefined;
+		return offer.titleLang === 'en' && locale !== 'en' ? 'en' : undefined;
 	}
 
 	export interface Fact {
@@ -87,7 +88,7 @@
 			const [before, after] = splitTalkTitle(talk.title);
 			const quote = talk.talk && {
 				text: talk.talk.title,
-				lang: foreignTitleLang(talk.talk, locale)
+				lang: foreignTitleLang({ titleLang: talk.talk.lang }, locale)
 			};
 			return { before, quote: talk.title.includes('{talk}') ? quote : undefined, after };
 		}
@@ -151,16 +152,23 @@
 							>{title.before}{#if title.quote}<q lang={title.quote.lang}>{title.quote.text}</q
 								>{title.after}{/if}</span
 						>
-						{#if talk.event}
+						{#if talk.event || talk.lang}
 							<span class="sr-only">, </span>
 							<span class="event">
-								{#if talk.url}
+								{#if talk.event && talk.url}
 									<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- an external address, not a route -->
 									<a href={talk.url}
 										>{talk.event}<span class="sr-only">{' ' + m.external_site()}</span></a
 									>
-								{:else}
+								{:else if talk.event}
 									{talk.event}
+								{/if}
+								{#if talk.lang}
+									<span class="spoken"
+										>{#if talk.event}<span aria-hidden="true"> · </span><span class="sr-only"
+												>,
+											</span>{/if}{labels.language[talk.lang]}</span
+									>
 								{/if}
 							</span>
 						{/if}

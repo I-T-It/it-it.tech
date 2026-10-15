@@ -88,6 +88,7 @@ describe('NL and EN parity', () => {
 			o.id,
 			o.kind,
 			o.lang,
+			o.titleLang,
 			o.duration === undefined,
 			o.audience === undefined
 		];
@@ -97,6 +98,7 @@ describe('NL and EN parity', () => {
 			g.offerId,
 			g.date,
 			g.url,
+			g.lang,
 			g.event === undefined,
 			g.title === undefined,
 			g.talk?.title,
@@ -133,7 +135,7 @@ describe('NL and EN parity', () => {
 		const enByPath = new Map(copy(en));
 		const sameAllowed = (path: string, value: string) =>
 			path.startsWith('profile.') ||
-			/\.(id|kind|lang|offerId)$/.test(path) ||
+			/\.(id|kind|lang|titleLang|offerId)$/.test(path) ||
 			/jobs\[\d+\]\.(organisation|via|title)$/.test(path) ||
 			/jobs\[\d+\]\.tech\[\d+\]$/.test(path) ||
 			/groups\[\d+\]\.(title|skills\[\d+\]\.title)$/.test(path) ||
@@ -416,11 +418,12 @@ describe('talks', () => {
 
 	it('has the catalogue of three talks and one workshop, with the titles as given', () => {
 		for (const [, c] of both) {
-			expect(c.talks.offers.map((o) => [o.id, o.kind, o.lang])).toEqual([
-				['php-2005-called', 'talk', 'en'],
-				['frontend-love', 'talk', 'en'],
-				['flutter-talk', 'talk', 'en'],
-				['flutter-workshop', 'workshop', 'nl']
+			// Per offer: the kind, the language it is given in, and the language of its title.
+			expect(c.talks.offers.map((o) => [o.id, o.kind, o.lang, o.titleLang])).toEqual([
+				['php-2005-called', 'talk', 'en', 'en'],
+				['frontend-love', 'talk', 'en', 'en'],
+				['flutter-talk', 'talk', 'nl', 'en'],
+				['flutter-workshop', 'workshop', 'nl', 'nl']
 			]);
 		}
 		const titles = (c: SiteContent) => c.talks.offers.map((o) => o.title);
@@ -482,6 +485,7 @@ describe('talks', () => {
 			for (const o of c.talks.offers) {
 				expect(['talk', 'workshop']).toContain(o.kind);
 				expect(['nl', 'en']).toContain(o.lang);
+				expect(['nl', 'en']).toContain(o.titleLang);
 				expect(o.title.length).toBeGreaterThan(3);
 				expect(o.summary.length).toBeGreaterThan(20);
 				// An optional field is left out until it is known, never filled with a guess.
@@ -530,11 +534,36 @@ describe('talks', () => {
 		}
 	});
 
-	it('keeps the title of an English talk as it is and translates the others', () => {
+	it('keeps an English title as it is and translates the others', () => {
 		for (const o of nl.talks.offers) {
 			const english = en.talks.offers.find((x) => x.id === o.id)!;
-			if (o.lang === 'en') expect(english.title, o.id).toBe(o.title);
+			if (o.titleLang === 'en') expect(english.title, o.id).toBe(o.title);
 			else expect(english.title, o.id).not.toBe(o.title);
+		}
+	});
+
+	it('has the Flutter talk given in Dutch at FrontMania, under its English title', () => {
+		for (const [, c] of both) {
+			const talk = c.talks.offers.find((o) => o.id === 'flutter-talk')!;
+			expect(talk.title).toBe('Writing multi-platform apps with native performance');
+			expect(talk.titleLang).toBe('en');
+			expect(talk.lang).toBe('nl');
+			const given = c.talks.given.find((g) => g.id === 'flutter-frontmania')!;
+			expect(given.offerId).toBe('flutter-talk');
+			expect(given.lang).toBe('nl');
+			// The workshop is Dutch too, and the other occurrences have no language of their own yet.
+			expect(c.talks.offers.find((o) => o.id === 'flutter-workshop')!.lang).toBe('nl');
+			expect(c.talks.given.filter((g) => g.lang !== undefined).map((g) => g.id)).toEqual([
+				'flutter-frontmania'
+			]);
+		}
+	});
+
+	it('has a known language only, never a guess, on an occurrence', () => {
+		for (const [, c] of both) {
+			for (const g of c.talks.given) {
+				if (g.lang !== undefined) expect(['nl', 'en'], g.id).toContain(g.lang);
+			}
 		}
 	});
 

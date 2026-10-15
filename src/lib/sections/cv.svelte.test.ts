@@ -906,6 +906,31 @@ describe('Talks (U7)', () => {
 			expect(splitTalkTitle('Geen plek')).toEqual(['Geen plek', '']);
 		});
 
+		it('says in which language an occurrence was given where that is known, and only there', async () => {
+			await render(Talks, {});
+			const spoken = (id: string) => row(id).querySelector('.spoken')?.textContent;
+			expect(spoken('flutter-frontmania')).toContain('Nederlands');
+			expect(row('flutter-frontmania').querySelector('.event')?.textContent).toContain(
+				'FrontMania'
+			);
+			for (const g of talks().given) {
+				if (g.lang === undefined) expect(spoken(g.id), g.id).toBeUndefined();
+			}
+			expect(
+				rows()
+					.filter((el) => el.querySelector('.spoken'))
+					.map((el) => el.dataset.given)
+			).toEqual(['flutter-frontmania']);
+		});
+
+		it('writes the language of an occurrence in English on the English page', async () => {
+			setLocale('en');
+			await render(Talks, {});
+			expect(row('flutter-frontmania').querySelector('.spoken')?.textContent).toContain('Dutch');
+			// The language is a word of the page, not a passage in another language.
+			expect(row('flutter-frontmania').querySelector('.spoken')?.hasAttribute('lang')).toBe(false);
+		});
+
 		it('gives the date as a machine-readable time', async () => {
 			await render(Talks, {});
 			expect(row('flutter-frontmania').querySelector('time')?.getAttribute('datetime')).toBe(
@@ -935,13 +960,31 @@ describe('Talks (U7)', () => {
 					[d.querySelector('dt')?.textContent, d.querySelector('dd')?.textContent].join(': ')
 				);
 			expect(facts('php-2005-called')).toEqual(['Taal: Engels']);
-			expect(facts('flutter-talk')).toEqual(['Taal: Engels']);
+			// The Flutter talk has an English title and is given in Dutch.
+			expect(facts('flutter-talk')).toEqual(['Taal: Nederlands']);
 			expect(facts('flutter-workshop')).toEqual(['Taal: Nederlands']);
+		});
+
+		it('says Dutch for the Flutter talk and keeps its English title marked on the Dutch page', async () => {
+			await render(Talks, {});
+			const el = offer('flutter-talk');
+			expect(el.querySelector('.facts')?.textContent).toContain('Nederlands');
+			expect(el.querySelector('h4')?.getAttribute('lang')).toBe('en');
+			expect(el.querySelector('h4')?.textContent).toBe(
+				'Writing multi-platform apps with native performance'
+			);
 		});
 
 		it('adds the duration and the audience to the facts where an offer has them', () => {
 			const labels = talks().labels;
-			const base = { id: 'x', kind: 'talk', title: 'T', summary: 'S', lang: 'en' } as const;
+			const base = {
+				id: 'x',
+				kind: 'talk',
+				title: 'T',
+				summary: 'S',
+				lang: 'en',
+				titleLang: 'en'
+			} as const;
 			expect(offerFacts(base, labels)).toEqual([{ label: 'Taal', value: 'Engels' }]);
 			expect(
 				offerFacts({ ...base, duration: '45 minuten', audience: 'Developers' }, labels)
@@ -1015,14 +1058,21 @@ describe('Talks (U7)', () => {
 			expect(document.querySelectorAll('section#talks [lang]')).toHaveLength(0);
 		});
 
-		it('are found from the language the talk is given in and the language of the page', () => {
-			const english = { lang: 'en' } as const;
-			const dutch = { lang: 'nl' } as const;
+		it('are found from the language of the title and the language of the page', () => {
+			const english = { titleLang: 'en' } as const;
+			const dutch = { titleLang: 'nl' } as const;
 			expect(foreignTitleLang(english, 'nl')).toBe('en');
 			expect(foreignTitleLang(english, 'en')).toBeUndefined();
-			// A talk given in Dutch has a translated title on the English page.
+			// A Dutch title is translated for the English page, so there is nothing to mark.
 			expect(foreignTitleLang(dutch, 'nl')).toBeUndefined();
 			expect(foreignTitleLang(dutch, 'en')).toBeUndefined();
+		});
+
+		it('do not depend on the language the talk is given in', async () => {
+			// The Flutter talk is given in Dutch, under an English title: the title is still English.
+			await render(Talks, {});
+			expect(offer('flutter-talk').querySelector('.title')?.getAttribute('lang')).toBe('en');
+			expect(row('flutter-frontmania').querySelector('.title')?.getAttribute('lang')).toBe('en');
 		});
 	});
 
