@@ -11,38 +11,92 @@ import {
 	type Rect
 } from './geometry.js';
 import { PITCH } from './grid.js';
-import { ellipseDistance, HERO_BAND, HERO_CLEARANCE, heroEllipse, type Ellipse } from './hero.js';
+import { ellipseDistance, HERO_CLEARANCE, heroEllipse, HERO_WIDTH, type Ellipse } from './hero.js';
 import { layoutBoard, type Board, type LayoutInput, type Trace } from './layout.js';
 
-/** The hero content as the real page measures it: the logo socket and the text block. */
-const CONTENT: Record<string, { area: Rect; content: Rect[] }> = {
+interface HeroCase {
+	area: Rect;
+	/** The logo socket, then each block of the text: what the ellipse holds. */
+	content: Rect[];
+	/** The text block as a whole: the obstacle. */
+	copy: Rect;
+	/** Top of the first chip below the hero. */
+	chipTop: number;
+}
+
+const rect = (x: number, y: number, width: number, height: number): Rect => ({
+	x,
+	y,
+	width,
+	height
+});
+
+/** The hero as the real page measures it: the logo socket, the name, the rule, tagline, handle, icons. */
+const CONTENT: Record<string, HeroCase> = {
 	'1440x900': {
-		area: { x: 0, y: 0, width: 1440, height: 900 },
+		area: rect(0, 0, 1440, 900),
 		content: [
-			{ x: 384, y: 143, width: 672, height: 232 },
-			{ x: 408, y: 447, width: 623, height: 238 }
-		]
+			rect(384, 161, 672, 232),
+			rect(250, 456, 940, 72),
+			rect(528, 542, 384, 2),
+			rect(576, 560, 288, 36),
+			rect(594, 611, 251, 24),
+			rect(586, 643, 267, 24)
+		],
+		copy: rect(250, 456, 940, 212),
+		chipTop: 1059
 	},
 	'1920x1080': {
-		area: { x: 0, y: 0, width: 1920, height: 1080 },
+		area: rect(0, 0, 1920, 1080),
 		content: [
-			{ x: 624, y: 231, width: 672, height: 232 },
-			{ x: 648, y: 543, width: 623, height: 238 }
-		]
+			rect(624, 246, 672, 232),
+			rect(490, 554, 940, 72),
+			rect(768, 640, 384, 2),
+			rect(816, 658, 288, 36),
+			rect(834, 709, 251, 24),
+			rect(826, 741, 267, 24)
+		],
+		copy: rect(490, 554, 940, 212),
+		chipTop: 1329
 	},
 	'1280x720': {
-		area: { x: 0, y: 0, width: 1280, height: 720 },
+		area: rect(0, 0, 1280, 720),
 		content: [
-			{ x: 307, y: 60, width: 666, height: 230 },
-			{ x: 328, y: 347, width: 623, height: 238 }
-		]
+			rect(307, 77, 666, 230),
+			rect(183, 357, 913, 71),
+			rect(448, 442, 384, 2),
+			rect(496, 460, 288, 36),
+			rect(514, 511, 251, 24),
+			rect(506, 543, 267, 24)
+		],
+		copy: rect(183, 357, 913, 210),
+		chipTop: 848
+	},
+	'768x1024': {
+		area: rect(0, 0, 768, 1024),
+		content: [
+			rect(184, 281, 399, 138),
+			rect(110, 491, 548, 42),
+			rect(192, 547, 384, 2),
+			rect(240, 565, 288, 36),
+			rect(258, 617, 251, 24),
+			rect(250, 649, 267, 24)
+		],
+		copy: rect(110, 491, 548, 182),
+		chipTop: 1146
 	},
 	'375x667': {
-		area: { x: 0, y: 0, width: 375, height: 667 },
+		area: rect(0, 0, 375, 667),
 		content: [
-			{ x: 60, y: 71, width: 256, height: 88 },
-			{ x: 30, y: 215, width: 315, height: 305 }
-		]
+			rect(60, 124, 256, 88),
+			rect(30, 260, 315, 67),
+			rect(35, 341, 305, 2),
+			rect(43, 359, 288, 36),
+			rect(62, 411, 251, 24),
+			rect(54, 443, 267, 24)
+		],
+		copy: rect(30, 260, 315, 207),
+		chipTop: 771
 	}
 };
 
@@ -84,31 +138,35 @@ describe('heroEllipse', () => {
 		const { area, content } = CONTENT['1440x900'];
 		const e = heroEllipse(content, area)!;
 		expect(e.cx).toBeCloseTo(720, 0);
-		expect(e.cy).toBeCloseTo((143 + 685) / 2, 0);
+		expect(e.cy).toBeCloseTo((161 + 667) / 2, 0);
 	});
 
-	it('leaves a band of field on every side where the window has room', () => {
-		const { area, content } = CONTENT['1920x1080'];
-		const m = margins(heroEllipse(content, area)!, area);
-		for (const value of Object.values(m)) expect(value).toBeGreaterThanOrEqual(HERO_BAND - 1);
-		// No bigger than it has to be: the band at the top or bottom is about HERO_BAND.
-		expect(Math.min(m.top, m.bottom)).toBeLessThan(HERO_BAND + 24);
-	});
-
-	it('shares out what room there is when the content nearly fills the window', () => {
-		const { area, content } = CONTENT['1440x900'];
-		const m = margins(heroEllipse(content, area)!, area);
-		// The thinnest band is as thick as it can be: bands round 75 px on the sides and the top.
-		expect(Math.min(m.top, m.left, m.right)).toBeGreaterThan(60);
-	});
-
-	it('still holds the content when the window is too small for a band', () => {
-		for (const name of ['1280x720', '375x667']) {
+	for (const name of ['1440x900', '1920x1080', '1280x720', '768x1024']) {
+		it(`is 80% of the window wide and only as tall as the content needs at ${name}`, () => {
 			const { area, content } = CONTENT[name];
 			const e = heroEllipse(content, area)!;
-			expect(e.rx).toBeGreaterThan(0);
-			expect(e.ry).toBeGreaterThan(0);
-		}
+			expect(e.rx * 2).toBeCloseTo(HERO_WIDTH * area.width, 6);
+			// Some corner of the content, grown by the clearance, sits right on the rim.
+			const reach = Math.max(
+				...content.flatMap((r) => corners(r, HERO_CLEARANCE).map((p) => ellipseDistance(e, p)))
+			);
+			expect(reach).toBeGreaterThan(0.999);
+		});
+	}
+
+	it('leaves field above and below the content on a desktop window', () => {
+		const { area, content } = CONTENT['1440x900'];
+		const m = margins(heroEllipse(content, area)!, area);
+		expect(m.top).toBeGreaterThan(48);
+		expect(m.bottom).toBeGreaterThan(48);
+		expect(m.left).toBeCloseTo(144, 6);
+	});
+
+	it('grows wider than 80% of a phone, as wide as its content needs', () => {
+		const { area, content } = CONTENT['375x667'];
+		const e = heroEllipse(content, area)!;
+		expect(e.rx * 2).toBeGreaterThan(HERO_WIDTH * area.width);
+		expect(e.ry).toBeLessThan(area.height);
 	});
 
 	it('returns null without content', () => {
@@ -118,11 +176,11 @@ describe('heroEllipse', () => {
 
 // A page: the hero (one window high) with its content and the scroll link, then a column of chips.
 function heroPage(name: string, extra: Partial<LayoutInput> = {}): LayoutInput {
-	const { area, content } = CONTENT[name];
+	const { area, content, copy, chipTop } = CONTENT[name];
 	const width = area.width;
 	const pad = width >= 1184 ? (width - 1152) / 2 : 16;
 	const chips = [0, 1, 2].map((i) => {
-		const rect = { x: pad, y: area.height + 48 + i * 700, width: width - 2 * pad, height: 600 };
+		const rect = { x: pad, y: chipTop + i * 700, width: width - 2 * pad, height: 600 };
 		const pins: Point[] = [];
 		for (let k = 0; k < 10; k++) {
 			pins.push({ x: rect.x - 4, y: rect.y + 24 + k * 48 });
@@ -131,12 +189,21 @@ function heroPage(name: string, extra: Partial<LayoutInput> = {}): LayoutInput {
 		return { id: `c${i}`, side: 'both' as const, rect, pins };
 	});
 	const indicator = { x: width / 2 - 39, y: area.height - 90, width: 78, height: 82 };
+	const logo = content[0];
 	return {
 		width,
-		height: area.height + 48 + 3 * 700 + 200,
+		height: chipTop + 3 * 700 + 200,
 		chips,
-		obstacles: [content[1], indicator],
-		socket: { rect: content[0], ports: [{ x: content[0].x + 100, y: content[0].y + 190 }] },
+		obstacles: [copy, indicator],
+		// The logo's two open trace ends: one on its bottom edge, one on its top edge.
+		socket: {
+			rect: logo,
+			ports: [
+				{ x: logo.x + 0.1 * logo.width, y: logo.y + logo.height - 2 },
+				{ x: logo.x + 0.6 * logo.width, y: logo.y + 1 }
+			],
+			leads: [0, 1]
+		},
 		hero: { rect: area, ellipse: heroEllipse(content, area)! },
 		...extra
 	};

@@ -7,9 +7,12 @@
  * ```
  *
  * `heroEllipse` picks the clear ellipse round the content: centred on it, holding every content
- * rect with `HERO_CLEARANCE` to spare, and leaving a band of at least `HERO_BAND` px of field to
- * each edge of the hero where the window has room. Where it hasn't, the thinnest band is as thick
- * as it can be. The ellipse may then run off the window; the field fills what is left.
+ * rect with `HERO_CLEARANCE` to spare. It is 80% of the window wide and as tall as the content
+ * needs. On a window too narrow for that (a phone), it is the ellipse round the content that leaves
+ * the thickest band of field to the edges of the hero, at least `HERO_BAND` px where it can (and
+ * then no bigger than that needs). The ellipse may run off the window; the field fills what is
+ * left. Pass the content block by block (the socket, each line of text), not as one box: a wide
+ * name over narrow lines needs a much flatter ellipse than their box would.
  *
  * `heroField` (called by `layoutBoard`) routes the field on the board's grid, in two passes:
  * - Rim buses: it walks round the ellipse and plugs buses of 3 to 5 traces, two cells apart, into
@@ -42,8 +45,12 @@ export interface Ellipse {
 
 /** Px between the hero content and the ellipse round it. */
 export const HERO_CLEARANCE = 12;
-/** The band of field (px) the ellipse leaves to every edge of the hero, where the window has room. */
+/** The ellipse is this share of the window wide, when that holds the content. */
+export const HERO_WIDTH = 0.8;
+/** On a window too narrow for that: the band of field (px) the ellipse tries to leave all round. */
 export const HERO_BAND = 96;
+/** The 80% ellipse is used when it is this much wider than the content needs. */
+const WIDE_ROOM = 1.05;
 /** Traces per rim bus. */
 export const HERO_BUS_MIN = 3;
 export const HERO_BUS_MAX = 5;
@@ -115,6 +122,16 @@ export function heroEllipse(content: readonly Rect[], area: Rect): Ellipse | nul
 			}
 		}
 	}
+	// 80% of the window wide, and as tall as the content needs, when that holds the content.
+	const dxMax = Math.max(...offsets.map(([dx]) => dx));
+	const wide = (HERO_WIDTH * area.width) / 2;
+	if (wide >= dxMax * WIDE_ROOM) {
+		let ry = 0;
+		for (const [dx, dy] of offsets) ry = Math.max(ry, dy / Math.sqrt(1 - (dx / wide) ** 2));
+		return { cx, cy, rx: wide, ry };
+	}
+
+	// Too narrow a window (a phone): the ellipse that leaves the thickest band of field.
 	const dyMax = Math.max(...offsets.map(([, dy]) => dy));
 	const lo = dyMax * 1.01;
 	const hi = Math.max(lo * 4, area.height);

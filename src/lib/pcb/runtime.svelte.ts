@@ -28,8 +28,8 @@
  * blank, `data-pcb-state="off"`, and every chip goes on so no content waits for the board.
  *
  * The hero: when one is registered, the board fills it edge to edge with the hero field (see
- * `hero.ts`). Its content is the socket and the obstacles inside it, kept in a clear ellipse; its
- * links and buttons (the scroll indicator) are obstacles too. The field builds up from the first
+ * `hero.ts`). Its content is the socket and the children of the obstacles inside it, kept in a
+ * clear ellipse; its links and buttons (the scroll indicator) are obstacles too. The field builds up from the first
  * frame, once, over 6 s.
  *
  * `data-pcb-state` on the canvas: `init` (waiting for fonts), `running` (a frame is queued),
@@ -306,8 +306,10 @@ export class BoardRuntime {
 		const heroRect = heroHandle?.el.isConnected ? docRect(heroHandle.el, sx, sy) : null;
 		if (heroHandle && heroRect && rendered(heroRect)) {
 			const area = { x: 0, y: heroRect.y, width: root.clientWidth, height: heroRect.height };
+			// Block by block: a wide name over narrow lines fits a flatter ellipse than their box.
 			const content = obstacleEls
 				.filter((el) => heroHandle.el.contains(el))
+				.flatMap((el) => (el.children.length > 0 ? [...el.children] : [el]))
 				.map((el) => docRect(el, sx, sy));
 			if (socket && port && heroHandle.el.contains(port.el)) content.push(socket.rect);
 			const ellipse = heroEllipse(content.filter(rendered), area);

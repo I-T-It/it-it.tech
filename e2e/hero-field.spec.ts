@@ -66,9 +66,7 @@ async function paint(page: Page, e: Ellipse) {
  */
 async function outside(page: Page, e: Ellipse): Promise<{ checked: number; out: string[] }> {
 	return page.evaluate((e) => {
-		const boxes = [
-			...document.querySelectorAll<HTMLElement>('#hero .socket, #hero .copy, #hero .copy > *')
-		];
+		const boxes = [...document.querySelectorAll<HTMLElement>('#hero .socket, #hero .copy > *')];
 		const out: string[] = [];
 		let checked = 0;
 		for (const el of boxes) {
@@ -106,8 +104,10 @@ test.describe('hero field', () => {
 
 		const e = await ellipseOf(page);
 		const { checked, out } = await outside(page, e);
-		// The socket, the text block, the name and the tagline at least.
+		// The socket, the name, the rule and the tagline at least.
 		expect(checked).toBeGreaterThanOrEqual(4);
+		// 80% of the window wide.
+		expect(e.rx * 2).toBeCloseTo(0.8 * 1440, 0);
 		expect(out).toEqual([]);
 		const { inside, corners } = await paint(page, e);
 		expect(inside).toBe(0);
