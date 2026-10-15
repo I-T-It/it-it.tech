@@ -59,15 +59,35 @@ async function paint(page: Page, e: Ellipse) {
 	}, e);
 }
 
-/** Every corner of the element's box lies inside the ellipse. */
-async function holds(page: Page, e: Ellipse, selector: string): Promise<boolean> {
-	const box = (await page.locator(selector).first().boundingBox())!;
-	return [
-		[box.x, box.y],
-		[box.x + box.width, box.y],
-		[box.x, box.y + box.height],
-		[box.x + box.width, box.y + box.height]
-	].every(([x, y]) => ((x - e.cx) / e.rx) ** 2 + ((y - e.cy) / e.ry) ** 2 < 1);
+/**
+ * The hero content: the socket and every block of the text under it, whatever the text holds.
+ * Returns the selector of each rendered box with a corner outside the ellipse, and how many boxes
+ * were checked.
+ */
+async function outside(page: Page, e: Ellipse): Promise<{ checked: number; out: string[] }> {
+	return page.evaluate((e) => {
+		const boxes = [
+			...document.querySelectorAll<HTMLElement>('#hero .socket, #hero .copy, #hero .copy > *')
+		];
+		const out: string[] = [];
+		let checked = 0;
+		for (const el of boxes) {
+			const r = el.getBoundingClientRect();
+			if (r.width === 0 && r.height === 0) continue;
+			checked++;
+			const corners = [
+				[r.left + scrollX, r.top + scrollY],
+				[r.right + scrollX, r.top + scrollY],
+				[r.left + scrollX, r.bottom + scrollY],
+				[r.right + scrollX, r.bottom + scrollY]
+			];
+			const held = corners.every(
+				([x, y]) => ((x - e.cx) / e.rx) ** 2 + ((y - e.cy) / e.ry) ** 2 < 1
+			);
+			if (!held) out.push(`${el.tagName.toLowerCase()}.${el.className}`);
+		}
+		return { checked, out };
+	}, e);
 }
 
 test.describe('hero field', () => {
@@ -85,9 +105,10 @@ test.describe('hero field', () => {
 		expect(Number(await canvas.getAttribute('data-hero-traces'))).toBeGreaterThan(40);
 
 		const e = await ellipseOf(page);
-		for (const selector of ['#hero .socket', '#hero h1', '#hero .tagline', '#hero .lead']) {
-			expect(await holds(page, e, selector), selector).toBe(true);
-		}
+		const { checked, out } = await outside(page, e);
+		// The socket, the text block, the name and the tagline at least.
+		expect(checked).toBeGreaterThanOrEqual(4);
+		expect(out).toEqual([]);
 		const { inside, corners } = await paint(page, e);
 		expect(inside).toBe(0);
 		for (const count of corners) expect(count).toBeGreaterThan(50);
