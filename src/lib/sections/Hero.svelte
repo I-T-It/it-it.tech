@@ -287,6 +287,20 @@
 		clip-path: polygon(14% 0, 100% 0, 100% 100%, 0 100%, 0 14%);
 	}
 
+	/* Scan lines over the photo while it is etched in; unseen otherwise. */
+	.die::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		opacity: 0;
+		background: repeating-linear-gradient(
+			to bottom,
+			color-mix(in srgb, var(--trace-cyan) 45%, transparent) 0 1px,
+			transparent 1px 4px
+		);
+		pointer-events: none;
+	}
+
 	/* enhanced:img puts the class on the <img> inside a <picture>. */
 	.photo {
 		display: block;
@@ -472,6 +486,19 @@
 		}
 
 		/*
+		 * The photo is etched in by the traces: it shows from the two contact points outward, under
+		 * scan lines that fade, bright at first and settling to its own colours. The mask's two
+		 * circles sit on the contact points (outside the die, which is inset a pad from the frame).
+		 */
+		:global(html.js:not(.reduced)) .die {
+			--etch: 150%;
+			mask-image:
+				radial-gradient(circle at -11% 72%, #000 var(--etch), transparent calc(var(--etch) + 14%)),
+				radial-gradient(circle at 111% 28%, #000 var(--etch), transparent calc(var(--etch) + 14%));
+			animation: etch 1.6s cubic-bezier(0.3, 0, 0.2, 1) 6s backwards;
+		}
+
+		/*
 		 * A new name starts each animation over, from the moment the power comes on. The board
 		 * sets the attribute, so it is :global: the template never has it.
 		 */
@@ -488,6 +515,61 @@
 		:global(html.js:not(.reduced) [data-power='on']) .courtyard .outline {
 			animation-name: outline-draw-powered;
 			animation-delay: 0s;
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .die {
+			animation-name: etch-powered;
+			animation-delay: 0.3s;
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .die::after {
+			animation: scan 1.2s ease-in 1s backwards;
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .photo {
+			animation: settle 1.9s ease-out 0.3s backwards;
+		}
+	}
+
+	/* The etch's reach: a registered property, so it animates smoothly. */
+	@property --etch {
+		syntax: '<percentage>';
+		inherits: false;
+		initial-value: 150%;
+	}
+
+	/* From -14%: the soft edge of the mask starts outside the die too, so nothing shows yet. */
+	@keyframes etch {
+		from {
+			--etch: -14%;
+		}
+		to {
+			--etch: 150%;
+		}
+	}
+
+	@keyframes etch-powered {
+		from {
+			--etch: -14%;
+		}
+		to {
+			--etch: 150%;
+		}
+	}
+
+	@keyframes scan {
+		from {
+			opacity: 0.9;
+		}
+		to {
+			opacity: 0;
+		}
+	}
+
+	/* Bright and pale where the traces have just etched it, then its own colours. */
+	@keyframes settle {
+		from {
+			filter: brightness(1.9) saturate(0.1) contrast(1.15);
 		}
 	}
 

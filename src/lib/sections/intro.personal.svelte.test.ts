@@ -284,16 +284,17 @@ describe('Hero power-up', () => {
 		}
 	});
 
-	it('is static under reduced motion: the ports are lit from the first frame', async () => {
-		document.documentElement.classList.add('reduced');
+	it('is static under reduced motion: the ports are lit and the photo shown from the first frame', async () => {
+		document.documentElement.classList.add('reduced', 'js');
 		try {
 			await mount(Hero);
 			expect(heroAnimations()).toEqual([]);
+			expect(getComputedStyle(hero().querySelector('.die')!).maskImage).toBe('none');
 			for (const port of socket()!.ports()) {
 				expect(getComputedStyle(port).boxShadow).not.toBe('none');
 			}
 		} finally {
-			document.documentElement.classList.remove('reduced');
+			document.documentElement.classList.remove('reduced', 'js');
 		}
 	});
 
@@ -339,6 +340,23 @@ describe('Hero power-up', () => {
 			expect(getComputedStyle(outline).animationDelay).toBe('0s');
 			const port = socket()!.ports()[0];
 			expect(getComputedStyle(port).animationName).toMatch(/port-on-powered/);
+		});
+
+		it('keeps the photo dark until the leads connect, then etches it in from where they touch', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			const die = hero().querySelector<HTMLElement>('.die')!;
+			// Waiting: the etch has not begun, nothing of the photo shows.
+			expect(getComputedStyle(die).animationDelay).toBe('6s');
+			expect(getComputedStyle(die).getPropertyValue('--etch').trim()).toBe('-14%');
+			expect(getComputedStyle(die).maskImage).toContain('radial-gradient');
+			socket()!.el.setAttribute('data-power', 'on');
+			expect(getComputedStyle(die).animationName).toMatch(/etch-powered/);
+			const etch = die
+				.getAnimations()
+				.find((a) => /etch-powered/.test((a as CSSAnimation).animationName))!;
+			etch.finish();
+			expect(getComputedStyle(die).getPropertyValue('--etch').trim()).toBe('150%');
 		});
 
 		it('is done drawing when the board is: within the time the board gives it', async () => {
