@@ -687,7 +687,7 @@ export const en: SiteContent = {
 		languages: [
 			{ id: 'nl', title: 'Dutch', level: 5 },
 			{ id: 'en', title: 'English', level: 5 },
-			{ id: 'ngt', title: 'Dutch Sign Language (NGT)', level: 2, note: 'basic' }
+			{ id: 'ngt', title: 'Dutch Sign Language (NGT)', level: 2 }
 		]
 	},
 

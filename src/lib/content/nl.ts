@@ -690,7 +690,7 @@ export const nl: SiteContent = {
 		languages: [
 			{ id: 'nl', title: 'Nederlands', level: 5 },
 			{ id: 'en', title: 'Engels', level: 5 },
-			{ id: 'ngt', title: 'Nederlandse Gebarentaal (NGT)', level: 2, note: 'basis' }
+			{ id: 'ngt', title: 'Nederlandse Gebarentaal (NGT)', level: 2 }
 		]
 	},
 

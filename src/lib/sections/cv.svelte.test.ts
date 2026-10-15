@@ -918,13 +918,12 @@ describe('EducationLanguages (U8)', () => {
 		expect(language('en').querySelector('.sr-only')?.textContent).toBe('niveau 5 van 5');
 	});
 
-	it('shows the note next to the level of NGT and reads it with the level, once', async () => {
+	it('shows no note next to the level of NGT: the two lit LEDs and the level text say it', async () => {
 		await render(EducationLanguages, {});
 		const ngt = language('ngt');
-		expect(ngt.querySelector('.sr-only')?.textContent).toBe('niveau 2 van 5, basis');
-		const note = ngt.querySelector<HTMLElement>('.note')!;
-		expect(note.textContent).toBe('basis');
-		expect(note.getAttribute('aria-hidden')).toBe('true');
+		expect(ngt.querySelector('.sr-only')?.textContent).toBe('niveau 2 van 5');
+		expect(ngt.querySelectorAll('.led[data-lit="true"]')).toHaveLength(2);
+		expect(ngt.querySelector('.note')).toBeNull();
 		expect(language('nl').querySelector('.note')).toBeNull();
 	});
 
@@ -932,7 +931,7 @@ describe('EducationLanguages (U8)', () => {
 		setLocale('en');
 		await render(EducationLanguages, {});
 		expect(document.querySelector('section#education h2')?.textContent).toBe(section('en').title);
-		expect(language('ngt').querySelector('.sr-only')?.textContent).toBe('level 2 of 5, basic');
+		expect(language('ngt').querySelector('.sr-only')?.textContent).toBe('level 2 of 5');
 		expect(
 			Array.from(document.querySelectorAll('section#education h3')).map((h) => h.textContent)
 		).toEqual(['Education', 'Languages']);

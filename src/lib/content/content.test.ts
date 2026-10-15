@@ -169,12 +169,12 @@ describe('cleaned up export', () => {
 		}
 	});
 
-	it('moves sign language to the languages block, with a level and a note', () => {
+	it('moves sign language to the languages block, with a level and no note (the LEDs say it)', () => {
 		for (const [, c] of both) {
 			expect(allSkills(c).some((s) => s.id === 'ngt')).toBe(false);
 			const ngt = c.educationLanguages.languages.find((l) => l.id === 'ngt');
 			expect(ngt?.level).toBe(2);
-			expect(ngt?.note?.length).toBeGreaterThan(2);
+			expect(ngt?.note).toBeUndefined();
 			expect(c.educationLanguages.languages.map((l) => l.id)).toEqual(['nl', 'en', 'ngt']);
 			expect(c.educationLanguages.languages.slice(0, 2).map((l) => l.level)).toEqual([5, 5]);
 		}
