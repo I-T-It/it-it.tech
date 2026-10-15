@@ -7,6 +7,8 @@ import {
 	PIN_FLASH_MS,
 	registerChip,
 	registerObstacle,
+	registerSocket,
+	socket,
 	type ChipHandle
 } from './registry.svelte.js';
 
@@ -134,6 +136,56 @@ describe('obstacles', () => {
 	});
 });
 
+/** A socket element with `ports` port markers, nested like an SVG overlay would be. */
+function makeSocket(ports: number): HTMLElement {
+	const el = document.createElement('div');
+	const overlay = document.createElement('div');
+	for (let i = 0; i < ports; i++) {
+		const port = document.createElement('span');
+		port.setAttribute('data-port', '');
+		overlay.append(port);
+	}
+	el.append(document.createElement('img'), overlay);
+	document.body.append(el);
+	return el;
+}
+
+describe('socket', () => {
+	it('registers a socket and returns its ports in DOM order', () => {
+		const el = makeSocket(2);
+		const unregister = registerSocket(el);
+		expect(socket()?.el).toBe(el);
+		const ports = socket()!.ports();
+		expect(ports).toHaveLength(2);
+		expect(ports).toEqual(Array.from(el.querySelectorAll('[data-port]')));
+		unregister();
+		expect(socket()).toBeNull();
+	});
+
+	it('reads the ports live, so a re-rendered socket reports its new ports', () => {
+		const el = makeSocket(1);
+		const unregister = registerSocket(el);
+		const extra = document.createElement('span');
+		extra.setAttribute('data-port', '');
+		el.append(extra);
+		expect(socket()!.ports()).toHaveLength(2);
+		unregister();
+	});
+
+	it('uses the latest socket and makes the unregister function idempotent', () => {
+		const a = makeSocket(1);
+		const b = makeSocket(3);
+		const unregisterA = registerSocket(a);
+		const unregisterB = registerSocket(b);
+		expect(socket()?.el).toBe(b);
+		unregisterB();
+		unregisterB();
+		expect(socket()?.el).toBe(a);
+		unregisterA();
+		expect(socket()).toBeNull();
+	});
+});
+
 describe('onChange', () => {
 	let calls = 0;
 	let stop: () => void;
@@ -156,6 +208,14 @@ describe('onChange', () => {
 		expect(calls).toBe(3);
 		handle.destroy();
 		expect(calls).toBe(4);
+	});
+
+	it('fires when a socket comes and goes', () => {
+		const unregister = registerSocket(makeSocket(2));
+		expect(calls).toBe(1);
+		unregister();
+		unregister();
+		expect(calls).toBe(2);
 	});
 
 	it('does not fire for a repeated destroy or a state change', () => {

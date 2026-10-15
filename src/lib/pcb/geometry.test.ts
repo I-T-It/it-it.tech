@@ -7,6 +7,7 @@ import {
 	DY,
 	inflateRect,
 	isOctilinear,
+	lengthAbove,
 	nearestOnPolyline,
 	pointAt,
 	rectContains,
@@ -90,6 +91,35 @@ describe('polylines', () => {
 		const near = nearestOnPolyline(path, lengths, { x: 170, y: 30 }, 50);
 		expect(near.point).toEqual({ x: 50, y: 0 });
 		expect(near.along).toBeCloseTo(50);
+	});
+
+	it('measures the part of a line down to a given y', () => {
+		const down: Point[] = [
+			{ x: 0, y: 100 },
+			{ x: 0, y: 200 },
+			{ x: 30, y: 230 },
+			{ x: 30, y: 300 }
+		];
+		const along = cumulativeLengths(down);
+		expect(lengthAbove(down, along, 50)).toBe(0);
+		expect(lengthAbove(down, along, 100)).toBe(0);
+		expect(lengthAbove(down, along, 150)).toBe(50);
+		expect(lengthAbove(down, along, 215)).toBeCloseTo(100 + 15 * Math.SQRT2);
+		expect(lengthAbove(down, along, 300)).toBe(along[3]);
+		expect(lengthAbove(down, along, 9999)).toBe(along[3]);
+		// A horizontal run counts whole once the y reaches it.
+		expect(lengthAbove(path, lengths, -1)).toBe(0);
+		expect(lengthAbove(path, lengths, 0)).toBe(100);
+		expect(lengthAbove(path, lengths, 15)).toBeCloseTo(100 + diagonal / 2);
+		// A line that turns back up stops at the first point below y.
+		const hook: Point[] = [
+			{ x: 0, y: 0 },
+			{ x: 0, y: 100 },
+			{ x: 50, y: 50 },
+			{ x: 50, y: 400 }
+		];
+		expect(lengthAbove(hook, cumulativeLengths(hook), 90)).toBe(90);
+		expect(lengthAbove([], [], 10)).toBe(0);
 	});
 
 	it('drops repeated and collinear points', () => {

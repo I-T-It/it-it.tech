@@ -9,7 +9,7 @@ const T = 5000;
 function straight(id: string, y: number, length = 300, pin = true): Trace {
 	return makeTrace({
 		id,
-		kind: pin ? 'feeder' : 'decor',
+		kind: pin ? 'branch' : 'decor',
 		side: 'left',
 		bus: 'b',
 		points: [
@@ -104,6 +104,19 @@ describe('Pulses.advance', () => {
 
 	it('dies silently at a via', () => {
 		const pulses = new Pulses([straight('d', 100, 300, false)]);
+		pulses.spawn(at(290, 100), T);
+		expect(pulses.advance(T + 1000)).toEqual([]);
+		expect(pulses.size).toBe(0);
+	});
+
+	it('dies without a hit at a socket port', () => {
+		const port = makeTrace({
+			...straight('socket:L0', 100),
+			kind: 'socket',
+			end: { kind: 'port', port: 0 },
+			chipId: null
+		});
+		const pulses = new Pulses([port]);
 		pulses.spawn(at(290, 100), T);
 		expect(pulses.advance(T + 1000)).toEqual([]);
 		expect(pulses.size).toBe(0);
