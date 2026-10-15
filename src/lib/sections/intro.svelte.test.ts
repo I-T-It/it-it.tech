@@ -12,6 +12,7 @@ import { getContent } from '#lib/content/index.js';
 import { profiles, visibleProfiles } from '#lib/content/profiles.js';
 import { decodeEmail, EMAIL_FALLBACK_TEXT } from '#lib/email.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
+import { SOCKET_DRAW_MS } from '#lib/pcb/growth.js';
 import { chips, obstacles, socket } from '#lib/pcb/registry.svelte.js';
 import About from './About.svelte';
 import Availability from './Availability.svelte';
@@ -419,6 +420,69 @@ describe('Hero power-up', () => {
 		} finally {
 			document.documentElement.classList.remove('reduced');
 		}
+	});
+});
+
+describe('Hero text with scripts', () => {
+	const root = document.documentElement;
+	afterEach(() => root.classList.remove('js', 'reduced'));
+	const copy = () => hero().querySelector<HTMLElement>('.copy')!;
+	const indicator = () => hero().querySelector<HTMLElement>('.scroll-indicator')!;
+	const pulse = () => indicator().querySelector<HTMLElement>('.pulse')!;
+	const seconds = (value: string) => parseFloat(value);
+
+	it('keeps the text out of sight until the board is built, and in the accessibility tree', async () => {
+		root.classList.add('js');
+		const screen = await mount(Hero);
+		expect(getComputedStyle(copy()).opacity).toBe('0');
+		expect(getComputedStyle(indicator()).opacity).toBe('0');
+		// Only out of sight: still there for screen readers, search engines and the layout.
+		for (const el of [copy(), indicator()]) {
+			const style = getComputedStyle(el);
+			expect(style.display).not.toBe('none');
+			expect(style.visibility).toBe('visible');
+			expect(el.closest('[aria-hidden="true"]')).toBeNull();
+		}
+		await expect
+			.element(screen.getByRole('heading', { level: 1, name: 'Robbin "Roboroads" Schepers' }))
+			.toBeInTheDocument();
+		await expect.element(screen.getByRole('link', { name: /Verder|Continue/ })).toBeInTheDocument();
+	});
+
+	it('brings the text in as the logo finishes, the scroll link 2 s later, its pulse with it', async () => {
+		root.classList.add('js');
+		await mount(Hero);
+		socket()!.el.setAttribute('data-power', 'on');
+		const text = getComputedStyle(copy());
+		expect(text.animationName).toMatch(/text-in-powered/);
+		expect(seconds(text.animationDelay) * 1000).toBe(SOCKET_DRAW_MS);
+		const link = getComputedStyle(indicator());
+		expect(link.animationName).toMatch(/text-in-powered/);
+		expect(seconds(link.animationDelay) * 1000).toBe(SOCKET_DRAW_MS + 2000);
+		const light = getComputedStyle(pulse());
+		expect(seconds(light.animationDelay) * 1000).toBeGreaterThanOrEqual(SOCKET_DRAW_MS + 2000);
+		expect(light.animationIterationCount).toBe('3');
+		for (const el of [copy(), indicator()]) for (const a of el.getAnimations()) a.finish();
+		expect(getComputedStyle(copy()).opacity).toBe('1');
+		expect(getComputedStyle(indicator()).opacity).toBe('1');
+	});
+
+	it('shows it all at once when keyboard focus lands in the hero', async () => {
+		root.classList.add('js');
+		await mount(Hero);
+		hero().querySelector<HTMLElement>('.profiles a')!.focus();
+		expect(getComputedStyle(copy()).opacity).toBe('1');
+		expect(getComputedStyle(indicator()).opacity).toBe('1');
+	});
+
+	it('shows it from the first frame under reduced motion and without scripts', async () => {
+		root.classList.add('js', 'reduced');
+		await mount(Hero);
+		expect(getComputedStyle(copy()).opacity).toBe('1');
+		expect(getComputedStyle(indicator()).opacity).toBe('1');
+		root.classList.remove('js', 'reduced');
+		expect(getComputedStyle(copy()).opacity).toBe('1');
+		expect(getComputedStyle(indicator()).opacity).toBe('1');
 	});
 });
 

@@ -634,6 +634,118 @@
 		:global(html.js:not(.reduced) [data-power='on']) .photo {
 			animation: settle 1.9s ease-out 0.3s backwards;
 		}
+
+		/*
+		 * The text under the logo or photo comes in when the build is done: 2.2 s after the power
+		 * (SOCKET_DRAW_MS in growth.ts), the line under the name drawing as it does. The scroll
+		 * link follows 2 s later, and its pulse starts then. Only the look waits: the text is in
+		 * the page, the accessibility tree and the layout from the start. Should the board never
+		 * come, it all shows after 8 s. Keyboard focus anywhere in the hero shows it at once.
+		 */
+		:global(html.js:not(.reduced)) .copy {
+			animation: text-in 0.6s ease-out 8s backwards;
+		}
+
+		:global(html.js:not(.reduced)) .rule {
+			animation-delay: 8.4s;
+		}
+
+		:global(html.js:not(.reduced)) .hero > :global(.scroll-indicator) {
+			animation: text-in 0.6s ease-out 10s backwards;
+		}
+
+		:global(html.js:not(.reduced)) .hero :global(.scroll-indicator:not([data-done]) .pulse) {
+			animation: hero-pulse 1.3s ease-in 10.6s 3 both;
+		}
+
+		:global(html.js:not(.reduced)) .socket:global([data-power='on']) ~ .copy {
+			animation-name: text-in-powered;
+			animation-delay: 2.2s;
+		}
+
+		:global(html.js:not(.reduced)) .socket:global([data-power='on']) ~ .copy .rule {
+			animation-name: rule-draw-powered;
+			animation-delay: 2.5s;
+		}
+
+		:global(html.js:not(.reduced))
+			.hero:has(.socket:global([data-power='on']))
+			> :global(.scroll-indicator) {
+			animation-name: text-in-powered;
+			animation-delay: 4.2s;
+		}
+
+		:global(html.js:not(.reduced))
+			.hero:has(.socket:global([data-power='on']))
+			:global(.scroll-indicator:not([data-done]) .pulse) {
+			animation-name: hero-pulse-powered;
+			animation-delay: 4.8s;
+		}
+
+		/* !important: this must beat the powered rules above, whatever their weight. */
+		:global(html.js:not(.reduced)) .hero:focus-within .copy,
+		:global(html.js:not(.reduced)) .hero:focus-within > :global(.scroll-indicator) {
+			animation: none !important;
+		}
+	}
+
+	/* The text and the scroll link come in: from out of sight, a touch bright, to their own look. */
+	@keyframes text-in {
+		from {
+			opacity: 0;
+			filter: brightness(1.8);
+		}
+	}
+
+	@keyframes text-in-powered {
+		from {
+			opacity: 0;
+			filter: brightness(1.8);
+		}
+	}
+
+	@keyframes rule-draw-powered {
+		from {
+			clip-path: inset(-6px 50% -6px 50%);
+		}
+		to {
+			clip-path: inset(-6px);
+		}
+	}
+
+	/* The scroll link's pulse (as in ScrollIndicator), restarted when the link comes in. */
+	@keyframes hero-pulse {
+		from {
+			opacity: 0;
+			transform: translateY(-100%);
+		}
+		20% {
+			opacity: 1;
+		}
+		80% {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+			transform: translateY(2.5rem);
+		}
+	}
+
+	@keyframes hero-pulse-powered {
+		from {
+			opacity: 0;
+			transform: translateY(-100%);
+		}
+		20% {
+			opacity: 1;
+		}
+		80% {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+			transform: translateY(2.5rem);
+		}
 	}
 
 	/* The etch's reach: a registered property, so it animates smoothly. */
