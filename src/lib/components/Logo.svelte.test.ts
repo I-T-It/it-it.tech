@@ -50,6 +50,76 @@ describe('structure', () => {
 	});
 });
 
+describe('ports', () => {
+	/** Where the last point of a trace lands on the screen. */
+	function endOf(trace: SVGPolylineElement): { x: number; y: number } {
+		const points = trace.points;
+		const last = points.getItem(points.numberOfItems - 1);
+		const m = trace.getScreenCTM()!;
+		return { x: m.a * last.x + m.c * last.y + m.e, y: m.b * last.x + m.d * last.y + m.f };
+	}
+
+	const centre = (el: Element) => {
+		const box = el.getBoundingClientRect();
+		return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+	};
+
+	it('marks the two open trace ends with data-port, one per colour', async () => {
+		await render(Logo, {});
+		const ports = Array.from(svg().querySelectorAll('[data-port]'));
+		expect(ports.map((port) => port.getAttribute('data-port')).sort()).toEqual(['cyan', 'green']);
+	});
+
+	for (const size of [72, 300, 640]) {
+		it(`puts each port on the end of its trace in rendered coordinates, at ${size}px`, async () => {
+			await render(Logo, { size });
+			for (const colour of ['cyan', 'green']) {
+				const port = centre(svg().querySelector(`[data-port="${colour}"]`)!);
+				const end = endOf(svg().querySelector(`polyline.trace-${colour}`)!);
+				expect(port.x).toBeCloseTo(end.x, 0);
+				expect(port.y).toBeCloseTo(end.y, 0);
+			}
+		});
+	}
+
+	it('keeps them on the open ends, not on the pads at the other end of the traces', async () => {
+		await render(Logo, { size: 640 });
+		for (const colour of ['cyan', 'green']) {
+			const port = centre(svg().querySelector(`[data-port="${colour}"]`)!);
+			const pad = centre(svg().querySelector(`.pad-${colour}`)!);
+			expect(Math.hypot(port.x - pad.x, port.y - pad.y)).toBeGreaterThan(100);
+		}
+	});
+
+	it('follows the logo when it moves: the port stays at the same fraction of the logo', async () => {
+		await render(Logo, { size: 400 });
+		const box = svg().getBoundingClientRect();
+		const port = centre(svg().querySelector('[data-port="cyan"]')!);
+		// The cyan trace ends low and left of centre, the green one high and right of it.
+		expect((port.x - box.left) / box.width).toBeLessThan(0.3);
+		expect((port.y - box.top) / box.height).toBeGreaterThan(0.9);
+		const green = centre(svg().querySelector('[data-port="green"]')!);
+		expect((green.x - box.left) / box.width).toBeGreaterThan(0.5);
+		expect((green.y - box.top) / box.height).toBeLessThan(0.1);
+	});
+
+	it('does not draw, take the pointer or change the accessible name', async () => {
+		await render(Logo, { title: 'I.T. It' });
+		for (const port of svg().querySelectorAll<SVGElement>('[data-port]')) {
+			const style = getComputedStyle(port);
+			expect(style.pointerEvents).toBe('none');
+			expect(style.fill).toBe('none');
+			expect(style.stroke).toBe('none');
+		}
+		expect(svg().getAttribute('aria-label')).toBe('I.T. It');
+	});
+
+	it('are there whether the logo animates or not', async () => {
+		await render(Logo, { animate: true });
+		expect(svg().querySelectorAll('[data-port]')).toHaveLength(2);
+	});
+});
+
 describe('size', () => {
 	it('takes a number as pixels of width and keeps the aspect ratio', async () => {
 		await render(Logo, { size: 200 });

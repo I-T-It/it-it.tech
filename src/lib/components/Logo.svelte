@@ -78,6 +78,21 @@
 		<circle class="pad pad-green" fill="#C9F4C9" cx="222.699" cy="202.156" r="16.815" />
 		<circle class="pad pad-cyan" fill="#D9FBFF" cx="438.439" cy="202.156" r="16.815" />
 
+		<!--
+			Ports: the two open trace ends (the last point of each polyline above), where the board
+			joins its socket traces to the logo. Real elements, so the board reads their rendered
+			position, whatever the size. They draw nothing.
+		-->
+		<circle class="port" data-port="cyan" cx="161.480995" cy="287.093736" r="1" />
+		<circle
+			class="port"
+			data-port="green"
+			transform="translate(221.929229 0)"
+			cx="285.680579"
+			cy="0"
+			r="1"
+		/>
+
 		<g class="letters" fill="#FFFFFF" fill-rule="nonzero">
 			<path
 				transform="translate(77.127371 87.520197)"
@@ -96,6 +111,12 @@
 		display: block;
 		width: 100%;
 		height: auto;
+	}
+
+	.port {
+		fill: none;
+		stroke: none;
+		pointer-events: none;
 	}
 
 	/* The draw: about two seconds in all, and nothing flashes. */
