@@ -625,36 +625,30 @@ export const en: SiteContent = {
 				id: 'php-2005-called',
 				kind: 'talk',
 				title: '2005 Called! They Want Your Opinion About PHP Back!',
-				summary: 'On PHP as it is now, for anyone who still knows it from 2005.',
+				summary:
+					'Why PHP was bad, why it no longer is, and why it is still a good language to build projects in today.',
 				lang: 'en'
 			},
 			{
 				id: 'frontend-love',
 				kind: 'talk',
 				title: 'Falling in Love with Front-end all over again',
-				summary: 'On finding the fun in front-end work again.',
+				summary:
+					'The magic of Svelte, and how it compares to other frameworks like Angular, React and Vue.js.',
 				lang: 'en'
 			},
 			{
 				id: 'flutter-talk',
 				kind: 'talk',
-				title: 'Flutter talk',
-				summary: 'A talk on Flutter: from one codebase you build apps for several platforms.',
-				lang: 'nl'
+				title: 'Writing multi-platform apps with native performance',
+				summary: 'The Flutter workshop as a talk, without the do-it-yourself steps.',
+				lang: 'en'
 			},
 			{
 				id: 'flutter-workshop',
 				kind: 'workshop',
 				title: 'Flutter workshop',
-				summary:
-					'A workshop where participants build with Flutter themselves. Also given as a training.',
-				lang: 'nl'
-			},
-			{
-				id: 'svelte-talk',
-				kind: 'talk',
-				title: 'Svelte talk',
-				summary: 'A talk on Svelte, a front-end framework that compiles components at build time.',
+				summary: 'How to start building your first Flutter reviews app.',
 				lang: 'nl'
 			}
 		],
@@ -714,7 +708,7 @@ export const en: SiteContent = {
 			},
 			{
 				id: 'svelte-nieuwegein',
-				offerId: 'svelte-talk',
+				offerId: 'frontend-love',
 				date: '2022-04-13',
 				event: 'FrontEnd Meetup Nieuwegein'
 			}

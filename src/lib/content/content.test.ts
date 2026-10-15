@@ -81,7 +81,7 @@ describe('NL and EN parity', () => {
 	});
 
 	it('has the same talks, competences, education and languages', () => {
-		expect(nl.talks.offers).toHaveLength(5);
+		expect(nl.talks.offers).toHaveLength(4);
 		expect(nl.talks.given).toHaveLength(9);
 		expect(nl.competences.items).toHaveLength(4);
 		const offer = (o: TalkOffer) => [
@@ -414,14 +414,61 @@ describe('talks', () => {
 		}
 	});
 
-	it('seeds the catalogue with every distinct talk and workshop of the history', () => {
+	it('has the catalogue of three talks and one workshop, with the titles as given', () => {
 		for (const [, c] of both) {
 			expect(c.talks.offers.map((o) => [o.id, o.kind, o.lang])).toEqual([
 				['php-2005-called', 'talk', 'en'],
 				['frontend-love', 'talk', 'en'],
-				['flutter-talk', 'talk', 'nl'],
-				['flutter-workshop', 'workshop', 'nl'],
-				['svelte-talk', 'talk', 'nl']
+				['flutter-talk', 'talk', 'en'],
+				['flutter-workshop', 'workshop', 'nl']
+			]);
+		}
+		const titles = (c: SiteContent) => c.talks.offers.map((o) => o.title);
+		expect(titles(nl)).toEqual([
+			'2005 Called! They Want Your Opinion About PHP Back!',
+			'Falling in Love with Front-end all over again',
+			'Writing multi-platform apps with native performance',
+			'Workshop Flutter'
+		]);
+		// The workshop has a Dutch name, so the English page gets it in English.
+		expect(titles(en)).toEqual([
+			'2005 Called! They Want Your Opinion About PHP Back!',
+			'Falling in Love with Front-end all over again',
+			'Writing multi-platform apps with native performance',
+			'Flutter workshop'
+		]);
+	});
+
+	it('has what each offer is about, from the descriptions of the talks', () => {
+		const summary = (c: SiteContent, id: string) =>
+			c.talks.offers.find((o) => o.id === id)!.summary;
+		expect(summary(nl, 'php-2005-called')).toMatch(/PHP.*slecht.*nog steeds/);
+		expect(summary(en, 'php-2005-called')).toMatch(/PHP.*bad.*still/);
+		for (const c of [nl, en]) {
+			for (const framework of ['Svelte', 'Angular', 'React', 'Vue.js']) {
+				expect(summary(c, 'frontend-love')).toContain(framework);
+			}
+			expect(summary(c, 'flutter-talk')).toContain('Flutter');
+			expect(summary(c, 'flutter-workshop')).toContain('Flutter');
+		}
+		expect(summary(nl, 'flutter-workshop')).toMatch(/eerste/);
+		expect(summary(en, 'flutter-workshop')).toMatch(/first/);
+	});
+
+	it('links every occurrence to the offer it was, so that "last given" is right', () => {
+		for (const [, c] of both) {
+			expect(c.talks.given.map((g) => [g.id, g.offerId])).toEqual([
+				['php-2005-called', 'php-2005-called'],
+				['frontend-js-eindhoven', 'frontend-love'],
+				['frontend-festival', 'frontend-love'],
+				['flutter-ordina-noord', 'flutter-workshop'],
+				['flutter-frontmania', 'flutter-talk'],
+				// The demo in the talk of Remi Appels is not a talk of his own.
+				['services-join-belgie', undefined],
+				// The training at Ordina Belgium counts as a time the workshop was given.
+				['flutter-ordina-belgie', 'flutter-workshop'],
+				['flutter-code-comedy', 'flutter-workshop'],
+				['svelte-nieuwegein', 'frontend-love']
 			]);
 		}
 	});

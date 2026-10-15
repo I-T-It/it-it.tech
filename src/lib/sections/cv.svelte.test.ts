@@ -751,7 +751,7 @@ describe('Talks (U7)', () => {
 	const rows = () => Array.from(document.querySelectorAll<HTMLElement>('[data-given]'));
 	const row = (id: string) => document.querySelector<HTMLElement>(`[data-given="${id}"]`)!;
 	// The talks that are given in English: their titles stay English on the Dutch page.
-	const ENGLISH_OFFERS = ['php-2005-called', 'frontend-love'];
+	const ENGLISH_OFFERS = ['php-2005-called', 'frontend-love', 'flutter-talk'];
 
 	it('is a chip labelled by its h2, registered as U7', async () => {
 		const screen = await render(Talks, {});
@@ -809,7 +809,7 @@ describe('Talks (U7)', () => {
 			Array.from(document.querySelectorAll('section#talks h3')).map((h) => h.textContent)
 		).toEqual(['Ready to give', 'Given']);
 		expect(offer('frontend-love').querySelector('.times')?.textContent).toBe(
-			'Given 2 times, most recently on 23 Aug 2023'
+			'Given 3 times, most recently on 23 Aug 2023'
 		);
 		expect(offer('php-2005-called').querySelector('.times')?.textContent).toBe(
 			'Given once, on 21 Jun 2024'
@@ -864,10 +864,13 @@ describe('Talks (U7)', () => {
 			const title = (id: string) => row(id).querySelector('.title')?.textContent;
 			expect(title('frontend-festival')).toBe('Falling in Love with Front-end all over again');
 			expect(title('frontend-js-eindhoven')).toBe('Falling in Love with Front-end all over again');
-			expect(title('flutter-ordina-noord')).toBe('Flutter-workshop');
+			expect(title('svelte-nieuwegein')).toBe('Falling in Love with Front-end all over again');
+			expect(title('flutter-ordina-noord')).toBe('Workshop Flutter');
 			// The training is an occurrence of the Flutter workshop under its own name.
-			expect(title('flutter-ordina-belgie')).toBe('Flutter-training');
-			expect(title('flutter-frontmania')).toBe('Flutter-talk');
+			expect(title('flutter-ordina-belgie')).toBe('Training Flutter');
+			expect(title('flutter-frontmania')).toBe(
+				'Writing multi-platform apps with native performance'
+			);
 		});
 
 		it('shows the Services talk as the talk of Remi Appels, with the Flutter demo in it', async () => {
@@ -922,7 +925,7 @@ describe('Talks (U7)', () => {
 				expect(el.querySelector('.summary')?.textContent, o.id).toBe(o.summary);
 			}
 			expect(offer('flutter-workshop').querySelector('.kind')?.textContent).toBe('Workshop');
-			expect(offer('svelte-talk').querySelector('.kind')?.textContent).toBe('Talk');
+			expect(offer('flutter-talk').querySelector('.kind')?.textContent).toBe('Talk');
 		});
 
 		it('names the language of every offer and shows no duration or audience yet', async () => {
@@ -932,6 +935,7 @@ describe('Talks (U7)', () => {
 					[d.querySelector('dt')?.textContent, d.querySelector('dd')?.textContent].join(': ')
 				);
 			expect(facts('php-2005-called')).toEqual(['Taal: Engels']);
+			expect(facts('flutter-talk')).toEqual(['Taal: Engels']);
 			expect(facts('flutter-workshop')).toEqual(['Taal: Nederlands']);
 		});
 
@@ -952,7 +956,8 @@ describe('Talks (U7)', () => {
 			await render(Talks, {});
 			const times = (id: string) => offer(id).querySelector('.times')!;
 			expect(times('php-2005-called').textContent).toBe('Eén keer gegeven, op 21 jun 2024');
-			expect(times('frontend-love').textContent).toBe('2 keer gegeven, laatst op 23 aug 2023');
+			expect(times('frontend-love').textContent).toBe('3 keer gegeven, laatst op 23 aug 2023');
+			expect(times('flutter-talk').textContent).toBe('Eén keer gegeven, op 5 okt 2022');
 			expect(times('flutter-workshop').textContent).toBe('3 keer gegeven, laatst op 27 okt 2022');
 			expect(times('frontend-love').querySelector('time')?.getAttribute('datetime')).toBe(
 				'2023-08-23'

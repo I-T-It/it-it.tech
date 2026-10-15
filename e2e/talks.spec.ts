@@ -4,13 +4,7 @@ import { expectNoAxeViolations } from './axe.js';
 // Built from parts: the mail scheme is never written out (see CLAUDE.md).
 const scheme = ['mail', 'to'].join('');
 
-const OFFERS = [
-	'php-2005-called',
-	'frontend-love',
-	'flutter-talk',
-	'flutter-workshop',
-	'svelte-talk'
-];
+const OFFERS = ['php-2005-called', 'frontend-love', 'flutter-talk', 'flutter-workshop'];
 
 test.describe('talks and workshops', () => {
 	test('lists what is ready to give, then when it was given, in Dutch', async ({ page }) => {
@@ -21,7 +15,14 @@ test.describe('talks and workshops', () => {
 			'Klaar om te geven',
 			'Gegeven'
 		]);
-		await expect(talks.locator('[data-offer]')).toHaveCount(OFFERS.length);
+		expect(
+			await talks
+				.locator('[data-offer]')
+				.evaluateAll((els) => els.map((el) => el.getAttribute('data-offer')))
+		).toEqual(OFFERS);
+		await expect(talks.locator('[data-offer="php-2005-called"] h4')).toHaveText(
+			'2005 Called! They Want Your Opinion About PHP Back!'
+		);
 		await expect(talks.locator('[data-given]')).toHaveCount(9);
 		// Newest first: the PHP talk of June 2024 is on top, the Svelte talk of April 2022 last.
 		await expect(talks.locator('[data-given]').first()).toHaveAttribute(
@@ -47,9 +48,9 @@ test.describe('talks and workshops', () => {
 	test('marks the English titles on the Dutch page and nothing else', async ({ page }) => {
 		await page.goto('./');
 		const marked = page.locator('section#talks [lang]');
-		// Two English talks in the catalogue, the three times they were given, and the title of the
+		// Three English talks in the catalogue, the five times they were given, and the title of the
 		// talk of Remi Appels that is quoted in the history.
-		await expect(marked).toHaveCount(2 + 3 + 1);
+		await expect(marked).toHaveCount(3 + 5 + 1);
 		for (const lang of await marked.evaluateAll((els) =>
 			els.map((el) => el.getAttribute('lang'))
 		)) {

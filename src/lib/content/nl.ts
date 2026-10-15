@@ -627,38 +627,30 @@ export const nl: SiteContent = {
 				id: 'php-2005-called',
 				kind: 'talk',
 				title: '2005 Called! They Want Your Opinion About PHP Back!',
-				summary: 'Over PHP zoals het nu is, voor wie het nog van 2005 kent.',
+				summary:
+					'Waarom PHP slecht was, waarom dat niet meer zo is en waarom het nog steeds een goede taal is om projecten in te bouwen.',
 				lang: 'en'
 			},
 			{
 				id: 'frontend-love',
 				kind: 'talk',
 				title: 'Falling in Love with Front-end all over again',
-				summary: 'Over opnieuw plezier vinden in front-endwerk.',
+				summary:
+					'De magie van Svelte, en hoe het zich verhoudt tot andere frameworks zoals Angular, React en Vue.js.',
 				lang: 'en'
 			},
 			{
 				id: 'flutter-talk',
 				kind: 'talk',
-				title: 'Flutter-talk',
-				summary:
-					'Een talk over Flutter: vanuit één codebase bouw je apps voor meerdere platformen.',
-				lang: 'nl'
+				title: 'Writing multi-platform apps with native performance',
+				summary: 'De Flutter-workshop als talk, zonder de stappen om zelf mee te bouwen.',
+				lang: 'en'
 			},
 			{
 				id: 'flutter-workshop',
 				kind: 'workshop',
-				title: 'Flutter-workshop',
-				summary:
-					'Een workshop waarin deelnemers zelf met Flutter bouwen. Ook gegeven als training.',
-				lang: 'nl'
-			},
-			{
-				id: 'svelte-talk',
-				kind: 'talk',
-				title: 'Svelte-talk',
-				summary:
-					'Een talk over Svelte, een front-endframework dat componenten bij het bouwen compileert.',
+				title: 'Workshop Flutter',
+				summary: 'Hoe je begint met het bouwen van je eerste Flutter-app voor reviews.',
 				lang: 'nl'
 			}
 		],
@@ -708,7 +700,7 @@ export const nl: SiteContent = {
 				offerId: 'flutter-workshop',
 				date: '2022-09-19',
 				event: 'Ordina België',
-				title: 'Flutter-training'
+				title: 'Training Flutter'
 			},
 			{
 				id: 'flutter-code-comedy',
@@ -718,7 +710,7 @@ export const nl: SiteContent = {
 			},
 			{
 				id: 'svelte-nieuwegein',
-				offerId: 'svelte-talk',
+				offerId: 'frontend-love',
 				date: '2022-04-13',
 				event: 'FrontEnd Meetup Nieuwegein'
 			}
