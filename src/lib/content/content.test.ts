@@ -419,12 +419,38 @@ describe('variant copy', () => {
 		expect(nl.availability.job.title).toBe('Overdag: in loondienst');
 	});
 
-	it('names what I.T. It takes on', () => {
+	it('names what I.T. It takes on, without tying it to a tech stack', () => {
 		for (const [, c] of both) {
-			const takes = c.availability.freelance.takesOn.join(' ');
-			for (const word of ['Laravel', 'Svelte', 'Vue', 'Flutter']) expect(takes).toContain(word);
 			expect(c.availability.freelance.takesOn.length).toBeGreaterThanOrEqual(4);
+			// Robbin is not tied to Laravel or Svelte: the chip, the company lead and the meta say
+			// that the solution is found together, and none of them lists a stack.
+			const copy = [
+				...c.availability.freelance.body,
+				...c.availability.freelance.takesOn,
+				c.hero.lead.company,
+				c.meta.company.title,
+				c.meta.company.description
+			].join(' ');
+			expect(copy).not.toMatch(/laravel|svelte|vue|flutter|react|angular/i);
 		}
+		expect(nl.availability.freelance.body.join(' ')).toMatch(/samen/);
+		expect(en.availability.freelance.body.join(' ')).toMatch(/together/);
+	});
+
+	it('offers plain computer help: a printer, email, for people who are not used to technology', () => {
+		const help = (c: typeof nl) =>
+			[...c.availability.freelance.body, ...c.availability.freelance.takesOn].join(' ');
+		expect(help(nl)).toMatch(/printer/);
+		expect(help(nl)).toMatch(/e-mail/);
+		expect(help(nl)).toMatch(/ouderen/);
+		expect(help(en)).toMatch(/printer/);
+		expect(help(en)).toMatch(/email/);
+		expect(help(en)).toMatch(/older people/);
+		// The company page says it up front too, and the meta mentions it.
+		expect(nl.hero.lead.company).toMatch(/computer/);
+		expect(en.hero.lead.company).toMatch(/computer/);
+		expect(nl.meta.company.description).toMatch(/computer/);
+		expect(en.meta.company.description).toMatch(/computer/);
 	});
 
 	it('has the freelance mail subject of the plan, without an address in it', () => {

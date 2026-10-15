@@ -10,9 +10,9 @@ export const nl: SiteContent = {
 
 	meta: {
 		company: {
-			title: 'I.T. It: webapplicaties en apps van Robbin Schepers',
+			title: 'I.T. It: software en computerhulp van Robbin Schepers',
 			description:
-				'I.T. It bouwt webapplicaties en apps met Laravel, Svelte, Vue en Flutter. Robbin Schepers werkt eraan doordeweeks vanaf 18:00 en in het weekend.'
+				'I.T. It bouwt webapplicaties en apps en helpt bij computerproblemen. Samen zoeken we de beste oplossing. Doordeweeks vanaf 18:00 en in het weekend.'
 		},
 		personal: {
 			title: 'Robbin Schepers, developer en oprichter van I.T. It',
@@ -29,7 +29,7 @@ export const nl: SiteContent = {
 	hero: {
 		lead: {
 			company:
-				'Als I.T. It bouw ik webapplicaties en apps met Laravel, Svelte, Vue en Flutter, in de avonden en het weekend.',
+				'Als I.T. It bouw ik webapplicaties en apps en help ik bij computerproblemen, in de avonden en het weekend.',
 			personal:
 				'Ik werk overdag als developer en bouw in de avonden en het weekend projecten met mijn eigen bedrijf, I.T. It.'
 		},
@@ -54,14 +54,15 @@ export const nl: SiteContent = {
 		freelance: {
 			title: 'Avonden en weekenden: I.T. It',
 			body: [
-				'Naast mijn baan heb ik een eigen bedrijf, I.T. It. Ik neem projecten aan voor webapplicaties en apps, van het eerste ontwerp tot een draaiende applicatie.'
+				'Naast mijn baan heb ik een eigen bedrijf, I.T. It. Heb je een probleem of een idee waar techniek bij hoort? Dan zoeken we samen uit wat de beste oplossing is. Ik ben niet gebonden aan één taal of framework en kies wat bij jouw situatie past.',
+				'Computerhulp doe ik meestal voor ouderen en voor anderen die niet gewend zijn aan techniek. Ik leg het rustig uit, in gewone taal.'
 			],
 			hours: 'Doordeweeks vanaf 18:00 en in het weekend',
 			takesOn: [
-				"Laravel-applicaties en API's",
-				'Front-ends in Svelte of Vue',
-				'Mobiele apps in Flutter',
-				'Technisch leiderschap en applicatie-architectuur'
+				'Webapplicaties en apps, van eerste idee tot draaiende applicatie',
+				'Bestaande software verbeteren of redden',
+				'Technisch advies en applicatie-architectuur',
+				'Computerhulp, zoals een printer aansluiten of e-mail instellen'
 			],
 			cta: 'Project voor I.T. It',
 			emailSubject: 'Project voor I.T. It'

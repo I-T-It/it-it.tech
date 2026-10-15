@@ -9,9 +9,9 @@ export const en: SiteContent = {
 
 	meta: {
 		company: {
-			title: 'I.T. It: web applications and apps by Robbin Schepers',
+			title: 'I.T. It: software and computer help by Robbin Schepers',
 			description:
-				'I.T. It builds web applications and apps with Laravel, Svelte, Vue and Flutter. Robbin Schepers works on them on weekday evenings from 18:00 and at weekends.'
+				'I.T. It builds web applications and apps and helps with computer problems. Together we find the best solution. Weekday evenings from 18:00 and weekends.'
 		},
 		personal: {
 			title: 'Robbin Schepers, developer and founder of I.T. It',
@@ -28,7 +28,7 @@ export const en: SiteContent = {
 	hero: {
 		lead: {
 			company:
-				'As I.T. It I build web applications and apps with Laravel, Svelte, Vue and Flutter, in the evenings and at weekends.',
+				'As I.T. It I build web applications and apps and help with computer problems, in the evenings and at weekends.',
 			personal:
 				'I work as a developer by day, and in the evenings and at weekends I build projects with my own company, I.T. It.'
 		},
@@ -53,14 +53,15 @@ export const en: SiteContent = {
 		freelance: {
 			title: 'Evenings and weekends: I.T. It',
 			body: [
-				'Alongside my job I have my own company, I.T. It. I take on projects for web applications and apps, from the first design to a running application.'
+				'Alongside my job I have my own company, I.T. It. Do you have a problem or an idea that involves technology? Then we work out the best solution together. I am not tied to one language or framework and I pick what fits your situation.',
+				'I do computer help mostly for older people and for others who are not used to technology. I explain it calmly, in plain language.'
 			],
 			hours: 'Weekday evenings from 18:00 and weekends',
 			takesOn: [
-				'Laravel applications and APIs',
-				'Front-ends in Svelte or Vue',
-				'Mobile apps in Flutter',
-				'Technical leadership and application architecture'
+				'Web applications and apps, from first idea to a running application',
+				'Improving or rescuing existing software',
+				'Technical advice and application architecture',
+				'Computer help, such as connecting a printer or setting up email'
 			],
 			cta: 'Project for I.T. It',
 			emailSubject: 'Project for I.T. It'
