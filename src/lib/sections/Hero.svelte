@@ -10,8 +10,47 @@
 	import Logo from '#lib/components/Logo.svelte';
 	import { profileIcons } from '#lib/components/profile-icons.js';
 	import ScrollIndicator from '#lib/components/ScrollIndicator.svelte';
+	import type { Attachment } from 'svelte/attachments';
 
 	const content = getContent(getLocale());
+
+	/**
+	 * The line under the name spans the name: as wide as its widest line, so its pads sit on the
+	 * first and last glyph (the grid centres it, like the text). Measured from the glyphs, again
+	 * once the fonts are in and whenever the name reflows. Without scripts it is as wide as the
+	 * text block.
+	 */
+	const spanName: Attachment<HTMLElement> = (rule) => {
+		const name = rule.parentElement?.querySelector('h1');
+		if (!name) return;
+		const measure = () => {
+			const range = document.createRange();
+			range.selectNodeContents(name);
+			const lines: { top: number; bottom: number; left: number; right: number }[] = [];
+			for (const box of range.getClientRects()) {
+				if (box.width === 0) continue;
+				const middle = (box.top + box.bottom) / 2;
+				const line = lines.find((l) => middle > l.top && middle < l.bottom);
+				if (line) {
+					line.left = Math.min(line.left, box.left);
+					line.right = Math.max(line.right, box.right);
+				} else {
+					lines.push({ top: box.top, bottom: box.bottom, left: box.left, right: box.right });
+				}
+			}
+			const widest = Math.max(0, ...lines.map((l) => l.right - l.left));
+			const block = rule.parentElement!.getBoundingClientRect().width;
+			// A share of the text block, not pixels: the line never widens the block it sits in.
+			if (widest > 0 && block > 0) {
+				rule.style.setProperty('--name-width', `${Math.min(100, (widest / block) * 100)}%`);
+			}
+		};
+		measure();
+		void document.fonts?.ready.then(measure);
+		const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+		observer?.observe(name);
+		return () => observer?.disconnect();
+	};
 
 	/**
 	 * The photo's footprint: an 11 by 11 grid with pads round the outside and the photo in the
@@ -152,7 +191,7 @@
 				<span class="q">"</span><span class="nick">{company.nickname}</span><span class="q">"</span>
 				{company.familyName}
 			</h1>
-			<span class="rule" aria-hidden="true"></span>
+			<span class="rule" aria-hidden="true" {@attach spanName}></span>
 			<p class="tagline" lang="en">{content.profile.tagline}</p>
 			<!-- The same name everywhere he is online, as in his talks. Text, not a link. -->
 			<p class="follow">{m.hero_follow()} <span class="handle">{company.githubHandle}</span></p>
@@ -375,8 +414,12 @@
 	.rule {
 		position: relative;
 		display: block;
-		/* The end pads hang 4px outside the line: stay that far inside the hero, which clips sideways. */
-		width: min(calc(100% - 10px), 24rem);
+		/*
+		 * As wide as the name's widest line (--name-width, measured), so the end pads sit on its
+		 * first and last glyph. Without it: the text block, less room for the pads, which hang 4px
+		 * outside the line and must stay inside the hero, which clips sideways.
+		 */
+		width: var(--name-width, calc(100% - 10px));
 		height: 2px;
 		margin-block: 0.875rem 1rem;
 		background: linear-gradient(90deg, var(--trace-cyan), var(--ink) 50%, var(--trace-green));

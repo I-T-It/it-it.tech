@@ -103,6 +103,37 @@ describe('Hero', () => {
 		expect(getComputedStyle(quotes[0]).color).not.toBe(style.color);
 	});
 
+	for (const [width, height] of [
+		[1440, 900],
+		[375, 667]
+	]) {
+		it(`underlines the whole name, its pads on the first and last glyph, at ${width} px`, async () => {
+			await page.viewport(width, height);
+			await mount(Hero, true);
+			const h1 = hero().querySelector('h1')!;
+			// The widest line of the name, from its glyphs.
+			const range = document.createRange();
+			range.selectNodeContents(h1);
+			const boxes = [...range.getClientRects()].filter((r) => r.width > 0);
+			const lines: { top: number; bottom: number; left: number; right: number }[] = [];
+			for (const box of boxes) {
+				const middle = (box.top + box.bottom) / 2;
+				const line = lines.find((l) => middle > l.top && middle < l.bottom);
+				if (line) {
+					line.left = Math.min(line.left, box.left);
+					line.right = Math.max(line.right, box.right);
+				} else lines.push({ top: box.top, bottom: box.bottom, left: box.left, right: box.right });
+			}
+			const widest = lines.reduce((a, b) => (b.right - b.left > a.right - a.left ? b : a));
+			await expect
+				.poll(() => {
+					const rule = hero().querySelector('.rule')!.getBoundingClientRect();
+					return [rule.left - widest.left, rule.right - widest.right].map(Math.round);
+				})
+				.toEqual([0, 0]);
+		});
+	}
+
 	it('keeps the name on one line on a desktop window and on at most two lines on a phone', async () => {
 		await page.viewport(1440, 900);
 		await mount(Hero, true);
