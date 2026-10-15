@@ -1,0 +1,16 @@
+{
+	"$schema": "https://inlang.com/schema/inlang-message-format",
+	"page_title_company": "I.T. It van Robbin Schepers",
+	"page_title_personal": "Robbin Schepers, developer en oprichter van I.T. It",
+	"language_label": "Taal",
+	"skip_to_content": "Naar de inhoud",
+	"availability_job_title": "Overdag: in loondienst",
+	"availability_freelance_title": "Avonden en weekenden: I.T. It",
+	"about_title": "Over mij",
+	"competences_title": "Wat ik goed kan",
+	"experience_title": "Ervaring",
+	"skills_title": "Vaardigheden",
+	"talks_title": "Talks en workshops",
+	"education_title": "Opleiding en talen",
+	"contact_title": "Contact"
+}

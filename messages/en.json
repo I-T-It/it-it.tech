@@ -1,0 +1,16 @@
+{
+	"$schema": "https://inlang.com/schema/inlang-message-format",
+	"page_title_company": "I.T. It by Robbin Schepers",
+	"page_title_personal": "Robbin Schepers, developer and founder of I.T. It",
+	"language_label": "Language",
+	"skip_to_content": "Skip to content",
+	"availability_job_title": "By day: employed",
+	"availability_freelance_title": "Evenings and weekends: I.T. It",
+	"about_title": "About me",
+	"competences_title": "What I do well",
+	"experience_title": "Experience",
+	"skills_title": "Skills",
+	"talks_title": "Talks and workshops",
+	"education_title": "Education and languages",
+	"contact_title": "Contact"
+}
