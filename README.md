@@ -74,3 +74,7 @@ The repository variables `COMPANY_DOMAIN` and `PERSONAL_DOMAIN` switch a build t
 ## Accessibility
 
 The target is WCAG 2.2 level AA. The e2e suite runs axe with the `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` and `wcag22aa` tags and expects no violations.
+
+## Third-party material
+
+The brand icons in the hero are the path data of [Font Awesome Free](https://fontawesome.com/license/free) (`@fortawesome/free-brands-svg-icons`), licensed CC BY 4.0, drawn as inline SVG by `src/lib/components/Icon.svelte`. No font and no stylesheet is loaded from Font Awesome.
