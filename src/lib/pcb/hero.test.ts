@@ -237,9 +237,11 @@ describe('layoutBoard hero field', () => {
 	const input = heroPage('1440x900');
 	const board = layoutBoard(input);
 	const field = heroTraces(board);
-	// Rim traces end on the ellipse; fill traces ("hero:f...") end in vias on the open board.
-	const rim = field.filter((t) => !t.id.startsWith('hero:f'));
+	// Rim traces ("hero:4.1") end on the ellipse; fill traces ("hero:f...") end in vias on the
+	// open board; dots ("hero:d...") run from a via to a via.
+	const rim = field.filter((t) => /^hero:\d/.test(t.id));
 	const fill = field.filter((t) => t.id.startsWith('hero:f'));
+	const dots = field.filter((t) => t.id.startsWith('hero:d'));
 	const { ellipse, rect: area } = input.hero!;
 
 	it('fills the hero with a dense field of traces', () => {
@@ -248,12 +250,29 @@ describe('layoutBoard hero field', () => {
 	});
 
 	it('fills the open board between the rim buses with buses from the edges that end in vias', () => {
-		expect(fill.length).toBeGreaterThan(10);
+		expect(fill.length).toBeGreaterThan(4);
 		for (const trace of fill) {
 			expect(onEdge(trace.points[0], area, board.width), trace.id).toBe(true);
 			expect(trace.startVia, trace.id).toBeUndefined();
 			expect(trace.end).toEqual({ kind: 'via' });
 		}
+	});
+
+	it('fills what open board is left with short traces from a via to a via', () => {
+		expect(dots.length).toBeGreaterThan(20);
+		for (const trace of dots) {
+			expect(trace.startVia, trace.id).toBe(true);
+			expect(trace.end).toEqual({ kind: 'via' });
+			expect(onEdge(trace.points[0], area, board.width), trace.id).toBe(false);
+			expect(onEdge(trace.points.at(-1)!, area, board.width), trace.id).toBe(false);
+			expect(trace.length, trace.id).toBeGreaterThanOrEqual(2 * PITCH);
+			expect(trace.length, trace.id).toBeLessThanOrEqual(16 * PITCH * Math.SQRT2);
+			expect(trace.points.length, trace.id).toBeLessThanOrEqual(3);
+		}
+		// Some of them in pairs, side by side.
+		const buses = new Map<string, number>();
+		for (const trace of dots) buses.set(trace.bus, (buses.get(trace.bus) ?? 0) + 1);
+		expect([...buses.values()].some((n) => n === 2)).toBe(true);
 	});
 
 	it('never lets a trace turn back on itself', () => {

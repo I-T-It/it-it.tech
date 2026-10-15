@@ -14,7 +14,7 @@
  * left. Pass the content block by block (the socket, each line of text), not as one box: a wide
  * name over narrow lines needs a much flatter ellipse than their box would.
  *
- * `heroField` (called by `layoutBoard`) routes the field on the board's grid, in two passes:
+ * `heroField` (called by `layoutBoard`) routes the field on the board's grid, in three passes:
  * - Rim buses: it walks round the ellipse and plugs buses of 3 to 5 traces, two cells apart, into
  *   its rim, with a gap of 4 to 6 cells between buses. Each trace leaves the rim straight along
  *   the heading nearest to the ellipse's outward normal and runs to the window edge that heading
@@ -23,6 +23,7 @@
  *   ends there in a via; one in five starts at a via on the board instead, part of the way in.
  * - Fill buses: from every window edge, buses of 2 to 4 traces run into the open board left
  *   between the rim buses, bend once or not at all, and end in vias.
+ * - Dots: short traces from a via to a via fill what open board is left.
  * Nothing enters the ellipse (it is blocked on the grid, 6 px wider than it is, so the glow stays
  * out too), no trace turns back on itself, and the field keeps to the hero's rows above the first
  * chip and out of anything blocked already (the hero's controls, the spine). The same input and
@@ -88,6 +89,16 @@ const FILL_BUS_MAX = 4;
 const FILL_MIN_RUN = 6;
 /** How far in from the edge a free run is measured, in cells. */
 const FILL_MAX_RUN = 48;
+/** One try at a dot trace per this many cells of field. */
+const DOT_TRY_CELLS = 4;
+/** A dot trace's first run, in cells... */
+const DOT_RUN_MIN = 2;
+const DOT_RUN_MAX = 9;
+/** ...and its run after the bend, when it bends. */
+const DOT_BEND_MIN = 2;
+const DOT_BEND_MAX = 6;
+/** Share of the dot traces that get a twin beside them. */
+const DOT_PAIR_SHARE = 0.35;
 /** Candidate heights tried when fitting the ellipse. */
 const FIT_STEPS = 240;
 
@@ -279,6 +290,7 @@ export function heroField(options: HeroFieldOptions): HeroRoute[] {
 		out: []
 	};
 	rimBuses(field, keep, createRng(deriveSeed(options.seed, 'hero')));
+	dotTraces(field, createRng(deriveSeed(options.seed, 'hero:dots')));
 	fillBuses(field, createRng(deriveSeed(options.seed, 'hero:fill')));
 	return field.out;
 }
@@ -478,6 +490,59 @@ function fillBuses(field: Field, rng: Rng): void {
 			if (made > 0) bus++;
 			a += SPACING * n + rng.int(2, 4);
 		}
+	}
+}
+
+/**
+ * The third pass: short traces from a via to a via, scattered over the open board that is left.
+ * Each runs straight for 2 to 9 cells, then on for 2 to 6 more after a 45-degree bend, or not; a
+ * straight one gets a twin beside it a third of the time. No search: a shape that does not fit
+ * where it lands is dropped.
+ */
+function dotTraces(field: Field, rng: Rng): void {
+	const { grid, window: w } = field;
+	const cells = (w.col1 - w.col0 + 1) * (w.row1 - w.row0 + 1);
+	const tries = Math.round(cells / DOT_TRY_CELLS);
+	// Away from the window edges, where the other traces come in.
+	const inside = (c: Cell) => c.col > w.col0 && c.col < w.col1 && c.row > w.row0 && c.row < w.row1;
+	const fits = (path: Cell[]) => path.every((c) => inside(c) && grid.isFree(c.col, c.row));
+	let made = 0;
+	for (let k = 0; k < tries; k++) {
+		const start = { col: rng.int(w.col0 + 1, w.col1 - 1), row: rng.int(w.row0 + 1, w.row1 - 1) };
+		const dir = rng.int(0, 7) as Dir;
+		const first = rng.int(DOT_RUN_MIN, DOT_RUN_MAX);
+		const turn = rng.next() < 0.5 ? 0 : rng.next() < 0.5 ? -1 : 1;
+		const second = turn === 0 ? 0 : rng.int(DOT_BEND_MIN, DOT_BEND_MAX);
+		const twin = rng.next() < DOT_PAIR_SHARE;
+		if (!grid.isFree(start.col, start.row)) continue;
+		const shape = (from: Cell): Cell[] => {
+			const bent = ((dir + turn + 8) & 7) as Dir;
+			const corner = { col: from.col + DX[dir] * first, row: from.row + DY[dir] * first };
+			const end = { col: corner.col + DX[bent] * second, row: corner.row + DY[bent] * second };
+			return second > 0 ? [from, corner, end] : [from, corner];
+		};
+		const path = shape(start);
+		if (!fits(walkCells(path))) continue;
+		grid.markPath(path);
+		const bus = `hero:d${made}`;
+		const add = (corners: Cell[], index: number) =>
+			field.out.push({
+				id: `${bus}.${index}`,
+				bus,
+				points: simplify(corners.map((c) => grid.centre(c.col, c.row))),
+				startVia: true
+			});
+		add(path, 0);
+		if (twin && second === 0) {
+			// A straight one gets a twin two cells to its side.
+			const side = ((dir + 2) & 7) as Dir;
+			const other = shape({ col: start.col + DX[side] * 2, row: start.row + DY[side] * 2 });
+			if (fits(walkCells(other))) {
+				grid.markPath(other);
+				add(other, 1);
+			}
+		}
+		made++;
 	}
 }
 
