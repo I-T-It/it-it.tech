@@ -4,15 +4,16 @@
 @import '@fontsource/fira-sans/latin-600.css';
 
 /*
- * Design tokens. S4 owns the final values and the base styles below the tokens.
- * Colours come from the logo and the business card, see the plan, section 3.
+ * Design tokens. The colours come from the logo and the business card (plan, section 3). Every
+ * pair of text and background is tested in src/lib/tokens.test.ts against the gradient at both
+ * ends, and against a bright trace showing through the translucent chip and header fills.
  */
 :root {
 	/* Board: the page background is a fixed horizontal gradient from navy to moss */
 	--board-navy: #001333;
 	--board-moss: #0b1f02;
 
-	/* Traces and pads */
+	/* Traces and pads. Traces from the left are cyan, from the right green. */
 	--trace-cyan: #00e7ff;
 	--trace-green: #3fd83f;
 	--pad-cyan: #d9fbff;
@@ -21,19 +22,30 @@
 	/* Text */
 	--ink: #ffffff;
 	--ink-muted: #a9bcc6;
+	/* The label on a filled button (cyan or green) */
+	--on-accent: #001333;
 
-	/* Silkscreen: chip outlines and designators */
+	/* Silkscreen: chip outlines and designators. --silk-faint is for decorative hairlines only. */
 	--silk: rgba(255, 255, 255, 0.55);
+	--silk-faint: rgba(255, 255, 255, 0.16);
+
+	/* Translucent fills. The canvas shows through a little, the text stays readable on top. */
+	--chip-fill: rgba(0, 10, 28, 0.8);
+	--header-fill: rgba(0, 8, 20, 0.9);
 
 	/* Paths: job is cyan, freelance is green */
 	--path-job: var(--trace-cyan);
 	--path-freelance: var(--trace-green);
+
+	/* Focus ring: 2px, at least 3:1 against every background above */
+	--focus: var(--trace-cyan);
 
 	/* Type */
 	--font-display: 'Fira Code Variable', ui-monospace, 'Cascadia Code', Menlo, monospace;
 	--font-body: 'Fira Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
 	--text-base: 1.0625rem;
+	--text-small: 0.9375rem;
 	--text-h1: clamp(2.5rem, 6vw, 4.5rem);
 	--text-h2: 1.75rem;
 	--text-h3: 1.2rem;
@@ -41,9 +53,43 @@
 	/* Layout */
 	--content-max: 72rem;
 	--gutter-min: 8vw;
+	/* Chip pins stick out 14px, so even the narrowest gutter keeps them on screen */
+	--gutter: max(var(--gutter-min), 1.5rem);
 	--measure: 68ch;
 
+	/*
+	 * Height of the sticky header. --header-min is the height of one row. SiteHeader measures
+	 * itself and writes the real value to <html> once it runs (it can differ when the header
+	 * wraps); --header-height here is the value for the first paint and for no JS.
+	 */
+	--header-min: 3.5rem;
+	--header-height: var(--header-min);
+
 	color-scheme: dark;
+}
+
+/* On a very short window (400% zoom on a laptop) the header scrolls away instead of sticking. */
+@media (max-height: 30rem) {
+	:root {
+		--header-height: 0px;
+	}
+}
+
+/*
+ * How much of a chip outline is drawn, 0 to 1. Registered, so it can transition and animate as
+ * a number: the Chip component drives it from the scroll position or from its boot state.
+ * 1 is the default, so an outline with no script and no animation is whole.
+ */
+@property --draw {
+	syntax: '<number>';
+	inherits: true;
+	initial-value: 1;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
 }
 
 html {
@@ -53,21 +99,48 @@ html {
 	color: var(--ink);
 	font-family: var(--font-body);
 	font-size: 100%;
+	/* Keep text size when a phone rotates; the viewport meta already allows zoom. */
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+	/* The sticky header must never cover the focused element (2.4.11). */
+	scroll-padding-top: var(--header-height);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	html:not(.reduced) {
+		scroll-behavior: smooth;
+	}
 }
 
 body {
 	margin: 0;
 	min-height: 100vh;
+	min-height: 100dvh;
+	display: flex;
+	flex-direction: column;
 	font-size: var(--text-base);
 	line-height: 1.6;
+}
+
+/* The page content grows, so the footer sits at the bottom of a short page. */
+main {
+	flex: 1 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: clamp(2rem, 5vw, 3.5rem);
+	width: min(var(--content-max), calc(100% - 2 * var(--gutter)));
+	margin-inline: auto;
+	padding-block: clamp(1.5rem, 4vw, 3rem) clamp(3rem, 8vw, 6rem);
 }
 
 h1,
 h2,
 h3 {
+	margin-block: 0 0.5em;
 	font-family: var(--font-display);
 	font-weight: 500;
 	line-height: 1.2;
+	text-wrap: balance;
 }
 
 h1 {
@@ -82,28 +155,47 @@ h3 {
 	font-size: var(--text-h3);
 }
 
-a {
-	color: inherit;
+p {
+	margin-block: 0 1em;
+	max-width: var(--measure);
 }
 
-/* Accessibility base for WCAG 2.2 AA. S4 owns the final version. */
+a {
+	color: inherit;
+	text-decoration-thickness: 0.08em;
+	text-underline-offset: 0.2em;
+}
+
+img,
+svg {
+	max-width: 100%;
+}
+
+::selection {
+	background: var(--trace-cyan);
+	color: var(--board-navy);
+}
+
+[hidden] {
+	display: none !important;
+}
+
+/* Accessibility base for WCAG 2.2 AA. */
 
 /* Visible focus: 2px outline, 3:1 against the gradient at both ends (2.4.7, 2.4.13). */
 :focus-visible {
-	outline: 2px solid var(--trace-cyan);
+	outline: 2px solid var(--focus);
 	outline-offset: 2px;
+	/* A focused element scrolls to this far below the sticky header, so its ring stays visible. */
+	scroll-margin-top: 0.5rem;
 }
 
-/* The sticky header must never cover the focused element (2.4.11). S4 sets --header-height. */
-:root {
-	--header-height: 0px;
+/* A target that only takes focus from a script (the skip link goes to main) shows no ring. */
+[tabindex='-1']:focus {
+	outline: none;
 }
 
-html {
-	scroll-padding-top: var(--header-height);
-}
-
-/* Text for screen readers only, e.g. the "(opens LinkedIn)" notice and the skill level. */
+/* Text for screen readers only, e.g. the "(external site)" notice and the skill level. */
 .sr-only {
 	position: absolute;
 	width: 1px;
@@ -124,9 +216,57 @@ html {
 	padding: 0.75rem 1rem;
 	background: var(--board-navy);
 	color: var(--ink);
+	font-family: var(--font-display);
+	font-size: var(--text-small);
 	transform: translateY(-110%);
 }
 
 .skip-link:focus {
 	transform: none;
+}
+
+/*
+ * Buttons and button-like links, shared by the sections and ProtectedEmail.
+ * `.cta` is the outline button, `.cta-filled` the filled one. `.cta-job` and `.cta-freelance`
+ * pick the path colour. The target is 44px high, well above the 24px minimum (2.5.8).
+ */
+.cta {
+	--cta-accent: var(--ink);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	min-height: 2.75rem;
+	padding: 0.5rem 1.25rem;
+	border: 2px solid var(--cta-accent);
+	border-radius: 0.25rem;
+	background: transparent;
+	color: var(--ink);
+	font: 500 1rem/1.25 var(--font-body);
+	text-align: center;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.cta-job {
+	--cta-accent: var(--path-job);
+}
+
+.cta-freelance {
+	--cta-accent: var(--path-freelance);
+}
+
+.cta-filled {
+	background: var(--cta-accent);
+	color: var(--on-accent);
+}
+
+@media (hover: hover) {
+	.cta:hover {
+		background: color-mix(in srgb, var(--cta-accent) 16%, transparent);
+	}
+
+	.cta-filled:hover {
+		background: color-mix(in srgb, var(--cta-accent) 82%, white);
+	}
 }
