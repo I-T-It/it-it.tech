@@ -22,7 +22,8 @@
 		"format": "node scripts/prettier.mjs --write .",
 		"test:unit": "vitest",
 		"test": "vitest --run",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+		"test:dev": "node scripts/test-dev.mjs"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "^4.13.0",

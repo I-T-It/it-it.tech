@@ -28,6 +28,7 @@ pnpm check          # svelte-check
 pnpm lint           # prettier and eslint
 pnpm test           # vitest, unit and browser
 pnpm test:e2e       # builds both variants and runs Playwright against them
+pnpm test:dev       # starts pnpm dev for each variant and base path, checks the page hydrates
 pnpm build:company  # dist/company and e2e-out/company/it-it.tech
 pnpm build:personal # dist/personal and e2e-out/personal/deschepers.nl
 ```
@@ -40,6 +41,8 @@ pnpm exec sirv e2e-out/personal --port 4174   # http://localhost:4174/deschepers
 ```
 
 `pnpm test:e2e` uses ports 4173 and 4174. Set `E2E_PORT_COMPANY` and `E2E_PORT_PERSONAL` when they are taken.
+
+`pnpm test:dev` runs the dev server on port 5180, one variant at a time (set `DEV_TEST_PORT` when it is taken). `pnpm dev` has no base path unless you set `BASE_PATH`.
 
 ## How the two builds differ
 
@@ -55,8 +58,9 @@ src/lib/content/         typed copy (Dutch and English) and company facts
 src/lib/pcb/             board registry, later the layout engine and renderer
 src/lib/sections/        one component per section of the page
 messages/                interface strings (Paraglide)
-scripts/                 build-variant.mjs, e2e-serve.mjs and shared helpers
-e2e/                     Playwright specs
+scripts/                 build-variant.mjs, e2e-serve.mjs, test-dev.mjs and shared helpers
+e2e/                     Playwright specs for the built sites
+e2e-dev/                 Playwright specs for the dev server
 ```
 
 Dutch is the source language and lives at `/`, English at `/en/`.

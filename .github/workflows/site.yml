@@ -23,6 +23,7 @@ jobs:
       - run: pnpm check
       - run: pnpm lint
       - run: pnpm test
+      - run: pnpm test:dev
       - run: pnpm test:e2e
       - name: Keep the e2e results of a failed run
         if: failure()
