@@ -1,0 +1,593 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
+import { pointAt } from './geometry.js';
+import { BOOT_FALLBACK_MS, FRONT_RATIO, SOCKET_MS } from './growth.js';
+import type { Trace } from './layout.js';
+import { MAX_DPR } from './renderer.js';
+import { registerChip, registerSocket, type ChipHandle } from './registry.svelte.js';
+import { BoardRuntime, RELAYOUT_DEBOUNCE_MS, type MotionQuery } from './runtime.svelte.js';
+
+const WIDTH = 1200;
+const HEIGHT = 800;
+const HERO = 800;
+const GAP = 160;
+const PIN_PITCH = 48;
+
+interface PageOptions {
+	/** Chip heights, top to bottom. */
+	chips?: number[];
+	/** Indexes of chips that get no pins (they boot on the timer). */
+	pinless?: number[];
+	socket?: boolean;
+}
+
+interface TestPage {
+	root: HTMLElement;
+	handles: ChipHandle[];
+	sections: HTMLElement[];
+}
+
+let cleanups: (() => void)[] = [];
+
+/** A hero with a socket, then chips with pins down both sides, centred in a 600 px column. */
+function buildPage({
+	chips = [400, 600, 500, 900, 500],
+	pinless = [],
+	socket = true
+}: PageOptions = {}): TestPage {
+	document.body.style.margin = '0';
+	const root = document.createElement('div');
+	const hero = document.createElement('div');
+	hero.style.cssText = `height:${HERO}px;padding-top:300px;box-sizing:border-box`;
+	root.append(hero);
+	document.body.append(root);
+	cleanups.push(() => root.remove());
+
+	if (socket) {
+		const el = document.createElement('div');
+		el.style.cssText = 'position:relative;width:300px;height:120px;margin:0 auto';
+		for (const side of ['left', 'right']) {
+			const port = document.createElement('span');
+			port.setAttribute('data-port', side);
+			port.style.cssText = `position:absolute;${side}:40px;top:60px;width:2px;height:2px`;
+			el.append(port);
+		}
+		hero.append(el);
+		cleanups.push(registerSocket(el));
+	}
+
+	const handles: ChipHandle[] = [];
+	const sections: HTMLElement[] = [];
+	chips.forEach((height, index) => {
+		const section = document.createElement('section');
+		section.style.cssText = `position:relative;width:600px;height:${height}px;margin:0 auto ${GAP}px`;
+		if (!pinless.includes(index)) {
+			const count = Math.max(2, Math.floor(height / PIN_PITCH));
+			for (const side of ['left', 'right']) {
+				for (let k = 0; k < count; k++) {
+					const pin = document.createElement('span');
+					pin.setAttribute('data-pin', String(side === 'left' ? k : count + k));
+					pin.setAttribute('data-pin-side', side);
+					pin.style.cssText = `position:absolute;${side}:-10px;top:${24 + k * PIN_PITCH}px;width:10px;height:4px`;
+					section.append(pin);
+				}
+			}
+		}
+		root.append(section);
+		const handle = registerChip(section, {
+			id: `c${index}`,
+			designator: `U${index}`,
+			side: 'both'
+		});
+		cleanups.push(() => handle.destroy());
+		handles.push(handle);
+		sections.push(section);
+	});
+
+	const footer = document.createElement('div');
+	footer.style.height = '400px';
+	root.append(footer);
+	return { root, handles, sections };
+}
+
+function makeCanvas(): HTMLCanvasElement {
+	const canvas = document.createElement('canvas');
+	canvas.style.cssText =
+		'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1';
+	canvas.setAttribute('aria-hidden', 'true');
+	document.body.prepend(canvas);
+	cleanups.push(() => canvas.remove());
+	return canvas;
+}
+
+/** A clock the test moves by hand. */
+function manualClock(start = 1000) {
+	let time = start;
+	return {
+		now: () => time,
+		advance(ms: number) {
+			time += ms;
+		}
+	};
+}
+
+function fakeMotionQuery(initial: boolean): MotionQuery & { set(matches: boolean): void } {
+	const listeners = new Set<() => void>();
+	let matches = initial;
+	return {
+		get matches() {
+			return matches;
+		},
+		addEventListener: (_type: 'change', listener: () => void) => listeners.add(listener),
+		removeEventListener: (_type: 'change', listener: () => void) => listeners.delete(listener),
+		set(value: boolean) {
+			matches = value;
+			for (const listener of listeners) listener();
+		}
+	};
+}
+
+function launch(options: ConstructorParameters<typeof BoardRuntime>[1] = {}) {
+	const canvas = makeCanvas();
+	const runtime = new BoardRuntime(canvas, {
+		reducedMotion: fakeMotionQuery(false),
+		debug: true,
+		...options
+	});
+	cleanups.push(() => runtime.destroy());
+	return { canvas, runtime };
+}
+
+function nextFrame(): Promise<void> {
+	return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+async function frames(count: number): Promise<void> {
+	for (let i = 0; i < count; i++) await nextFrame();
+}
+
+async function until(condition: () => boolean, timeout = 4000): Promise<void> {
+	const start = performance.now();
+	while (!condition()) {
+		if (performance.now() - start > timeout) throw new Error('timed out');
+		await nextFrame();
+	}
+}
+
+async function scrollTo(y: number): Promise<void> {
+	window.scrollTo(0, y);
+	await frames(2);
+}
+
+function tracesOf(runtime: BoardRuntime, kind: Trace['kind']): Trace[] {
+	return runtime.board?.traces.filter((t) => t.kind === kind) ?? [];
+}
+
+function spineDrawn(runtime: BoardRuntime): number {
+	return tracesOf(runtime, 'spine').reduce((sum, t) => sum + runtime.growth!.drawn(t.id), 0);
+}
+
+function pointer(type: string, x: number, y: number, pointerType = 'mouse'): void {
+	window.dispatchEvent(
+		new PointerEvent(type, {
+			clientX: x - window.scrollX,
+			clientY: y - window.scrollY,
+			pointerType,
+			bubbles: true
+		})
+	);
+}
+
+beforeEach(async () => {
+	await page.viewport(WIDTH, HEIGHT);
+	window.scrollTo(0, 0);
+});
+
+afterEach(() => {
+	for (const cleanup of cleanups.reverse()) cleanup();
+	cleanups = [];
+	window.scrollTo(0, 0);
+	vi.restoreAllMocks();
+});
+
+describe('start', () => {
+	it('lays out the registered chips and the socket and draws', async () => {
+		buildPage();
+		const { canvas, runtime } = launch();
+		expect(canvas.dataset.pcbState).toBe('init');
+		await runtime.start();
+		expect(runtime.board?.chips.map((c) => c.id)).toEqual(['c0', 'c1', 'c2', 'c3', 'c4']);
+		expect(tracesOf(runtime, 'socket').length).toBeGreaterThan(0);
+		expect(tracesOf(runtime, 'spine').length).toBeGreaterThan(0);
+		expect(tracesOf(runtime, 'branch').length).toBeGreaterThan(0);
+		expect(runtime.frames).toBeGreaterThanOrEqual(1);
+		expect(['running', 'idle']).toContain(canvas.dataset.pcbState);
+	});
+
+	it('sizes the canvas to the viewport', async () => {
+		buildPage();
+		const { canvas, runtime } = launch();
+		await runtime.start();
+		const rect = canvas.getBoundingClientRect();
+		expect(canvas.width).toBe(Math.round(rect.width * Math.min(MAX_DPR, devicePixelRatio)));
+		expect(canvas.height).toBe(Math.round(rect.height * Math.min(MAX_DPR, devicePixelRatio)));
+	});
+
+	it('caps the device pixel ratio at 2', async () => {
+		const original = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
+		Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: () => 3 });
+		cleanups.push(() => {
+			if (original) Object.defineProperty(window, 'devicePixelRatio', original);
+			else delete (window as { devicePixelRatio?: number }).devicePixelRatio;
+		});
+		buildPage();
+		const { canvas, runtime } = launch();
+		await runtime.start();
+		expect(canvas.width).toBe(Math.round(canvas.getBoundingClientRect().width * 2));
+	});
+
+	it('lays out a real page well within budget', async () => {
+		await page.viewport(1440, 900);
+		buildPage({ chips: [700, 400, 500, 520, 2600, 900, 700, 420, 380] });
+		const { runtime } = launch();
+		await runtime.start();
+		console.info(
+			`measure ${runtime.lastMeasureMs.toFixed(1)} ms, layout ${runtime.lastLayoutMs.toFixed(1)} ms`
+		);
+		// The budget is 30 ms on a mid-range laptop; CI machines get headroom.
+		expect(runtime.lastLayoutMs).toBeLessThan(100);
+	});
+});
+
+describe('socket load sequence', () => {
+	it('grows every socket trace to full within 2 s of the start, then idles', async () => {
+		buildPage();
+		const { canvas, runtime } = launch();
+		await runtime.start();
+		const started = performance.now();
+		const sockets = tracesOf(runtime, 'socket');
+		expect(sockets.every((t) => runtime.growth!.isFull(t.id))).toBe(false);
+		await until(() => sockets.every((t) => runtime.growth!.isFull(t.id)), 3000);
+		expect(performance.now() - started).toBeLessThanOrEqual(SOCKET_MS + 100);
+		await until(() => canvas.dataset.pcbState === 'idle', 500);
+	});
+});
+
+describe('scroll', () => {
+	it('draws the spine by scroll position, both ways', async () => {
+		buildPage();
+		const clock = manualClock();
+		const { canvas, runtime } = launch({ now: clock.now });
+		await runtime.start();
+
+		await scrollTo(1500);
+		const down = spineDrawn(runtime);
+		expect(Number(canvas.dataset.spineFront)).toBe(Math.round(1500 + HEIGHT * FRONT_RATIO));
+		expect(down).toBeGreaterThan(0);
+
+		await scrollTo(3000);
+		const further = spineDrawn(runtime);
+		expect(further).toBeGreaterThan(down);
+		expect(Number(canvas.dataset.spineFront)).toBe(Math.round(3000 + HEIGHT * FRONT_RATIO));
+
+		await scrollTo(1500);
+		expect(spineDrawn(runtime)).toBeCloseTo(down, 5);
+	});
+
+	it('stops the loop one frame after scrolling stops', async () => {
+		const { root } = buildPage();
+		window.scrollTo(0, root.scrollHeight);
+		const clock = manualClock();
+		const { canvas, runtime } = launch({ now: clock.now });
+		await runtime.start();
+		// Let every timed trace and boot finish, then settle.
+		clock.advance(10_000);
+		await scrollTo(window.scrollY - 10);
+		await until(() => canvas.dataset.pcbState === 'idle', 1000);
+
+		const before = runtime.frames;
+		window.scrollTo(0, window.scrollY - 200);
+		await frames(6);
+		expect(runtime.frames).toBe(before + 1);
+		expect(canvas.dataset.pcbState).toBe('idle');
+	});
+
+	it('requests no frames while nothing moves', async () => {
+		buildPage();
+		const clock = manualClock();
+		const { runtime } = launch({ now: clock.now });
+		await runtime.start();
+		// Past the socket sequence and any decoration in view.
+		clock.advance(10_000);
+		await until(() => runtime.state === 'idle', 1000);
+		const before = runtime.frames;
+		await frames(10);
+		expect(runtime.frames).toBe(before);
+	});
+
+	it('snaps the chips above the front on a deep link', async () => {
+		const { sections, handles } = buildPage();
+		window.scrollTo(0, sections[3].offsetTop);
+		const clock = manualClock();
+		const { runtime } = launch({ now: clock.now });
+		await runtime.start();
+		const front = window.scrollY + HEIGHT * FRONT_RATIO;
+		for (const [index, handle] of handles.entries()) {
+			const above = sections[index].offsetTop <= front;
+			expect(handle.state).toBe(above ? 'on' : 'off');
+		}
+		const wiring = runtime.board!.chips.find((c) => c.id === 'c0')!;
+		expect(wiring.feeders.every((id) => runtime.growth!.isFull(id))).toBe(true);
+	});
+
+	it('boots a chip without branches on the 2.5 s fallback', async () => {
+		const { sections, handles } = buildPage({ pinless: [1] });
+		const clock = manualClock();
+		const { runtime } = launch({ now: clock.now });
+		await runtime.start();
+		expect(runtime.board!.chips.find((c) => c.id === 'c1')?.fallback).toBe(true);
+
+		await scrollTo(sections[1].offsetTop);
+		expect(handles[1].state).toBe('booting');
+		clock.advance(BOOT_FALLBACK_MS - 100);
+		await frames(2);
+		expect(handles[1].state).toBe('booting');
+		clock.advance(200);
+		await until(() => handles[1].state === 'on', 1000);
+	});
+
+	it('keeps booted chips on and their branches full when scrolling back up', async () => {
+		const { root, handles } = buildPage();
+		window.scrollTo(0, root.scrollHeight);
+		const clock = manualClock();
+		const { runtime } = launch({ now: clock.now });
+		await runtime.start();
+		await scrollTo(0);
+		expect(handles.every((h) => h.state === 'on')).toBe(true);
+		expect(tracesOf(runtime, 'branch').every((t) => runtime.growth!.isFull(t.id))).toBe(true);
+	});
+
+	it('has no long task over 50 ms during a 2 s scripted scroll', async () => {
+		await page.viewport(1440, 900);
+		const { root } = buildPage({ chips: [700, 400, 500, 520, 2600, 900, 700, 420, 380] });
+		const { runtime } = launch();
+		await runtime.start();
+		await frames(5);
+
+		const longTasks: number[] = [];
+		const supported = PerformanceObserver.supportedEntryTypes.includes('longtask');
+		const observer = supported
+			? new PerformanceObserver((list) => {
+					for (const entry of list.getEntries()) longTasks.push(entry.duration);
+				})
+			: null;
+		observer?.observe({ type: 'longtask' });
+
+		const bottom = root.scrollHeight - innerHeight;
+		const started = performance.now();
+		let elapsed = 0;
+		while (elapsed < 2000) {
+			await nextFrame();
+			elapsed = performance.now() - started;
+			const t = Math.min(1, elapsed / 2000);
+			// Down to the bottom in the first half, back up in the second.
+			window.scrollTo(0, bottom * (t < 0.5 ? t * 2 : 2 - t * 2));
+		}
+		await frames(3);
+		observer?.disconnect();
+
+		console.info(
+			`scripted scroll: ${runtime.frames} frames, slowest frame ${runtime.maxFrameMs.toFixed(1)} ms, ` +
+				`long tasks: ${supported ? longTasks.length : 'not supported'}`
+		);
+		expect(longTasks.filter((d) => d > 50)).toEqual([]);
+		expect(runtime.maxFrameMs).toBeLessThan(50);
+	});
+});
+
+describe('relayout', () => {
+	it('relays out after a size change, debounced, and keeps chips on', async () => {
+		const { root, sections, handles } = buildPage();
+		window.scrollTo(0, root.scrollHeight);
+		const clock = manualClock();
+		const { runtime } = launch({ now: clock.now });
+		await runtime.start();
+		expect(handles.every((h) => h.state === 'on')).toBe(true);
+		expect(runtime.layouts).toBe(1);
+
+		// Like a <details> opening inside a chip.
+		sections[1].style.height = '800px';
+		await frames(2);
+		sections[1].style.height = '900px';
+		await frames(2);
+		expect(runtime.layouts).toBe(1);
+		await until(() => runtime.layouts === 2, RELAYOUT_DEBOUNCE_MS + 1000);
+		await frames(3);
+		expect(runtime.layouts).toBe(2);
+
+		expect(handles.every((h) => h.state === 'on')).toBe(true);
+		for (const wiring of runtime.board!.chips) {
+			expect(wiring.feeders.every((id) => runtime.growth!.isFull(id))).toBe(true);
+		}
+	});
+
+	it('relays out when a chip registers', async () => {
+		buildPage({ chips: [400, 500] });
+		const clock = manualClock();
+		const { runtime } = launch({ now: clock.now });
+		await runtime.start();
+		const late = document.createElement('section');
+		late.style.cssText = 'width:600px;height:300px;margin:0 auto';
+		document.body.append(late);
+		cleanups.push(() => late.remove());
+		const handle = registerChip(late, { id: 'late', designator: 'U9', side: 'both' });
+		cleanups.push(() => handle.destroy());
+		expect(runtime.layouts).toBe(1);
+		await until(() => runtime.board!.chips.some((c) => c.id === 'late'), 1000);
+		expect(runtime.layouts).toBe(2);
+	});
+});
+
+describe('pointer pulses', () => {
+	/** Deep link to the first chip, so its branches are drawn, and the branch to aim at. */
+	async function aim() {
+		const { sections, handles } = buildPage();
+		window.scrollTo(0, sections[0].offsetTop - 100);
+		const { canvas, runtime } = launch();
+		await runtime.start();
+		const branch = tracesOf(runtime, 'branch').find(
+			(t) => t.chipId === 'c0' && runtime.growth!.isFull(t.id)
+		)!;
+		const near = pointAt(branch.points, branch.lengths, branch.length - 20);
+		return { canvas, runtime, branch, near, handle: handles[0] };
+	}
+
+	it('spawns a pulse near a trace and flashes the pin it reaches', async () => {
+		const { canvas, branch, near, handle } = await aim();
+		pointer('pointermove', near.x, near.y);
+		expect(Number(canvas.dataset.pulses)).toBeGreaterThan(0);
+		const end = branch.end;
+		if (end.kind !== 'pin') throw new Error('expected a pin');
+		const pin = handle.pins()[end.pin];
+		await until(() => pin.hasAttribute('data-flash'), 1000);
+		await until(() => canvas.dataset.pulses === '0', 1000);
+	});
+
+	it('ignores touch moves and spawns on a tap', async () => {
+		const { canvas, near } = await aim();
+		pointer('pointermove', near.x, near.y, 'touch');
+		expect(canvas.dataset.pulses ?? '0').toBe('0');
+		pointer('pointerdown', near.x, near.y, 'touch');
+		expect(Number(canvas.dataset.pulses)).toBeGreaterThan(0);
+	});
+
+	it('clears pulses and pauses when the tab is hidden', async () => {
+		const { canvas, runtime, near } = await aim();
+		const spine = tracesOf(runtime, 'spine')[0];
+		const onSpine = pointAt(spine.points, spine.lengths, 40);
+		pointer('pointermove', near.x, near.y);
+		pointer('pointermove', onSpine.x, onSpine.y);
+		expect(Number(canvas.dataset.pulses)).toBeGreaterThan(0);
+
+		const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+		document.dispatchEvent(new Event('visibilitychange'));
+		expect(canvas.dataset.pulses).toBe('0');
+		const before = runtime.frames;
+		await frames(4);
+		expect(runtime.frames).toBe(before);
+
+		visibility.mockReturnValue('visible');
+		document.dispatchEvent(new Event('visibilitychange'));
+		await frames(2);
+		expect(runtime.frames).toBeGreaterThan(before);
+	});
+});
+
+describe('reduced motion', () => {
+	it('draws once, static, fully grown, with every chip on', async () => {
+		const { handles } = buildPage();
+		const { canvas, runtime } = launch({ reducedMotion: fakeMotionQuery(true) });
+		await runtime.start();
+		await frames(10);
+		expect(canvas.dataset.pcbState).toBe('static');
+		expect(runtime.frames).toBe(1);
+		expect(handles.every((h) => h.state === 'on')).toBe(true);
+		expect(runtime.board!.traces.every((t) => runtime.growth!.isFull(t.id))).toBe(true);
+	});
+
+	it('spawns no pulses', async () => {
+		buildPage();
+		const { canvas, runtime } = launch({ reducedMotion: fakeMotionQuery(true) });
+		await runtime.start();
+		const branch = tracesOf(runtime, 'branch')[0];
+		pointer('pointermove', branch.points[0].x, branch.points[0].y);
+		expect(canvas.dataset.pulses ?? '0').toBe('0');
+	});
+
+	it('goes static when the setting turns on', async () => {
+		const { handles } = buildPage();
+		const query = fakeMotionQuery(false);
+		const { canvas, runtime } = launch({ reducedMotion: query });
+		await runtime.start();
+		expect(handles.every((h) => h.state === 'on')).toBe(false);
+		query.set(true);
+		expect(canvas.dataset.pcbState).toBe('static');
+		expect(handles.every((h) => h.state === 'on')).toBe(true);
+	});
+
+	it('redraws on scroll only to keep the board in place', async () => {
+		const { handles } = buildPage();
+		const { runtime } = launch({ reducedMotion: fakeMotionQuery(true) });
+		await runtime.start();
+		await scrollTo(600);
+		expect(runtime.frames).toBe(2);
+		await frames(5);
+		expect(runtime.frames).toBe(2);
+		expect(handles.every((h) => h.state === 'on')).toBe(true);
+	});
+});
+
+describe('fallbacks', () => {
+	it('turns the chips on and does not throw without a 2D context', async () => {
+		const { handles } = buildPage();
+		const canvas = makeCanvas();
+		vi.spyOn(canvas, 'getContext').mockReturnValue(null);
+		const runtime = new BoardRuntime(canvas, { reducedMotion: fakeMotionQuery(false) });
+		cleanups.push(() => runtime.destroy());
+		await expect(runtime.start()).resolves.toBeUndefined();
+		expect(canvas.dataset.pcbState).toBe('off');
+		expect(handles.every((h) => h.state === 'on')).toBe(true);
+		await scrollTo(500);
+		expect(runtime.frames).toBe(0);
+	});
+});
+
+describe('test-run attributes', () => {
+	it('exposes the spine front and the pulse count when debugging', async () => {
+		buildPage();
+		const { canvas, runtime } = launch({ debug: true });
+		await runtime.start();
+		expect(canvas.dataset.spineFront).toBe(String(Math.round(HEIGHT * FRONT_RATIO)));
+		expect(canvas.dataset.pulses).toBe('0');
+	});
+
+	it('leaves them out otherwise', async () => {
+		buildPage();
+		const { canvas, runtime } = launch({ debug: false });
+		await runtime.start();
+		expect(canvas.dataset.spineFront).toBeUndefined();
+		expect(canvas.dataset.pulses).toBeUndefined();
+	});
+
+	it('turns them on by default in automated browsers', async () => {
+		buildPage();
+		const canvas = makeCanvas();
+		const runtime = new BoardRuntime(canvas, { reducedMotion: fakeMotionQuery(false) });
+		cleanups.push(() => runtime.destroy());
+		await runtime.start();
+		expect(navigator.webdriver).toBe(true);
+		expect(canvas.dataset.spineFront).toBeDefined();
+	});
+});
+
+describe('destroy', () => {
+	it('stops listening', async () => {
+		buildPage();
+		const { runtime } = launch();
+		await runtime.start();
+		runtime.destroy();
+		const before = runtime.frames;
+		await scrollTo(800);
+		expect(runtime.frames).toBe(before);
+	});
+
+	it('does nothing when destroyed before the fonts are ready', async () => {
+		buildPage();
+		const { canvas, runtime } = launch();
+		const started = runtime.start();
+		runtime.destroy();
+		await started;
+		expect(runtime.board).toBeNull();
+		expect(canvas.dataset.pcbState).toBe('init');
+	});
+});
