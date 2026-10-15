@@ -7,9 +7,10 @@ export const company = {
 	linkedin: 'https://www.linkedin.com/in/roboroads',
 	github: 'https://github.com/Roboroads',
 	githubHandle: '@Roboroads',
-	/** Still to come from the owner. Tests list them as todo. */
-	kvk: 'TODO',
-	btw: 'TODO'
+	/** Chamber of Commerce number, shown in the footer. */
+	kvk: '86738852',
+	/** VAT number, shown in the footer. */
+	btw: 'NL002333708B14'
 } as const;
 
 /**
