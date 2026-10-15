@@ -33,11 +33,14 @@ async function paint(page: Page, e: Ellipse) {
 		const height = canvas.height / scale;
 
 		let inside = 0;
+		let samples = 0;
 		const inner = { rx: e.rx - 2, ry: e.ry - 2 };
 		for (let y = Math.max(0, e.cy - e.ry); y < Math.min(height, e.cy + e.ry); y += 2) {
 			for (let x = Math.max(0, e.cx - e.rx); x < Math.min(width, e.cx + e.rx); x += 2) {
 				const d = ((x - e.cx) / inner.rx) ** 2 + ((y - e.cy) / inner.ry) ** 2;
-				if (d < 1 && alpha(x, y) > 0) inside++;
+				if (d >= 1) continue;
+				samples++;
+				if (alpha(x, y) > 0) inside++;
 			}
 		}
 		const corner = (x0: number, y0: number) => {
@@ -49,6 +52,8 @@ async function paint(page: Page, e: Ellipse) {
 		};
 		return {
 			inside,
+			/** The share of the ellipse that is painted: only the two lead traces cross it. */
+			insideShare: inside / Math.max(1, samples),
 			corners: [
 				corner(0, 0),
 				corner(width - 161, 0),
@@ -109,21 +114,31 @@ test.describe('hero field', () => {
 		// 80% of the window wide.
 		expect(e.rx * 2).toBeCloseTo(0.8 * 1440, 0);
 		expect(out).toEqual([]);
-		const { inside, corners } = await paint(page, e);
-		expect(inside).toBe(0);
+		const { inside, insideShare, corners } = await paint(page, e);
+		// The two lead traces run in to the socket, and nothing else.
+		expect(inside).toBeGreaterThan(0);
+		expect(insideShare).toBeLessThan(0.02);
 		for (const count of corners) expect(count).toBeGreaterThan(50);
+		await expect(page.locator('#hero .socket')).toHaveAttribute('data-power', 'on');
 	});
 
-	test('builds up from the corners after the load and ends the same way', async ({ page }) => {
+	test('runs the leads in first, powers the socket, then builds the field from the corners', async ({
+		page
+	}) => {
 		await page.goto('./');
 		const canvas = page.locator('canvas.pcb-board');
+		const socket = page.locator('#hero .socket');
 		await expect(canvas).toHaveAttribute('data-hero-ellipse', /\d/);
 		const e = await ellipseOf(page);
-		const early = await paint(page, e);
-		await expect(canvas).toHaveAttribute('data-pcb-state', 'idle', { timeout: 10_000 });
+		// The leads arrive about a second after the board starts: the socket is powered then.
+		await expect(socket).toHaveAttribute('data-power', 'on', { timeout: 4000 });
+		const powered = await paint(page, e);
+		expect(powered.inside).toBeGreaterThan(0);
+		await expect(canvas).toHaveAttribute('data-pcb-state', 'idle', { timeout: 12_000 });
 		const done = await paint(page, e);
-		expect(done.inside).toBe(0);
+		expect(done.insideShare).toBeLessThan(0.02);
 		const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
-		expect(sum(done.corners)).toBeGreaterThan(sum(early.corners));
+		// The field came after the power: the corners were (nearly) empty then.
+		expect(sum(done.corners)).toBeGreaterThan(sum(powered.corners) + 200);
 	});
 });

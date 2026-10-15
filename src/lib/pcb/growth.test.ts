@@ -6,8 +6,10 @@ import {
 	frontAt,
 	Growth,
 	GROWTH_SPEED,
+	HERO_FIELD_START_MS,
 	HERO_MS,
 	HERO_VIA_DELAY_MS,
+	LEAD_MS,
 	MAX_STAGGER_MS,
 	SOCKET_MS
 } from './growth.js';
@@ -103,7 +105,9 @@ describe('constants', () => {
 		expect(MAX_STAGGER_MS).toBe(600);
 		expect(BOOT_FALLBACK_MS).toBe(2500);
 		expect(SOCKET_MS).toBe(2000);
-		expect(HERO_MS).toBe(6000);
+		expect(LEAD_MS).toBe(1000);
+		expect(HERO_FIELD_START_MS).toBe(1900);
+		expect(HERO_MS).toBe(7500);
 	});
 });
 
@@ -144,25 +148,73 @@ describe('Growth hero field', () => {
 		return seen;
 	}
 
+	/** A lead trace of `length` px into a socket port. */
+	function lead(id: string, length: number) {
+		return makeTrace({
+			id,
+			kind: 'socket',
+			side: 'left',
+			bus: 'socket:lead',
+			points: [
+				{ x: 0, y: 500 },
+				{ x: length, y: 500 }
+			],
+			end: { kind: 'port', port: 0 },
+			chipId: null,
+			triggerY: 500
+		});
+	}
+
+	it('grows the two lead traces first and powers the socket when both are in', () => {
+		const leads = [lead('socket:L0', 300), lead('socket:R1', 900)];
+		const g = new Growth({ ...board([...leads, corner]), hero: HERO });
+		expect(g.powered).toBe(false);
+		g.update(T, 0, VH);
+		expect(g.powered).toBe(false);
+		g.update(T + LEAD_MS / 2, 0, VH);
+		for (const l of leads) {
+			expect(g.drawn(l.id)).toBeGreaterThan(0);
+			expect(g.isFull(l.id)).toBe(false);
+		}
+		expect(g.powered).toBe(false);
+		g.update(T + LEAD_MS, 0, VH);
+		for (const l of leads) expect(g.isFull(l.id)).toBe(true);
+		expect(g.powered).toBe(true);
+		expect(g.drawn(corner.id)).toBe(0);
+	});
+
+	it('powers the socket at the first update when there are no lead traces', () => {
+		const g = new Growth(heroBoard());
+		expect(g.powered).toBe(false);
+		g.update(T, 0, VH);
+		expect(g.powered).toBe(true);
+	});
+
+	it('starts the field once the leads are in and the logo is drawing', () => {
+		const seen = firstDrawn(new Growth(heroBoard()), [corner.id]);
+		expect(HERO_FIELD_START_MS).toBeGreaterThan(LEAD_MS);
+		expect(seen[corner.id]).toBeGreaterThanOrEqual(HERO_FIELD_START_MS);
+	});
+
 	it('starts a trace from a via below the hero with the edges, not with the dots', () => {
 		const under = heroTrace('hero:4.0', { x: 30, y: 960 }, 200, true);
 		const g = new Growth({ ...board([under, dot]), hero: HERO });
 		const seen = firstDrawn(g, [under.id, dot.id]);
-		expect(seen[under.id]).toBeLessThan(HERO_VIA_DELAY_MS);
-		expect(seen[dot.id]).toBeGreaterThanOrEqual(HERO_VIA_DELAY_MS);
+		expect(seen[under.id]).toBeLessThan(HERO_FIELD_START_MS + HERO_VIA_DELAY_MS);
+		expect(seen[dot.id]).toBeGreaterThanOrEqual(HERO_FIELD_START_MS + HERO_VIA_DELAY_MS);
 	});
 
 	it('starts in the corners, then works along the edges, the dots on the board last', () => {
 		const seen = firstDrawn(new Growth(heroBoard()), [corner.id, middle.id, dot.id]);
-		expect(seen[corner.id]).toBeLessThanOrEqual(400);
+		expect(seen[corner.id]).toBeLessThanOrEqual(HERO_FIELD_START_MS + 400);
 		expect(seen[middle.id]).toBeGreaterThan(seen[corner.id] + 500);
-		expect(seen[dot.id]).toBeGreaterThanOrEqual(HERO_VIA_DELAY_MS);
+		expect(seen[dot.id]).toBeGreaterThanOrEqual(HERO_FIELD_START_MS + HERO_VIA_DELAY_MS);
 	});
 
 	it('builds slowly, a few hundred px a second, never shrinking', () => {
 		const g = new Growth(heroBoard());
 		let last = 0;
-		for (let t = 0; t <= 2000; t += 20) {
+		for (let t = 0; t <= HERO_FIELD_START_MS + 2000; t += 20) {
 			g.update(T + t, 0, VH);
 			expect(g.drawn(corner.id)).toBeGreaterThanOrEqual(last);
 			last = g.drawn(corner.id);
@@ -185,9 +237,10 @@ describe('Growth hero field', () => {
 		const b = new Growth(heroBoard());
 		a.update(T, 0, VH);
 		b.update(T, 4000, VH);
-		a.update(T + 1500, 0, VH);
-		b.update(T + 1500, 200, VH);
+		a.update(T + HERO_FIELD_START_MS + 1500, 0, VH);
+		b.update(T + HERO_FIELD_START_MS + 1500, 200, VH);
 		for (const t of [corner, middle, dot, long]) expect(b.drawn(t.id)).toBe(a.drawn(t.id));
+		expect(a.drawn(corner.id)).toBeGreaterThan(0);
 	});
 
 	it('is the same every time', () => {
@@ -205,8 +258,9 @@ describe('Growth hero field', () => {
 	it('keeps its clock across a relayout', () => {
 		const g = new Growth(heroBoard());
 		g.update(T, 0, VH);
-		g.update(T + 1000, 0, VH);
+		g.update(T + HERO_FIELD_START_MS + 1000, 0, VH);
 		const drawn = g.drawn(corner.id);
+		expect(drawn).toBeGreaterThan(0);
 		g.relayout(heroBoard());
 		expect(g.drawn(corner.id)).toBe(drawn);
 		g.update(T + HERO_MS, 0, VH);

@@ -29,8 +29,10 @@
  *
  * The hero: when one is registered, the board fills it edge to edge with the hero field (see
  * `hero.ts`). Its content is the socket and the children of the obstacles inside it, kept in a
- * clear ellipse; its links and buttons (the scroll indicator) are obstacles too. The field builds up from the first
- * frame, once, over 6 s.
+ * clear ellipse; its links and buttons (the scroll indicator) are obstacles too. The two lead
+ * traces grow in first; when they arrive (`growth.powered`), the socket gets `data-power="on"` and
+ * the logo or photo frame draws itself from where they touch. The rest of the field builds up
+ * after that, once. Reduced motion and the fallback power the socket at once.
  *
  * `data-pcb-state` on the canvas: `init` (waiting for fonts), `running` (a frame is queued),
  * `idle`, `static` or `off`. In test runs (`debug`, by default when the browser is automated) the
@@ -294,9 +296,15 @@ export class BoardRuntime {
 		const obstacles = obstacleEls.map((el) => docRect(el, sx, sy)).filter(rendered);
 		const port = registeredSocket();
 		const socketRect = port?.el.isConnected ? docRect(port.el, sx, sy) : null;
+		const portEls = port?.ports() ?? [];
 		const socket =
 			port && socketRect && rendered(socketRect)
-				? { rect: socketRect, ports: port.ports().map((el) => docCentre(el, sx, sy)) }
+				? {
+						rect: socketRect,
+						ports: portEls.map((el) => docCentre(el, sx, sy)),
+						// The ports marked data-lead take the two lead traces of the hero.
+						leads: portEls.flatMap((el, i) => (el.hasAttribute('data-lead') ? [i] : []))
+					}
 				: undefined;
 
 		// The hero: as wide as the board, its content (the socket and the obstacles in it) inside a
@@ -364,6 +372,7 @@ export class BoardRuntime {
 			const state = growth.chipState(handle.id);
 			if (handle.state !== state) handle.state = state;
 		}
+		if (growth.powered) this.#power();
 		renderer.draw({
 			view: {
 				scrollX: window.scrollX,
@@ -457,7 +466,13 @@ export class BoardRuntime {
 		}, RELAYOUT_DEBOUNCE_MS);
 	};
 
-	/** No board: every chip goes on, now and when it registers later. */
+	/** The socket gets `data-power="on"`: the logo or photo frame draws itself (see Logo, Hero). */
+	#power(): void {
+		const el = registeredSocket()?.el;
+		if (el && el.dataset.power !== 'on') el.dataset.power = 'on';
+	}
+
+	/** No board: every chip goes on and the socket powers up, now and when they register later. */
 	#fallback(): void {
 		if (this.#raf) cancelAnimationFrame(this.#raf);
 		this.#raf = 0;
@@ -469,6 +484,7 @@ export class BoardRuntime {
 		this.board = null;
 		const lightAll = () => {
 			for (const chip of registeredChips()) chip.state = 'on';
+			this.#power();
 		};
 		lightAll();
 		this.#cleanups.push(onChange(lightAll));

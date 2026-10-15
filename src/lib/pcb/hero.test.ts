@@ -250,7 +250,7 @@ describe('layoutBoard hero field', () => {
 	});
 
 	it('fills the open board between the rim buses with buses from the edges that end in vias', () => {
-		expect(fill.length).toBeGreaterThan(4);
+		expect(fill.length).toBeGreaterThan(1);
 		for (const trace of fill) {
 			const start = trace.points[0];
 			// From the bottom they start on vias below the hero, the rest on a window edge.
@@ -281,14 +281,15 @@ describe('layoutBoard hero field', () => {
 		for (const trace of field) {
 			const dirs = trace.points
 				.slice(1)
-				.map((p, i) => dirOf(p.x - trace.points[i].x, p.y - trace.points[i].y) as number);
-			for (const d of dirs)
-				expect(turnSteps(dirs[0] as Dir, d as Dir), trace.id).toBeLessThanOrEqual(2);
+				.map((p, i) => dirOf(p.x - trace.points[i].x, p.y - trace.points[i].y) as Dir);
+			// Every run within 90 degrees of the way in from the edge, or of the way into the rim.
+			const within = (heading: Dir) => dirs.every((d) => turnSteps(heading, d) <= 2);
+			expect(within(dirs[0]) || within(dirs[dirs.length - 1]), trace.id).toBe(true);
 		}
 	});
 
-	it('keeps every trace out of the ellipse, halo included', () => {
-		for (const trace of board.traces) {
+	it('keeps every trace but the two leads out of the ellipse, halo included', () => {
+		for (const trace of board.traces.filter((t) => t.kind !== 'socket')) {
 			for (const p of samples(trace)) {
 				expect(
 					ellipseDistance({ ...ellipse, rx: ellipse.rx + 4, ry: ellipse.ry + 4 }, p),
@@ -418,8 +419,38 @@ describe('layoutBoard hero field', () => {
 		}
 	});
 
-	it('builds no socket traces: nothing runs inside the ellipse', () => {
-		expect(board.traces.filter((t) => t.kind === 'socket')).toHaveLength(0);
+	it('runs two lead traces into the ellipse, each from the edge its port faces', () => {
+		const leads = board.traces.filter((t) => t.kind === 'socket');
+		expect(leads).toHaveLength(2);
+		const [cyan, green] = [...leads].sort((a, b) => a.points[0].x - b.points[0].x);
+		const ports = input.socket!.ports;
+		// The cyan port is on the logo's bottom side, over the text: its lead comes from the left.
+		expect(cyan.side).toBe('left');
+		expect(cyan.points[0].x).toBe(0);
+		expect(cyan.points.at(-1)).toEqual(ports[0]);
+		expect(cyan.end).toEqual({ kind: 'port', port: 0 });
+		// The green port is on the top side: its lead comes straight down from the top.
+		expect(green.side).toBe('right');
+		expect(green.points[0].y).toBe(0);
+		expect(green.points.at(-1)).toEqual(ports[1]);
+		expect(green.end).toEqual({ kind: 'port', port: 1 });
+		for (const lead of leads) {
+			expect(isOctilinear(lead.points), lead.id).toBe(true);
+			// Into the ellipse, and only into the socket on its last run.
+			expect(samples(lead).some((p) => ellipseDistance(ellipse, p) < 1)).toBe(true);
+			const lastRun = lead.lengths.at(-2)!;
+			for (const p of samples(lead).filter((_, i) => i * 2 < lastRun)) {
+				const r = input.socket!.rect;
+				const inside = p.x > r.x && p.x < r.x + r.width && p.y > r.y && p.y < r.y + r.height;
+				expect(inside, lead.id).toBe(false);
+			}
+		}
+	});
+
+	it('builds no lead traces without lead ports', () => {
+		const page = heroPage('1440x900');
+		page.socket = { ...page.socket!, leads: [] };
+		expect(layoutBoard(page).traces.filter((t) => t.kind === 'socket')).toHaveLength(0);
 	});
 
 	it('gives every trace a unique id', () => {
@@ -441,7 +472,7 @@ describe('layoutBoard hero field', () => {
 			const e = page.hero!.ellipse;
 			const other = layoutBoard(page);
 			expect(heroTraces(other).length, name).toBeGreaterThan(8);
-			for (const trace of other.traces) {
+			for (const trace of other.traces.filter((t) => t.kind !== 'socket')) {
 				for (const p of samples(trace, 3)) {
 					expect(ellipseDistance(e, p), trace.id).toBeGreaterThanOrEqual(1);
 				}

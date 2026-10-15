@@ -158,6 +158,55 @@ describe('motion', () => {
 		expect(getComputedStyle(document.querySelector('.letters')!).opacity).toBe('1');
 	});
 
+	it('marks both open trace ends as the ports the lead traces run into', async () => {
+		await render(Logo, { animate: true });
+		const leads = svg().querySelectorAll('[data-port][data-lead]');
+		expect(leads).toHaveLength(2);
+	});
+
+	it('draws each trace from its open end, the port, back to its pad', async () => {
+		await render(Logo, { animate: true });
+		const trace = document.querySelector<SVGPolylineElement>('.trace-cyan')!;
+		const [draw] = trace.getAnimations() as CSSAnimation[];
+		draw.pause();
+		draw.currentTime = 0.5 * 1400;
+		// Part way: a negative offset puts the dash on the far end of the line, the port's end.
+		const offset = Number(getComputedStyle(trace).strokeDashoffset.replace('px', ''));
+		expect(offset).toBeLessThan(0);
+		expect(offset).toBeGreaterThan(-1);
+	});
+
+	describe('with scripts, in the hero', () => {
+		afterEach(() => root.classList.remove('js'));
+
+		it('waits, dark, for the board to power it', async () => {
+			root.classList.add('js');
+			await render(Logo, { animate: true });
+			const trace = getComputedStyle(document.querySelector('.trace')!);
+			expect(trace.animationDelay).toBe('3s');
+			expect(Number(trace.strokeDashoffset.replace('px', ''))).toBe(-1);
+			expect(getComputedStyle(document.querySelector('.letters')!).opacity).toBe('0');
+		});
+
+		it('draws at once when the lead traces reach it', async () => {
+			root.classList.add('js');
+			await render(Logo, { animate: true });
+			svg().parentElement!.setAttribute('data-power', 'on');
+			const trace = getComputedStyle(document.querySelector('.trace')!);
+			expect(trace.animationName).toMatch(/draw-powered/);
+			expect(trace.animationDelay).toBe('0s');
+			expect(getComputedStyle(document.querySelector('.letters')!).animationName).toMatch(
+				/fade-powered/
+			);
+		});
+
+		it('is the finished logo under reduced motion, powered or not', async () => {
+			root.classList.add('js', 'reduced');
+			await render(Logo, { animate: true });
+			expect(svg().getAnimations({ subtree: true })).toHaveLength(0);
+		});
+	});
+
 	it('does not animate under reduced motion', async () => {
 		root.classList.add('reduced');
 		await render(Logo, { animate: true });

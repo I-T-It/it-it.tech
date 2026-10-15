@@ -27,10 +27,14 @@
  * - `socket`: by time from the first `update` (the page load), whatever the scroll position.
  *   Each trace waits a seeded 0 to 400 ms, then grows with an ease-out over 1.6 s, so every
  *   socket trace is full 2 s after the first `update`.
- * - `hero`: by time from the first `update` too, once, slowly: the field builds up from the four
- *   corners of the hero. A trace waits longer the further its start lies from the nearest corner
- *   (up to 2.4 s, plus a seeded 0 to 300 ms), a trace that starts at a via on the board 1.5 s more,
- *   then grows at 160 px/s, faster only where it must to be full 6 s after the first `update`.
+ *   With a hero the socket traces are its two leads instead: no wait, an ease-in-out over 1 s.
+ *   `powered` turns true once they are in (at once without any), and the runtime then lets the
+ *   logo or photo frame draw itself from where they touch.
+ * - `hero`: by time from the first `update` too, once, slowly, after the leads and the start of
+ *   the logo draw (1.9 s): the field builds up from the four corners of the hero. A trace waits
+ *   longer the further its start lies from the nearest corner (up to 2.4 s, plus a seeded 0 to
+ *   300 ms), a trace that starts at a via in the hero 1.5 s more, then grows at 160 px/s, faster
+ *   only where it must to be full 7.5 s after the first `update`.
  *
  * Chips: a chip goes `booting` when its first branch arrives (is fully drawn), and `on` when all
  * its branches have arrived or 2.5 s after it started booting, whichever comes first. A chip
@@ -68,8 +72,12 @@ export const SOCKET_MS = 2000;
 /** A socket trace waits a seeded 0 to this many ms before it grows. */
 export const SOCKET_STAGGER_MS = 400;
 
+/** With a hero, the socket traces are its two leads: they grow in this many ms from the load. */
+export const LEAD_MS = 1000;
+/** The hero field waits this long after the load: the leads arrive, then the logo draws. */
+export const HERO_FIELD_START_MS = 1900;
 /** Every hero trace is full this many ms after the first update. */
-export const HERO_MS = 6000;
+export const HERO_MS = 7500;
 /** Hero traces grow at this many px/s, or faster where they must to be full in time. */
 export const HERO_SPEED = 160;
 /** A hero trace starting at the middle of an edge waits this many ms more than one in a corner. */
@@ -151,11 +159,20 @@ function heroDelay(board: Board, trace: Trace, random: number): number {
 	const spread = reach > 0 ? Math.min(1, nearest / reach) : 0;
 	// A via below the hero is where a trace from the bottom edge comes in: it goes with the edges.
 	const onBoard = trace.startVia === true && start.y <= area.y + area.height;
-	return (onBoard ? HERO_VIA_DELAY_MS : 0) + spread * HERO_SPREAD_MS + random * HERO_JITTER_MS;
+	return (
+		HERO_FIELD_START_MS +
+		(onBoard ? HERO_VIA_DELAY_MS : 0) +
+		spread * HERO_SPREAD_MS +
+		random * HERO_JITTER_MS
+	);
 }
 
 function easeOut(t: number): number {
 	return 1 - (1 - t) ** 3;
+}
+
+function easeInOut(t: number): number {
+	return t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
 }
 
 export class Growth {
@@ -168,6 +185,8 @@ export class Growth {
 	#front = 0;
 	/** The board's document height: where the front ends at the bottom of the page. */
 	#height = 0;
+	/** With a hero, the socket traces are its two leads. */
+	#leads = false;
 	#static = false;
 	#animating = false;
 
@@ -178,6 +197,19 @@ export class Growth {
 	/** True while a latched, socket or hero trace still grows or a chip is booting. */
 	get animating(): boolean {
 		return this.#animating;
+	}
+
+	/**
+	 * True once the socket has power: after the first update, when every socket trace (with a hero:
+	 * both leads) is drawn in full, or at once when there are none. The logo or photo frame draws
+	 * itself from then on.
+	 */
+	get powered(): boolean {
+		if (this.#loadedAt === null) return false;
+		for (const entry of this.#traces.values()) {
+			if (entry.mode === 'socket' && entry.drawn < entry.trace.length) return false;
+		}
+		return true;
 	}
 
 	/** The front in document px as of the last `update`; 0 before the first. */
@@ -231,10 +263,13 @@ export class Growth {
 			}
 			if (entry.startAt === null || entry.drawn >= entry.trace.length) continue;
 			const length = entry.trace.length;
+			const since = now - entry.startAt;
 			let grown =
-				entry.mode === 'socket'
-					? length * easeOut(Math.min(1, Math.max(0, (now - entry.startAt) / SOCKET_GROW_MS)))
-					: ((now - entry.startAt) * entry.speed) / 1000;
+				entry.mode !== 'socket'
+					? (since * entry.speed) / 1000
+					: this.#leads
+						? length * easeInOut(Math.min(1, Math.max(0, since / LEAD_MS)))
+						: length * easeOut(Math.min(1, Math.max(0, since / SOCKET_GROW_MS)));
 			if (entry.floorFrom !== null) grown = Math.max(grown, front - entry.floorFrom);
 			entry.drawn = Math.max(entry.drawn, Math.min(length, grown));
 		}
@@ -301,6 +336,7 @@ export class Growth {
 
 	#load(board: Board, oldTraces: Map<string, TraceEntry>, oldChips: Map<string, ChipEntry>): void {
 		this.#height = board.height;
+		this.#leads = board.hero !== null;
 		for (const trace of board.traces) {
 			const old = oldTraces.get(trace.id);
 			const mode = modeOf(trace);
@@ -308,7 +344,9 @@ export class Growth {
 			const random = createRng(deriveSeed(board.seed, trace.id)).next();
 			const stagger =
 				mode === 'socket'
-					? random * SOCKET_STAGGER_MS
+					? this.#leads
+						? 0
+						: random * SOCKET_STAGGER_MS
 					: mode === 'hero'
 						? heroDelay(board, trace, random)
 						: trace.kind === 'decor'

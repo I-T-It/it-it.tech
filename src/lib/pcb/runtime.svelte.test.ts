@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { pointAt } from './geometry.js';
-import { BOOT_FALLBACK_MS, FRONT_RATIO, HERO_MS, SOCKET_MS } from './growth.js';
+import { BOOT_FALLBACK_MS, FRONT_RATIO, HERO_MS, LEAD_MS, SOCKET_MS } from './growth.js';
 import { ellipseDistance, type Ellipse } from './hero.js';
 import type { Trace } from './layout.js';
 import { MAX_DPR } from './renderer.js';
@@ -77,6 +77,8 @@ function buildPage({
 		for (const side of ['left', 'right']) {
 			const port = document.createElement('span');
 			port.setAttribute('data-port', side);
+			// In the hero both ports take a lead trace.
+			if (withHero) port.setAttribute('data-lead', '');
 			port.style.cssText = `position:absolute;${side}:40px;top:60px;width:2px;height:2px`;
 			el.append(port);
 		}
@@ -538,7 +540,6 @@ describe('hero field', () => {
 		const field = tracesOf(runtime, 'hero');
 		expect(field.length).toBeGreaterThan(20);
 		expect(Number(canvas.dataset.heroTraces)).toBe(field.length);
-		expect(tracesOf(runtime, 'socket')).toHaveLength(0);
 		expect(runtime.board!.hero!.rect.width).toBe(document.documentElement.clientWidth);
 
 		const e = ellipseOf(canvas);
@@ -554,7 +555,8 @@ describe('hero field', () => {
 				expect(ellipseDistance(e, { x, y })).toBeLessThan(1);
 			}
 		}
-		for (const trace of runtime.board!.traces) {
+		// Only the two lead traces enter it.
+		for (const trace of runtime.board!.traces.filter((t) => t.kind !== 'socket')) {
 			for (const p of samples(trace)) expect(ellipseDistance(e, p), trace.id).toBeGreaterThan(1);
 		}
 	});
@@ -594,6 +596,41 @@ describe('hero field', () => {
 		await runtime.start();
 		expect(canvas.dataset.pcbState).toBe('static');
 		expect(tracesOf(runtime, 'hero').every((t) => runtime.growth!.isFull(t.id))).toBe(true);
+	});
+
+	it('runs the two lead traces in first and powers the socket when they arrive', async () => {
+		buildPage({ hero: true });
+		const socketEl = document.querySelector<HTMLElement>('[data-port]')!.parentElement!;
+		const clock = manualClock();
+		const { runtime } = launch({ now: clock.now });
+		await runtime.start();
+		expect(tracesOf(runtime, 'socket')).toHaveLength(2);
+		expect(socketEl.dataset.power).toBeUndefined();
+		clock.advance(LEAD_MS / 2);
+		await frames(2);
+		expect(socketEl.dataset.power).toBeUndefined();
+		clock.advance(LEAD_MS / 2);
+		await until(() => socketEl.dataset.power === 'on', 1000);
+		expect(tracesOf(runtime, 'socket').every((t) => runtime.growth!.isFull(t.id))).toBe(true);
+	});
+
+	it('powers the socket at once under reduced motion', async () => {
+		buildPage({ hero: true });
+		const socketEl = document.querySelector<HTMLElement>('[data-port]')!.parentElement!;
+		const { runtime } = launch({ reducedMotion: fakeMotionQuery(true) });
+		await runtime.start();
+		expect(socketEl.dataset.power).toBe('on');
+	});
+
+	it('powers the socket when the board cannot draw', async () => {
+		buildPage({ hero: true });
+		const socketEl = document.querySelector<HTMLElement>('[data-port]')!.parentElement!;
+		const canvas = makeCanvas();
+		vi.spyOn(canvas, 'getContext').mockReturnValue(null);
+		const runtime = new BoardRuntime(canvas, { reducedMotion: fakeMotionQuery(false) });
+		cleanups.push(() => runtime.destroy());
+		await runtime.start();
+		expect(socketEl.dataset.power).toBe('on');
 	});
 
 	it('builds no field without a registered hero', async () => {

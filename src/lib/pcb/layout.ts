@@ -333,8 +333,13 @@ export function layoutBoard(input: LayoutInput): Board {
 	);
 	for (const chip of wiring) if (chip.feeders.length === 0) chip.fallback = true;
 
-	if (hero) heroTraces(ctx, hero);
-	else if (socket && socket.ports.length > 0) socketTraces(ctx, socket);
+	if (hero) {
+		// The two leads first: they are the only traces that cross the ellipse.
+		if (socket) leadTraces(ctx, socket);
+		heroTraces(ctx, hero);
+	} else if (socket && socket.ports.length > 0) {
+		socketTraces(ctx, socket);
+	}
 	if (!narrow) {
 		setups.forEach((setup, i) => {
 			gutterDecor(ctx, setup, decorLimit[i], openHero ? heroRow : 0, height);
@@ -834,6 +839,58 @@ function facing(out: Dir, edge: Edge): number {
 }
 
 /** Traces from all four hero edges into the socket's ports. See the file header. */
+/**
+ * With a hero: the two lead traces, one into each lead port (`socket.leads`), cyan into the port
+ * left of the socket's centre, green into the other. Each comes in through the side of the socket
+ * its port is nearest to, like a socket trace, from the window edge that side faces (the top, the
+ * left or the right; a port on the bottom side takes the left or right edge).
+ */
+function leadTraces(ctx: Context, socket: SocketInput): void {
+	const { grid } = ctx;
+	if (ctx.heroRow < 2) return;
+	const centre = socket.rect.x + socket.rect.width / 2;
+	const leads = (socket.leads ?? []).filter((i) => socket.ports[i] !== undefined).slice(0, 2);
+	const slots: { slot: Slot; edge: Edge; side: Side }[] = [];
+	for (const port of leads) {
+		const point = socket.ports[port];
+		const normal = outwardNormal(socket.rect, point);
+		for (const turn of [0, -1, 1]) {
+			const out = ((normal + turn + 8) & 7) as Dir;
+			const approach = approachCell(ctx, point, out);
+			if (!approach) continue;
+			const side: Side = point.x < centre ? 'left' : 'right';
+			const slot = { order: port, port, point, out, inward: ((out + 4) & 7) as Dir, ...approach };
+			// Straight in from the edge the port faces, so the lead cuts across the field's band
+			// instead of running along it; from below the text is in the way, so from the side.
+			const edge: Edge =
+				out === NORTH ? 'top' : out === EAST ? 'right' : out === WEST ? 'left' : side;
+			slots.push({ slot, edge, side });
+			break;
+		}
+	}
+	// Reserve both last runs first, so neither route squeezes in next to the other.
+	for (const { slot } of slots) grid.markPath([slot.leg[0], slot.leg[slot.leg.length - 1]]);
+	slots.forEach(({ slot, edge, side }, k) => {
+		const bus = ++ctx.busCount;
+		const rng = () => createRng(deriveSeed(ctx.seed, `lead:${k}`));
+		const trace = routeSocket(ctx, edge, slot, rng()) ?? routeSocket(ctx, edge, slot, rng(), true);
+		if (!trace) return;
+		grid.markPath(trace.path, bus);
+		ctx.traces.push(
+			makeTrace({
+				id: `socket:${EDGE_LETTER[edge]}${k}`,
+				kind: 'socket',
+				side,
+				bus: `socket:lead`,
+				points: trace.points,
+				end: { kind: 'port', port: slot.port },
+				chipId: null,
+				triggerY: boundsOf(trace.points).y
+			})
+		);
+	});
+}
+
 function socketTraces(ctx: Context, socket: SocketInput): void {
 	const { grid } = ctx;
 	if (ctx.heroRow < 2) return;
@@ -938,7 +995,9 @@ function routeSocket(
 	ctx: Context,
 	edge: Edge,
 	slot: Slot,
-	rng: Rng
+	rng: Rng,
+	/** Let the last run come in at 45 degrees too: for a lead that has to squeeze in. */
+	slanted = false
 ): { path: Cell[]; points: Point[] } | null {
 	const { grid } = ctx;
 	const goal = slot.cell;
@@ -967,7 +1026,10 @@ function routeSocket(
 		if (along < 0 || along > span) continue;
 		const start = vertical ? { col: fixed, row: along } : { col: along, row: fixed };
 		if (!grid.isFree(start.col, start.row)) continue;
-		const path = route(grid, start, goal, { startDir: leave, endDir: slot.inward, window });
+		const endDir = slanted
+			? [slot.inward, ((slot.inward + 1) & 7) as Dir, ((slot.inward + 7) & 7) as Dir]
+			: slot.inward;
+		const path = route(grid, start, goal, { startDir: leave, endDir, window });
 		if (!path) continue;
 		const centres = path.map((c) => grid.centre(c.col, c.row));
 		const first = centres[0];

@@ -295,6 +295,51 @@ describe('Hero power-up', () => {
 			document.documentElement.classList.remove('reduced');
 		}
 	});
+
+	it('marks two ports, one on each side, for the lead traces of the board', async () => {
+		await mount(Hero);
+		const leads = socket()!
+			.ports()
+			.filter((port) => port.hasAttribute('data-lead'));
+		expect(leads.map((port) => port.style.gridColumn).sort()).toEqual(['1', '11']);
+	});
+
+	it('draws the outline in two halves, each from where a lead touches it', async () => {
+		await mount(Hero);
+		const halves = [...hero().querySelectorAll<SVGPolylineElement>('.courtyard .outline')];
+		expect(halves).toHaveLength(2);
+		const leads = socket()!
+			.ports()
+			.filter((port) => port.hasAttribute('data-lead'));
+		const rowOf = (port: HTMLElement) => ((Number(port.style.gridRow) - 0.5) / 11) * 100;
+		const left = leads.find((port) => port.style.gridColumn === '1')!;
+		const right = leads.find((port) => port.style.gridColumn === '11')!;
+		const first = (half: SVGPolylineElement) => half.points.getItem(0);
+		expect(first(halves[0]).x).toBeCloseTo(0.5);
+		expect(first(halves[0]).y).toBeCloseTo(rowOf(left), 1);
+		expect(first(halves[1]).x).toBeCloseTo(99.5);
+		expect(first(halves[1]).y).toBeCloseTo(rowOf(right), 1);
+		// Each half ends where the other starts: together they are the whole outline.
+		const last = (half: SVGPolylineElement) => half.points.getItem(half.points.numberOfItems - 1);
+		expect(last(halves[0])).toMatchObject({ x: first(halves[1]).x, y: first(halves[1]).y });
+		expect(last(halves[1])).toMatchObject({ x: first(halves[0]).x, y: first(halves[0]).y });
+	});
+
+	describe('with scripts', () => {
+		afterEach(() => document.documentElement.classList.remove('js'));
+
+		it('waits for the board to power the socket, then draws the outline and lights the ports', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			const outline = hero().querySelector<SVGPolylineElement>('.courtyard .outline')!;
+			expect(getComputedStyle(outline).animationDelay).toBe('3s');
+			socket()!.el.setAttribute('data-power', 'on');
+			expect(getComputedStyle(outline).animationName).toMatch(/outline-draw-powered/);
+			expect(getComputedStyle(outline).animationDelay).toBe('0s');
+			const port = socket()!.ports()[0];
+			expect(getComputedStyle(port).animationName).toMatch(/port-on-powered/);
+		});
+	});
 });
 
 describe('Hero focal point', () => {

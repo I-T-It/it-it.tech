@@ -31,6 +31,12 @@
 		'11,8': 'green'
 	};
 
+	/**
+	 * The two ports the board's lead traces run into, one on each side. When they arrive, the
+	 * footprint's outline draws itself from those two points (see the frame halves below).
+	 */
+	const LEADS = new Set(['8,1', '4,11']);
+
 	const ring = Array.from({ length: GRID * GRID }, (_, i) => ({
 		row: Math.floor(i / GRID) + 1,
 		col: (i % GRID) + 1
@@ -41,8 +47,17 @@
 			col,
 			pin1: row === 1 && col === 1,
 			side: col <= (GRID + 1) / 2 ? 'left' : 'right',
-			port: PORTS[`${row},${col}`]
+			port: PORTS[`${row},${col}`],
+			lead: LEADS.has(`${row},${col}`)
 		}));
+
+	/** Where a lead port's row meets the outline, in the outline's 0 to 100 box. */
+	const contact = (row: number) => (((row - 0.5) / GRID) * 100).toFixed(2);
+	/** The outline in two halves, each from one lead's contact point round to the other's. */
+	const FRAME = [
+		`0.5,${contact(8)} 0.5,11 11,0.5 99.5,0.5 99.5,${contact(4)}`,
+		`99.5,${contact(4)} 99.5,99.5 0.5,99.5 0.5,${contact(8)}`
+	];
 </script>
 
 <!--
@@ -72,7 +87,9 @@
 					aria-hidden="true"
 					focusable="false"
 				>
-					<polygon points="11,0.5 99.5,0.5 99.5,99.5 0.5,99.5 0.5,11" />
+					{#each FRAME as points (points)}
+						<polyline class="outline" pathLength="1" {points} />
+					{/each}
 				</svg>
 				<div class="pads" aria-hidden="true">
 					{#each ring as pad (`${pad.row},${pad.col}`)}
@@ -81,6 +98,7 @@
 							class:pin1={pad.pin1}
 							data-side={pad.side}
 							data-port={pad.port}
+							data-lead={pad.lead ? '' : undefined}
 							style:grid-row={pad.row}
 							style:grid-column={pad.col}
 						></span>
@@ -216,7 +234,7 @@
 		overflow: visible;
 	}
 
-	.courtyard polygon {
+	.courtyard .outline {
 		fill: none;
 		stroke: var(--silk);
 		stroke-width: 1px;
@@ -415,10 +433,10 @@
 	}
 
 	/*
-	 * The board powering up, once, about 2.5 s from the load: the traces arrive (the board draws
-	 * them, and the logo draws itself), the glow rises behind the socket, the ports light as the
-	 * traces reach them and the line under the name runs out from the middle. The text takes no
-	 * part: it is there from the first frame. Reduced motion gets the finished picture.
+	 * The board powering up, once: the lead traces arrive (the board draws them, and the logo or
+	 * the photo's outline draws itself from where they touch), the glow rises behind the socket,
+	 * the ports light and the line under the name runs out from the middle. The text takes no part:
+	 * it is there from the first frame. Reduced motion gets the finished picture.
 	 */
 	@media (prefers-reduced-motion: no-preference) {
 		:global(html:not(.reduced)) .socket::before {
@@ -432,9 +450,52 @@
 		:global(html:not(.reduced)) .rule {
 			animation: rule-draw 0.9s cubic-bezier(0.45, 0, 0.2, 1) 1.7s backwards;
 		}
+
+		/*
+		 * With scripts the board powers the socket: its two lead traces run into the lead ports,
+		 * and when they arrive it sets data-power="on" on the socket. Until then the glow, the ports
+		 * and the photo's outline wait; then the outline draws from the two contact points, the
+		 * glow rises and the ports light. Should the board never come, all that runs after 3 s.
+		 */
+		:global(html.js:not(.reduced)) .socket::before {
+			animation-delay: 3s;
+		}
+
+		:global(html.js:not(.reduced)) .pad[data-port] {
+			animation-delay: 3.8s;
+		}
+
+		:global(html.js:not(.reduced)) .courtyard .outline {
+			animation: outline-draw 1.2s cubic-bezier(0.45, 0, 0.2, 1) 3s backwards;
+		}
+
+		/*
+		 * A new name starts each animation over, from the moment the power comes on. The board
+		 * sets the attribute, so it is :global: the template never has it.
+		 */
+		:global(html.js:not(.reduced)) .socket:global([data-power='on'])::before {
+			animation-name: glow-up-powered;
+			animation-delay: 0.3s;
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .pad[data-port] {
+			animation-name: port-on-powered;
+			animation-delay: 0.8s;
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .courtyard .outline {
+			animation-name: outline-draw-powered;
+			animation-delay: 0s;
+		}
 	}
 
 	@keyframes glow-up {
+		from {
+			opacity: 0;
+		}
+	}
+
+	@keyframes glow-up-powered {
 		from {
 			opacity: 0;
 		}
@@ -445,6 +506,36 @@
 		from {
 			background: color-mix(in srgb, var(--pad-color) 32%, transparent);
 			box-shadow: 0 0 0 transparent;
+		}
+	}
+
+	@keyframes port-on-powered {
+		from {
+			background: color-mix(in srgb, var(--pad-color) 32%, transparent);
+			box-shadow: 0 0 0 transparent;
+		}
+	}
+
+	/* Each half of the outline from its lead's contact point on. */
+	@keyframes outline-draw {
+		from {
+			stroke-dasharray: 1;
+			stroke-dashoffset: 1;
+		}
+		to {
+			stroke-dasharray: 1;
+			stroke-dashoffset: 0;
+		}
+	}
+
+	@keyframes outline-draw-powered {
+		from {
+			stroke-dasharray: 1;
+			stroke-dashoffset: 1;
+		}
+		to {
+			stroke-dasharray: 1;
+			stroke-dashoffset: 0;
 		}
 	}
 
