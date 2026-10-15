@@ -126,6 +126,7 @@ function board(traces: Trace[]): Board {
 		height: 6000,
 		narrow: false,
 		heroBottom: 900,
+		hero: null,
 		traces,
 		chips: []
 	};

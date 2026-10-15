@@ -77,6 +77,7 @@ function board(traces: Trace[], chips: ChipWiring[] = [], height = 20_000): Boar
 		height,
 		narrow: false,
 		heroBottom: 900,
+		hero: null,
 		traces,
 		chips
 	};

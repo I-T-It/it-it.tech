@@ -2,10 +2,12 @@ import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	chips,
+	hero,
 	obstacles,
 	onChange,
 	PIN_FLASH_MS,
 	registerChip,
+	registerHero,
 	registerObstacle,
 	registerSocket,
 	socket,
@@ -186,6 +188,46 @@ describe('socket', () => {
 	});
 });
 
+describe('hero', () => {
+	function makeHero(): HTMLElement {
+		const el = document.createElement('section');
+		el.innerHTML =
+			'<div class="copy"><h1>Name</h1></div><a href="#next">Next</a><button>Go</button>';
+		document.body.append(el);
+		return el;
+	}
+
+	it('registers the hero and lists its links and buttons as controls', () => {
+		const el = makeHero();
+		const unregister = registerHero(el);
+		expect(hero()?.el).toBe(el);
+		expect(hero()!.controls()).toEqual(Array.from(el.querySelectorAll('a, button')));
+		unregister();
+		expect(hero()).toBeNull();
+	});
+
+	it('reads the controls live', () => {
+		const el = makeHero();
+		const unregister = registerHero(el);
+		el.append(document.createElement('a'));
+		expect(hero()!.controls()).toHaveLength(3);
+		unregister();
+	});
+
+	it('uses the latest hero and makes the unregister function idempotent', () => {
+		const a = makeHero();
+		const b = makeHero();
+		const unregisterA = registerHero(a);
+		const unregisterB = registerHero(b);
+		expect(hero()?.el).toBe(b);
+		unregisterB();
+		unregisterB();
+		expect(hero()?.el).toBe(a);
+		unregisterA();
+		expect(hero()).toBeNull();
+	});
+});
+
 describe('onChange', () => {
 	let calls = 0;
 	let stop: () => void;
@@ -212,6 +254,14 @@ describe('onChange', () => {
 
 	it('fires when a socket comes and goes', () => {
 		const unregister = registerSocket(makeSocket(2));
+		expect(calls).toBe(1);
+		unregister();
+		unregister();
+		expect(calls).toBe(2);
+	});
+
+	it('fires when a hero comes and goes', () => {
+		const unregister = registerHero(document.createElement('section'));
 		expect(calls).toBe(1);
 		unregister();
 		unregister();
