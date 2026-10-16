@@ -3,10 +3,11 @@ import path from 'node:path';
 import { expect, test, type Page, type Request } from '@playwright/test';
 import { expectNoAxeViolations } from './axe.js';
 
-// The hero photo glitch: on the personal build the photo now and then tears, flickers the Roboroads
-// avatar in for a moment, and every 20 to 40 s swaps to the avatar for a few seconds. The company
-// build has no photo and none of this. The clock is faked and paused, so five minutes of glitch
-// take a few seconds and every moment is exact.
+// The hero photo glitch: on the personal build the photo now and then tears (slices thrown sideways,
+// blocks in the wrong colours, the avatar leaking in, some of it spilling out of the die), flickers
+// the Roboroads avatar in for a moment, and every 20 to 40 s swaps to the avatar for a few seconds.
+// The company build has no photo and none of this. The clock is faked and paused, so five minutes
+// of glitch take a few seconds and every moment is exact.
 
 // The numbers of src/lib/glitch/schedule.ts, written out: the test checks the page against them.
 const ARM_AFTER_POWER_MS = 2200 + 2600;
@@ -17,13 +18,31 @@ const AVATAR_NL = /^Avatar van Roboroads/;
 const PAUSE_NL = 'Foto-glitch pauzeren';
 const PAUSE_EN = 'Pause the photo glitch';
 
+type Box = [left: number, top: number, right: number, bottom: number];
+
+/** Where everything was when a frame went up: the fragments, the die, the hero text, the window. */
+interface FrameGeometry {
+	fragments: Box[];
+	die: Box;
+	copy: Box;
+	/** How far the page is wider than the window, in CSS px. */
+	overflow: number;
+	/** How many fragments were drawn from the avatar. */
+	fromAvatar: number;
+	layerHidden: string | null;
+	layerPointerEvents: string;
+	tints: string[];
+}
+
 interface LogEntry {
 	/** The fake clock, in ms. */
 	t: number;
-	what: 'data-power' | 'data-glitch' | 'data-show' | 'avatar-added';
+	what: 'data-power' | 'data-glitch' | 'data-show' | 'data-frame' | 'avatar-added';
 	value: string | null;
 	/** At data-power: how many requests for the avatar had gone out by then. */
 	avatarRequests?: number;
+	/** At data-frame: the picture as it was when the frame went up. */
+	geometry?: FrameGeometry;
 }
 
 /** Writes down, with the fake time, every glitch attribute change and the moment the avatar is added. */
@@ -33,6 +52,24 @@ function installLog() {
 	const avatarRequests = () =>
 		performance.getEntriesByType('resource').filter((e) => e.name.includes('roboroads-avatar'))
 			.length;
+	const box = (el: Element): Box => {
+		const r = el.getBoundingClientRect();
+		return [r.left, r.top, r.right, r.bottom];
+	};
+	const geometry = (): FrameGeometry => {
+		const layer = document.querySelector<HTMLElement>('#hero .fx')!;
+		const fragments = [...layer.querySelectorAll<HTMLElement>('.frag')];
+		return {
+			fragments: fragments.map(box),
+			die: box(document.querySelector('#hero .die')!),
+			copy: box(document.querySelector('#hero .copy')!),
+			overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+			fromAvatar: fragments.filter((el) => el.dataset.source === 'avatar').length,
+			layerHidden: layer.getAttribute('aria-hidden'),
+			layerPointerEvents: getComputedStyle(layer).pointerEvents,
+			tints: fragments.map((el) => el.style.getPropertyValue('--tint'))
+		};
+	};
 	new MutationObserver((records) => {
 		for (const record of records) {
 			if (record.type === 'attributes') {
@@ -41,7 +78,8 @@ function installLog() {
 					t: performance.now(),
 					what,
 					value: (record.target as Element).getAttribute(what),
-					avatarRequests: what === 'data-power' ? avatarRequests() : undefined
+					avatarRequests: what === 'data-power' ? avatarRequests() : undefined,
+					geometry: what === 'data-frame' ? geometry() : undefined
 				});
 				continue;
 			}
@@ -57,7 +95,7 @@ function installLog() {
 		subtree: true,
 		childList: true,
 		attributes: true,
-		attributeFilter: ['data-power', 'data-glitch', 'data-show']
+		attributeFilter: ['data-power', 'data-glitch', 'data-show', 'data-frame']
 	});
 }
 
@@ -179,6 +217,82 @@ test.describe('the photo glitch', () => {
 		}
 		expect(busiest).toBeLessThanOrEqual(4);
 		expect(busiest).toBeLessThanOrEqual(2);
+	});
+
+	test('tears slices and blocks off the picture, out past the die but never over the text, within 3 flashes a second', async ({
+		page
+	}) => {
+		await load(page);
+		await arm(page);
+		await page.clock.runFor(5 * 60_000);
+		const frames = (await readLog(page)).filter((e) => e.what === 'data-frame');
+		expect(frames.length).toBeGreaterThan(30);
+
+		// Every change of the picture, the end of each glitch included: 6 in a second at most, and 3
+		// flashes is the limit of WCAG 2.3.1. The busiest second is a swap, which uses all of it.
+		const times = frames.map((e) => e.t);
+		let busiest = 0;
+		for (const start of times) {
+			busiest = Math.max(busiest, times.filter((t) => t >= start && t < start + 1000).length);
+		}
+		expect(busiest).toBeLessThanOrEqual(6);
+		expect(busiest).toBeGreaterThanOrEqual(5);
+
+		const drawn = frames.map((e) => e.geometry!).filter((g) => g.fragments.length > 0);
+		expect(drawn.length).toBeGreaterThan(20);
+		let spilled = 0;
+		let avatar = 0;
+		for (const g of drawn) {
+			// Decoration only.
+			expect(g.layerHidden).toBe('true');
+			expect(g.layerPointerEvents).toBe('none');
+			// Never makes the page wider than the window.
+			expect(g.overflow).toBeLessThanOrEqual(0);
+			if (g.fromAvatar > 0) avatar++;
+			for (const [left, top, right, bottom] of g.fragments) {
+				// Out of the die sideways, never above or below it.
+				if (left < g.die[0] - 1 || right > g.die[2] + 1) spilled++;
+				expect(top).toBeGreaterThanOrEqual(g.die[1] - 1);
+				expect(bottom).toBeLessThanOrEqual(g.die[3] + 1);
+				// Never over the hero text.
+				const over =
+					Math.min(right, g.copy[2]) > Math.max(left, g.copy[0]) &&
+					Math.min(bottom, g.copy[3]) > Math.max(top, g.copy[1]);
+				expect(over).toBe(false);
+			}
+		}
+		expect(spilled).toBeGreaterThan(20);
+		// The avatar leaks into the photo in teasers too, not only in swaps.
+		expect(avatar).toBeGreaterThan(5);
+		for (const tint of new Set(drawn.flatMap((g) => g.tints))) {
+			const [red, green, blue] = tint.match(/\d+/g)!.map(Number);
+			expect(red / (red + green + blue)).toBeLessThan(0.8);
+		}
+	});
+
+	test('keeps the fragments inside a 320 px window, with no sideways scroll, through the swaps', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 320, height: 640 });
+		await load(page);
+		await arm(page);
+		await page.clock.runFor(2 * 60_000);
+		const drawn = (await readLog(page))
+			.filter((e) => e.what === 'data-frame')
+			.map((e) => e.geometry!)
+			.filter((g) => g.fragments.length > 0);
+		expect(drawn.length).toBeGreaterThan(10);
+		for (const g of drawn) {
+			expect(g.overflow).toBeLessThanOrEqual(0);
+			for (const [left, , right] of g.fragments) {
+				expect(left).toBeGreaterThanOrEqual(0);
+				expect(right).toBeLessThanOrEqual(320);
+			}
+		}
+		const overflow = await page.evaluate(
+			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+		);
+		expect(overflow).toBeLessThanOrEqual(0);
 	});
 
 	test('names the avatar while it holds and the photo again after, in the accessibility tree', async ({

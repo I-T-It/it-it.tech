@@ -28,10 +28,11 @@ describe('GlitchPhoto prerender', () => {
 		expect(html).not.toContain('aria-hidden="true"');
 	});
 
-	it('writes no glitch state, no bands and no switch', () => {
+	it('writes no glitch state, no fragments and no switch', () => {
 		const html = prerender();
 		expect(html).not.toContain('data-glitch');
-		expect(html).not.toContain('class="band');
+		expect(html).not.toContain('frag');
+		expect(html).not.toContain('class="fx');
 		expect(html).not.toContain('<button');
 	});
 

@@ -7,12 +7,15 @@ import {
 	FIRST_TEASER_MIN_MS,
 	FLICKER_MS,
 	GLITCH_START_AFTER_POWER_MS,
-	MAX_BAND_AREA,
+	MAX_TEASE_AREA,
+	MAX_TRANSITIONS_PER_S,
+	frameArea,
 	nextCycle,
 	type GlitchEvent
 } from '#lib/glitch/schedule.js';
-import { glitch, PAUSED_KEY, setPaused } from '#lib/glitch/state.svelte.js';
+import { fx, glitch, PAUSED_KEY, setPaused } from '#lib/glitch/state.svelte.js';
 import { createRng } from '#lib/pcb/rng.js';
+import GlitchFx from './GlitchFx.svelte';
 import GlitchPhoto from './GlitchPhoto.svelte';
 
 const photoAlt = 'Portret van Robbin Schepers';
@@ -32,6 +35,10 @@ interface Rig {
 	/** The photo's frame; the glitch lives inside it. */
 	die: HTMLElement;
 	glitch: () => HTMLElement;
+	/** The layer the fragments are drawn on: in the socket, beside the die, not in it. */
+	fx: () => HTMLElement;
+	/** The fragments being drawn now. */
+	fragments: () => HTMLElement[];
 	avatar: () => HTMLImageElement | null;
 	power: () => void;
 	/** The board powers the socket, and the glitch gets as far as arming. */
@@ -53,12 +60,16 @@ function rig(props: { seed?: number } = {}): Rig {
 	socket.append(die);
 	document.body.append(socket);
 	const app = mount(GlitchPhoto, { target: die, props: { photoAlt, avatarAlt, ...props } });
+	// Like the hero: the fragment layer is a child of the socket, after the die.
+	const layer = mount(GlitchFx, { target: socket });
 	flushSync();
 	let stopped = false;
 	const made: Rig = {
 		socket,
 		die,
 		glitch: () => die.querySelector<HTMLElement>('.glitch')!,
+		fx: () => socket.querySelector<HTMLElement>('.fx')!,
+		fragments: () => [...socket.querySelectorAll<HTMLElement>('.fx .frag')],
 		avatar: () => die.querySelector<HTMLImageElement>('img.avatar'),
 		power: () => socket.setAttribute('data-power', 'on'),
 		arm: async () => {
@@ -79,6 +90,7 @@ function rig(props: { seed?: number } = {}): Rig {
 			if (stopped) return;
 			stopped = true;
 			unmount(app);
+			unmount(layer);
 			socket.remove();
 		}
 	};
@@ -167,6 +179,11 @@ beforeEach(() => {
 	glitch.paused = false;
 	glitch.armed = false;
 	glitch.reduced = false;
+	fx.photoSrc = '';
+	fx.avatarSrc = '';
+	fx.kind = null;
+	fx.slices = [];
+	fx.blocks = [];
 });
 
 afterEach(() => {
@@ -275,40 +292,84 @@ describe('a teaser', () => {
 		expect(first.duration).toBeLessThanOrEqual(300);
 	}, 60_000);
 
-	it('has three decorative bands that cover at most 8% of the die, tinted cyan or green', async () => {
+	it('draws the slices and blocks of each frame, decorative, on a layer beside the die and not in it', async () => {
 		const seed = seedWhere(plain);
 		const first = nextCycle(createRng(seed), 0).events[0];
 		const r = rig({ seed });
 		await r.arm();
 		await advance(first.at);
-		const bands = [...r.glitch().querySelectorAll<HTMLElement>('.band')];
-		expect(bands).toHaveLength(3);
-		expect(r.glitch().querySelector('.bands')!.getAttribute('aria-hidden')).toBe('true');
-		let area = 0;
-		for (const band of bands) {
-			area += Number(band.style.getPropertyValue('--h'));
-			expect(['cyan', 'green']).toContain(band.dataset.tint);
-		}
-		expect(area).toBeGreaterThan(0);
-		expect(area).toBeLessThanOrEqual(MAX_BAND_AREA);
-		for (const img of r.glitch().querySelectorAll('.bands img')) {
+		const [frame] = first.frames;
+		expect(r.fx().parentElement).toBe(r.socket);
+		expect(r.die.contains(r.fx())).toBe(false);
+		expect(r.fx().getAttribute('aria-hidden')).toBe('true');
+		expect(r.fragments().filter((el) => el.dataset.part === 'slice')).toHaveLength(
+			frame.slices.length
+		);
+		expect(r.fragments().filter((el) => el.dataset.part === 'block')).toHaveLength(
+			frame.blocks.length
+		);
+		expect(frameArea(frame)).toBeGreaterThan(0.1);
+		expect(frameArea(frame)).toBeLessThanOrEqual(MAX_TEASE_AREA);
+		for (const img of r.fx().querySelectorAll('img')) {
 			expect(img.getAttribute('alt')).toBe('');
 		}
-		expect(r.glitch().querySelector('.bands a, .bands button, .bands [tabindex]')).toBeNull();
+		expect(r.fx().querySelector('a, button, [tabindex]')).toBeNull();
+		expect(names()).toEqual([photoAlt]);
 	});
 
-	it('shows the bands only while a glitch runs', async () => {
+	it('plays every frame of the teaser in turn and ends with nothing drawn', async () => {
 		const seed = seedWhere(plain);
 		const first = nextCycle(createRng(seed), 0).events[0];
 		const r = rig({ seed });
 		await r.arm();
-		const bands = () => getComputedStyle(r.glitch().querySelector('.bands')!).display;
-		expect(bands()).toBe('none');
 		await advance(first.at);
-		expect(bands()).not.toBe('none');
-		await advance(first.duration);
-		expect(bands()).toBe('none');
+		const counts: number[] = [];
+		for (const f of first.frames) {
+			counts.push(r.fragments().length);
+			expect(r.fragments()).toHaveLength(f.slices.length + f.blocks.length);
+			const next = first.frames[first.frames.indexOf(f) + 1]?.at ?? first.duration;
+			await advance(next - f.at);
+		}
+		expect(r.fragments()).toHaveLength(0);
+		expect(r.glitch().hasAttribute('data-glitch')).toBe(false);
+		expect(counts.length).toBe(first.frames.length);
 	});
+
+	it('shows the layer only while a glitch runs', async () => {
+		const seed = seedWhere(plain);
+		const first = nextCycle(createRng(seed), 0).events[0];
+		const r = rig({ seed });
+		await r.arm();
+		const layer = () => getComputedStyle(r.fx()).display;
+		expect(layer()).toBe('none');
+		await advance(first.at);
+		expect(layer()).not.toBe('none');
+		await advance(first.duration);
+		expect(layer()).toBe('none');
+	});
+
+	it('lets the avatar leak into the photo as fragments, once it has decoded, and says nothing of it', async () => {
+		const bleeds = (events: GlitchEvent[]) =>
+			events[0].kind === 'tease' &&
+			[...events[0].frames[0].slices, ...events[0].frames[0].blocks].some(
+				(f) => f.source === 'avatar'
+			);
+		const seed = seedWhere(bleeds);
+		const first = nextCycle(createRng(seed), 0).events[0];
+		const r = rig({ seed });
+		await r.arm();
+		await r.loaded();
+		await advance(first.at);
+		const wanted = [...first.frames[0].slices, ...first.frames[0].blocks].filter(
+			(f) => f.source === 'avatar'
+		).length;
+		expect(wanted).toBeGreaterThan(0);
+		expect(r.fragments().filter((el) => el.dataset.source === 'avatar')).toHaveLength(wanted);
+		// The photo is still the whole image, and the only image there is to a screen reader.
+		expect(r.glitch().dataset.show).toBe('photo');
+		expect(names()).toEqual([photoAlt]);
+		expect(r.avatar()!.getAttribute('aria-hidden')).toBe('true');
+	}, 60_000);
 });
 
 describe('a flicker', () => {
@@ -416,6 +477,14 @@ describe('a swap', () => {
 });
 
 describe('flash safety', () => {
+	/** The most of `times` in any window of 1000 ms, its end not included. */
+	const busiestSecond = (times: number[]) => {
+		let busiest = 0;
+		for (const t of times)
+			busiest = Math.max(busiest, times.filter((c) => c >= t && c < t + 1000).length);
+		return busiest;
+	};
+
 	it('changes the whole image at most twice in any second, over 3 simulated minutes', async () => {
 		const r = rig({ seed: 11 });
 		const changes: number[] = [];
@@ -432,15 +501,34 @@ describe('flash safety', () => {
 		for (let t = 0; t < 180_000; t += 1000) await advance(1000);
 		watch.disconnect();
 		expect(changes.length).toBeGreaterThanOrEqual(2);
-		let busiest = 0;
-		for (let i = 0; i < changes.length; i++) {
-			busiest = Math.max(
-				busiest,
-				changes.filter((c) => c >= changes[i] && c < changes[i] + 1000).length
-			);
-		}
-		expect(busiest).toBeLessThanOrEqual(2);
+		expect(busiestSecond(changes)).toBeLessThanOrEqual(2);
 	}, 120_000);
+
+	it('changes the picture at most 6 times (3 flashes) in any second, and draws no red, over 2 simulated minutes', async () => {
+		const r = rig({ seed: 11 });
+		const changes: number[] = [];
+		const tints = new Set<string>();
+		const watch = new MutationObserver(() => {
+			changes.push(Date.now());
+			for (const el of r.fragments()) tints.add(el.style.getPropertyValue('--tint'));
+		});
+		await r.arm();
+		await r.loaded();
+		watch.observe(r.fx(), { attributes: true, attributeFilter: ['data-frame'] });
+		// Frames are 60 ms apart at the least: stepping by 20 ms shows each change on its own.
+		for (let t = 0; t < 120_000; t += 20) await advance(20);
+		watch.disconnect();
+		// Every frame and every end of a glitch is a change: a cycle has at least 3 glitches, 2 of them swaps.
+		expect(changes.length).toBeGreaterThan(30);
+		expect(busiestSecond(changes)).toBeLessThanOrEqual(MAX_TRANSITIONS_PER_S);
+		expect(busiestSecond(changes)).toBeGreaterThanOrEqual(4);
+		// Colours drawn: cyan, green, magenta and blue, red never leading (WCAG 2.3.1, saturated red).
+		expect(tints.size).toBeGreaterThanOrEqual(3);
+		for (const color of tints) {
+			const [red, green, blue] = color.match(/\d+/g)!.map(Number);
+			expect(red / (red + green + blue)).toBeLessThan(0.8);
+		}
+	}, 240_000);
 });
 
 describe('reduced motion', () => {

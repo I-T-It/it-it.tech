@@ -7,13 +7,12 @@
 		MAX_TRANSITIONS_PER_S,
 		maxTransitionsInWindow,
 		nextCycle,
-		type Band,
 		type Frame,
 		type GlitchEvent,
 		type GlitchKind,
 		type Shown
 	} from '#lib/glitch/schedule.js';
-	import { glitch, loadPaused, trackReducedMotion } from '#lib/glitch/state.svelte.js';
+	import { clearFx, fx, glitch, loadPaused, trackReducedMotion } from '#lib/glitch/state.svelte.js';
 	import { createRng, type Rng } from '#lib/pcb/rng.js';
 
 	interface Props {
@@ -32,22 +31,15 @@
 	 * intro takes to show everything when the board never comes.
 	 */
 	const NO_POWER_ARM_MS = 12_000;
-	const REST_BANDS: Band[] = Array.from({ length: 3 }, () => ({
-		top: 0,
-		height: 0,
-		shift: 0,
-		source: 'photo',
-		tint: 'cyan'
-	}));
 
 	let host: HTMLElement | undefined = $state();
 	let photoEl: HTMLImageElement | undefined = $state();
 	let avatarEl: HTMLImageElement | undefined = $state();
 
-	// What the die shows: the whole image underneath, the glitch running, the bands.
+	// What the die shows: the whole image underneath, and the glitch running. The fragments the
+	// glitch tears off are drawn by GlitchFx from `fx`, outside the die.
 	let shown: Shown = $state('photo');
 	let kind: GlitchKind | null = $state(null);
-	let bands: Band[] = $state(REST_BANDS);
 	/** The avatar is the image in the accessibility tree: between the middles of the two swap glitches. */
 	let held = $state(false);
 
@@ -55,8 +47,6 @@
 	let avatarMounted = $state(false);
 	let avatarReady = $state(false);
 	let avatarFailed = $state(false);
-	let photoSrc = $state('');
-	let avatarSrc = $state('');
 
 	let pageVisible = $state(true);
 	let inView = $state(true);
@@ -100,11 +90,11 @@
 		kind = null;
 		shown = 'photo';
 		held = false;
-		bands = REST_BANDS;
+		clearFx();
 	}
 
 	function rememberPhoto() {
-		if (glitch.armed && photoEl) photoSrc = photoEl.currentSrc;
+		if (glitch.armed && photoEl) fx.photoSrc = photoEl.currentSrc;
 	}
 
 	/**
@@ -129,7 +119,10 @@
 				kind = event.kind;
 				shown = f.show;
 			}
-			bands = f.bands;
+			fx.kind = kind;
+			fx.slices = f.slices;
+			fx.blocks = f.blocks;
+			fx.frame++;
 			if (isSwap) held = f.show === 'avatar';
 		};
 
@@ -138,7 +131,7 @@
 			if (isSwap && !swapping) return;
 			if (event.kind === 'swap-out') swapping = false;
 			kind = null;
-			bands = REST_BANDS;
+			clearFx();
 		};
 
 		const cycle = () => {
@@ -231,6 +224,8 @@
 			document.removeEventListener('visibilitychange', onVisibility);
 			stopMotion();
 			glitch.armed = false;
+			fx.photoSrc = '';
+			clearFx();
 		};
 	});
 
@@ -255,7 +250,7 @@
 		if (glitch.armed && !glitch.paused && !glitch.reduced) avatarMounted = true;
 	});
 
-	// The photo as the browser picked it, for the strips that tear off it.
+	// The photo as the browser picked it, for the fragments that tear off it.
 	$effect(rememberPhoto);
 
 	// Flickers and swaps wait until the avatar has decoded, so a 100 ms flash is never half an image.
@@ -266,7 +261,7 @@
 		el.decode().then(
 			() => {
 				if (!current) return;
-				avatarSrc = el.currentSrc;
+				fx.avatarSrc = el.currentSrc;
 				avatarReady = true;
 			},
 			() => {
@@ -275,6 +270,7 @@
 		);
 		return () => {
 			current = false;
+			fx.avatarSrc = '';
 		};
 	});
 
@@ -290,7 +286,8 @@
 <!--
 	The photo, and over it what the glitch does. The photo is the only image a screen reader finds,
 	except between the middles of the two swap glitches, when the avatar takes its place (silently:
-	no live region). The bands, the strips in them and the avatar's flickers are decoration.
+	no live region). What the glitch tears off (slices, blocks, the avatar bleeding through) is drawn
+	by GlitchFx, outside the die, and the avatar's flickers are decoration: none of it is announced.
 -->
 <div class="glitch" bind:this={host} data-show={shown} data-glitch={kind ?? undefined}>
 	<!-- The avatar fills the same frame, so both pictures say the same sizes (a literal: enhanced:img reads it at build time). -->
@@ -315,27 +312,6 @@
 			aria-hidden={held ? undefined : 'true'}
 			onerror={() => (avatarFailed = true)}
 		/>
-	{/if}
-	{#if glitch.armed}
-		<span class="bands" aria-hidden="true">
-			{#each bands as band, i (i)}
-				<span
-					class="band"
-					data-source={band.source}
-					data-tint={band.tint}
-					style:--t={band.top}
-					style:--h={band.height}
-					style:--shift={band.shift}
-				>
-					{#if photoSrc}
-						<img class="strip strip-photo" src={photoSrc} alt="" />
-					{/if}
-					{#if avatarSrc}
-						<img class="strip strip-avatar" src={avatarSrc} alt="" />
-					{/if}
-				</span>
-			{/each}
-		</span>
 	{/if}
 </div>
 
@@ -372,73 +348,14 @@
 		visibility: visible;
 	}
 
-	/*
-	 * Three thin strips of an image, torn sideways, with a cyan or green tint: all that moves in a
-	 * teaser. Each band is a window on the die; its image is as big as the die and pulled up by
-	 * the band's own top, so the strip shows the picture where the band sits, then --shift moves it.
-	 */
-	.bands {
-		position: absolute;
-		inset: 1px;
-		display: none;
-		pointer-events: none;
-	}
-
-	.glitch[data-glitch] .bands {
-		display: block;
-	}
-
-	.band {
-		--tint: var(--trace-cyan);
-		position: absolute;
-		left: 0;
-		right: 0;
-		top: calc(var(--t) * 100%);
-		height: calc(var(--h) * 100%);
-		overflow: hidden;
-		box-shadow: 0 1px 0 color-mix(in srgb, var(--tint) 70%, transparent);
-	}
-
-	.band[data-tint='green'] {
-		--tint: var(--trace-green);
-	}
-
-	.band::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background: var(--tint);
-		mix-blend-mode: screen;
-		opacity: 0.45;
-	}
-
-	.strip {
-		position: absolute;
-		left: 0;
-		top: calc(var(--t) / var(--h) * -100%);
-		width: 100%;
-		height: calc(100% / var(--h));
-		max-width: none;
-		object-fit: cover;
-		object-position: 45% 30%;
-		transform: translateX(calc(var(--shift) * 100%));
-	}
-
-	.band[data-source='photo'] .strip-avatar,
-	.band[data-source='avatar'] .strip-photo {
-		display: none;
-	}
-
 	/* The page in print, and a visitor who asked for less motion, get the photo and nothing else. */
 	@media print {
-		.avatar,
-		.bands {
+		.avatar {
 			display: none !important;
 		}
 	}
 
-	:global(html.reduced) .avatar,
-	:global(html.reduced) .bands {
+	:global(html.reduced) .avatar {
 		display: none !important;
 	}
 </style>
