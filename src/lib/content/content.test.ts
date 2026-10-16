@@ -422,12 +422,13 @@ describe('experience', () => {
 });
 
 describe('projects', () => {
-	it('lists Laravel Tinker, Framed, Streamline and GH Radio, in that order', () => {
+	it('lists Laravel Tinker, Framed, Streamline, Frontend Festival and GH Radio, in that order', () => {
 		for (const [, c] of both) {
 			expect(c.projects.projects.map((p) => [p.id, p.title, p.status])).toEqual([
 				['laravel-tinker', 'Laravel Tinker', 'live'],
 				['framed', 'Framed', 'soon'],
 				['streamline', 'Streamline', 'wip'],
+				['frontend-festival', 'Frontend Festival', 'live'],
 				['gh-radio', 'GH Radio', 'past']
 			]);
 		}
@@ -454,13 +455,24 @@ describe('projects', () => {
 		}
 	});
 
-	it('links Framed and Streamline to their repositories, and GH Radio nowhere', () => {
+	it('links Framed, Streamline and Frontend Festival to their repositories, and GH Radio nowhere', () => {
 		for (const [, c] of both) {
 			const urls = (id: string) =>
 				c.projects.projects.find((p) => p.id === id)!.links.map((l) => l.url);
 			expect(urls('framed')).toEqual(['https://github.com/Roboroads/Framed']);
 			expect(urls('streamline')).toEqual(['https://github.com/StreamlineRadio/Streamline']);
+			expect(urls('frontend-festival')).toEqual([
+				'https://github.com/Ordina-Group/frontendfestival.nl'
+			]);
 			expect(urls('gh-radio')).toEqual([]);
+		}
+	});
+
+	it('has no link to Graphton, which is dead', () => {
+		for (const [, c] of both) {
+			const urls = c.projects.projects.flatMap((p) => p.links.map((l) => l.url));
+			expect(urls.some((u) => /graphton/i.test(u))).toBe(false);
+			expect(leaves(c).some(([, value]) => /graphton/i.test(value))).toBe(false);
 		}
 	});
 

@@ -478,6 +478,21 @@ export const en: SiteContent = {
 				]
 			},
 			{
+				id: 'frontend-festival',
+				title: 'Frontend Festival',
+				status: 'live',
+				description: [
+					'I worked on the website of Frontend Festival, an evening of talks and workshops about open source front-end development. The code is open on GitHub.'
+				],
+				tech: ['Svelte', 'JavaScript', 'CSS', 'HTML'],
+				links: [
+					{
+						label: 'Source code on GitHub',
+						url: 'https://github.com/Ordina-Group/frontendfestival.nl'
+					}
+				]
+			},
+			{
 				id: 'gh-radio',
 				title: 'GH Radio',
 				status: 'past',

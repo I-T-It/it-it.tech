@@ -989,13 +989,14 @@ describe('Projects (U10)', () => {
 			'laravel-tinker',
 			'framed',
 			'streamline',
+			'frontend-festival',
 			'gh-radio'
 		]);
 		for (const project of section().projects) {
 			expect(item(project.id).querySelector('h3')?.textContent).toBe(project.title);
 		}
 		const headings = Array.from(document.querySelectorAll('section#projects :is(h2, h3, h4)'));
-		expect(headings.map((h) => h.tagName)).toEqual(['H2', 'H3', 'H3', 'H3', 'H3']);
+		expect(headings.map((h) => h.tagName)).toEqual(['H2', 'H3', 'H3', 'H3', 'H3', 'H3']);
 	});
 
 	it('writes the status of each project as text, not only as a mark', async () => {
@@ -1005,6 +1006,7 @@ describe('Projects (U10)', () => {
 			'Beschikbaar',
 			'Verschijnt binnenkort',
 			'In ontwikkeling',
+			'Beschikbaar',
 			'Eerder project'
 		]);
 		expect(item('framed').dataset.status).toBe('soon');
@@ -1034,6 +1036,9 @@ describe('Projects (U10)', () => {
 		]);
 		expect(hrefs('framed')).toEqual(['https://github.com/Roboroads/Framed']);
 		expect(hrefs('streamline')).toEqual(['https://github.com/StreamlineRadio/Streamline']);
+		expect(hrefs('frontend-festival')).toEqual([
+			'https://github.com/Ordina-Group/frontendfestival.nl'
+		]);
 		expect(hrefs('gh-radio')).toEqual([]);
 		expect(item('gh-radio').querySelector('.links')).toBeNull();
 	});
@@ -1064,6 +1069,7 @@ describe('Projects (U10)', () => {
 			'Available',
 			'Releasing soon',
 			'In development',
+			'Available',
 			'Earlier project'
 		]);
 		expect(item('framed').querySelector('a')?.textContent).toBe(
