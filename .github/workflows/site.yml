@@ -75,16 +75,22 @@ jobs:
           if [ -n "$COMPANY_DOMAIN" ]; then
             company_url="https://$COMPANY_DOMAIN/"
           fi
+          personal_url="https://roboroads.github.io/deschepers.nl/"
+          if [ -n "$PERSONAL_DOMAIN" ]; then
+            personal_url="https://$PERSONAL_DOMAIN/"
+          fi
           {
             echo "base=$base"
             echo "url=$url"
             echo "company_url=$company_url"
+            echo "personal_url=$personal_url"
           } >> "$GITHUB_OUTPUT"
       - name: Build ${{ matrix.site }}
         env:
           BASE_PATH: ${{ steps.settings.outputs.base }}
           PUBLIC_SITE_URL: ${{ steps.settings.outputs.url }}
           PUBLIC_COMPANY_SITE_URL: ${{ steps.settings.outputs.company_url }}
+          PUBLIC_PERSONAL_SITE_URL: ${{ steps.settings.outputs.personal_url }}
         run: node scripts/build-variant.mjs "${{ matrix.site }}" --no-copy
       - name: Upload the company site for Pages
         if: matrix.site == 'company'

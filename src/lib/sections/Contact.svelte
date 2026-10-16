@@ -3,7 +3,7 @@
 	import { getContent } from '#lib/content/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
-	import { COMPANY_SITE_URL, site } from '#lib/site.js';
+	import { COMPANY_SITE_URL, PERSONAL_SITE_URL, site } from '#lib/site.js';
 	import Chip from '#lib/components/Chip.svelte';
 	import ProtectedEmail from '#lib/components/ProtectedEmail.svelte';
 
@@ -12,13 +12,16 @@
 
 	/** I.T. It in the language of this page. The personal build links here instead of showing an email. */
 	const companyUrl = COMPANY_SITE_URL + (locale === 'en' ? 'en/' : '');
+
+	/** Robbin's own page in the language of this page. The company build links here. */
+	const personalUrl = PERSONAL_SITE_URL + (locale === 'en' ? 'en/' : '');
 </script>
 
 <!--
 	U9. Each way to reach him is a pad at the end of a short trace, like the icon pads on the back
 	of the business card. The pads are decoration; each row has exactly one link, and its text
 	says what it is. Only the company build shows an email address: the personal build links to
-	I.T. It instead. The whole row is clickable (the link stretches over it), the link keeps the
+	I.T. It instead, and the company build links to the personal site. The whole row is clickable (the link stretches over it), the link keeps the
 	focus ring.
 -->
 <Chip id="contact" designator="U9" side="both" labelledby="contact-title">
@@ -73,7 +76,21 @@
 			>
 		</li>
 
-		{#if site === 'personal'}
+		{#if site === 'company'}
+			<li class="way way-job">
+				<span class="stub" aria-hidden="true"></span>
+				<span class="pad" aria-hidden="true">
+					<svg viewBox="0 0 24 24" focusable="false">
+						<circle cx="12" cy="8" r="3.5" />
+						<path d="M5 20c0-3.9 3.1-6 7-6s7 2.1 7 6" />
+					</svg>
+				</span>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- an external address, not a route -->
+				<a class="way-link" href={personalUrl}
+					>{contact.labels.personal}<span class="sr-only">{' ' + m.external_site()}</span></a
+				>
+			</li>
+		{:else}
 			<li class="way way-freelance">
 				<span class="stub" aria-hidden="true"></span>
 				<span class="pad" aria-hidden="true">

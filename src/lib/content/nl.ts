@@ -12,12 +12,16 @@ export const nl: SiteContent = {
 		company: {
 			title: 'I.T. It - Voor alles met stekkers',
 			description:
-				'I.T. It bouwt webapplicaties en apps en helpt bij computerproblemen. Samen zoeken we de beste oplossing. Doordeweeks vanaf 18:00 en in het weekend.'
+				'I.T. It is het bedrijf van Robbin Schepers. Hij bouwt webapplicaties en apps en helpt bij computerproblemen, doordeweeks vanaf 18:00 en in het weekend.',
+			ogImageAlt:
+				'Logo van I.T. It op een donkere printplaat, met de tekst Voor alles met stekkers en het webadres'
 		},
 		personal: {
 			title: 'Robbin "Roboroads" Schepers - Professionele Computer Nerd',
 			description:
-				'Robbin "Roboroads" Schepers is developer en werkt overdag in loondienst. In de avonden en het weekend bouwt hij webapplicaties en apps met zijn bedrijf I.T. It.'
+				'Robbin "Roboroads" Schepers is developer en werkt overdag in loondienst. In de avonden en het weekend bouwt hij webapplicaties en apps met zijn bedrijf I.T. It.',
+			ogImageAlt:
+				'Portret van Robbin Schepers op een donkere printplaat, met zijn naam, de tekst Professional Computer Nerd en het webadres'
 		}
 	},
 
@@ -733,7 +737,8 @@ export const nl: SiteContent = {
 			email: 'E-mail',
 			linkedin: 'LinkedIn',
 			github: 'GitHub',
-			company: 'Naar I.T. It'
+			company: 'Naar I.T. It',
+			personal: 'Persoonlijke site van Robbin'
 		}
 	}
 };

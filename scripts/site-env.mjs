@@ -17,6 +17,17 @@ const DEFAULTS = {
 /** Where the personal build sends visitors who want I.T. It. Trailing slash on purpose. */
 export const COMPANY_SITE_URL_DEFAULT = 'https://i-t-it.github.io/it-it.tech/';
 
+/** Where the company build sends visitors who want Robbin's own page. Trailing slash on purpose. */
+export const PERSONAL_SITE_URL_DEFAULT = 'https://roboroads.github.io/deschepers.nl/';
+
+/**
+ * An address with exactly one trailing slash, so `url + 'en/'` and `url + '#person'` always work.
+ * @param {string} url
+ */
+export function withTrailingSlash(url) {
+	return url.replace(/\/*$/, '/');
+}
+
 /**
  * Unset or empty means company, which covers local dev and PR builds.
  * Anything else that is not a known site fails the build.
@@ -54,6 +65,9 @@ export function resolveBuildEnv(env) {
 		PUBLIC_SITE: site,
 		PUBLIC_SITE_URL: (env.PUBLIC_SITE_URL || defaults.siteUrl).replace(/\/+$/, ''),
 		PUBLIC_COMPANY_SITE_URL: env.PUBLIC_COMPANY_SITE_URL || COMPANY_SITE_URL_DEFAULT,
+		PUBLIC_PERSONAL_SITE_URL: withTrailingSlash(
+			env.PUBLIC_PERSONAL_SITE_URL || PERSONAL_SITE_URL_DEFAULT
+		),
 		BASE_PATH: basePath
 	};
 }

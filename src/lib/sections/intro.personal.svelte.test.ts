@@ -29,7 +29,8 @@ vi.mock('../site.js', () => ({
 		primaryPath: 'job',
 		availabilityOrder: ['job', 'freelance']
 	},
-	COMPANY_SITE_URL: 'https://company.example/'
+	COMPANY_SITE_URL: 'https://company.example/',
+	PERSONAL_SITE_URL: 'https://personal.example/'
 }));
 
 // Built from parts: the address and the mail scheme are never written out (see CLAUDE.md).
@@ -682,6 +683,19 @@ describe('Contact', () => {
 		expect(section().textContent).not.toContain('[at]');
 		expect(section().textContent).not.toContain(content.nl.contact.labels.email);
 		expect(section().innerHTML).not.toContain(address);
+	});
+
+	it('has no link to the personal site: this is the personal site', async () => {
+		await mount(Contact);
+		expect(section().textContent).not.toContain(content.nl.contact.labels.personal);
+		expect(section().querySelector('a[href^="https://personal.example"]')).toBeNull();
+	});
+
+	it('has no link to the personal site on the English page either', async () => {
+		setLocale('en');
+		await mount(Contact);
+		expect(section().textContent).not.toContain(content.en.contact.labels.personal);
+		expect(section().querySelector('a[href^="https://personal.example"]')).toBeNull();
 	});
 
 	it('links to the English page of I.T. It on the English page', async () => {

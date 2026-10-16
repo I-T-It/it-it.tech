@@ -26,7 +26,13 @@ const combinations = [
 /** @param {{ site: string, base: string }} combination @returns {Promise<number>} */
 function run({ site, base }) {
 	const env = { ...process.env, BASE_PATH: base };
-	for (const key of ['PUBLIC_SITE', 'PUBLIC_SITE_URL', 'PUBLIC_COMPANY_SITE_URL', 'BUILD_DIR']) {
+	for (const key of [
+		'PUBLIC_SITE',
+		'PUBLIC_SITE_URL',
+		'PUBLIC_COMPANY_SITE_URL',
+		'PUBLIC_PERSONAL_SITE_URL',
+		'BUILD_DIR'
+	]) {
 		delete env[key];
 	}
 	if (site === 'personal') env.PUBLIC_SITE = 'personal';

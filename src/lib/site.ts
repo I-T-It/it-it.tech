@@ -1,4 +1,9 @@
-import { PUBLIC_SITE, PUBLIC_SITE_URL, PUBLIC_COMPANY_SITE_URL } from '$app/env/public';
+import {
+	PUBLIC_SITE,
+	PUBLIC_SITE_URL,
+	PUBLIC_COMPANY_SITE_URL,
+	PUBLIC_PERSONAL_SITE_URL
+} from '$app/env/public';
 import { parseSite } from '../../scripts/site-env.mjs';
 
 export { parseSite };
@@ -55,6 +60,13 @@ export const siteUrl: string = PUBLIC_SITE_URL;
  * It is the github.io address until the custom domain is live, then https://it-it.tech/.
  */
 export const COMPANY_SITE_URL: string = PUBLIC_COMPANY_SITE_URL;
+
+/**
+ * Where the personal site lives, with a trailing slash. The company build links here and names it
+ * in its structured data. Locale: append `en/` for English, nothing for Dutch.
+ * It is the github.io address until the custom domain is live, then https://deschepers.nl/.
+ */
+export const PERSONAL_SITE_URL: string = PUBLIC_PERSONAL_SITE_URL;
 
 /** `siteUrl` plus a root-relative path, e.g. `absoluteUrl('/en/')`. */
 export function absoluteUrl(path = '/'): string {
