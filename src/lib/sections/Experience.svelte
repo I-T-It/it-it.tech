@@ -9,15 +9,71 @@
 
 <script lang="ts">
 	import type { Attachment } from 'svelte/attachments';
+	import { page } from '$app/state';
 	import Chip from '#lib/components/Chip.svelte';
 	import { getContent } from '#lib/content/index.js';
 	import { PERIOD_SEPARATOR, localeTag, periodParts } from '#lib/format/period.js';
+	import { filterableKeys, jobsWithSkill, skillKey, skillOptions } from '#lib/format/skills.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { EXPERIENCE_ID, skillFilter } from './skillFilter.svelte.js';
 
 	const locale = getLocale();
 	const content = getContent(locale).experience;
 	const jobs = newestFirst(content.jobs);
+
+	/** How many skills the filter lists before the "more" button. */
+	const VISIBLE_SKILLS = 12;
+
+	/** The skills a role can be filtered on: every tag that any role has. */
+	const available = filterableKeys(jobs);
+
+	/** The address is the source: read it once the page is up, and again after each navigation. */
+	$effect(() => {
+		void page.url;
+		skillFilter.restore(available);
+	});
+
+	const active = $derived(skillFilter.active);
+
+	/** The skills of two roles or more, and the one in use even if it is rarer. */
+	const pool = $derived(skillOptions(jobs, { keep: active }));
+	let expanded = $state(false);
+	const chips = $derived(
+		expanded ? pool : pool.filter((option, i) => i < VISIBLE_SKILLS || option.key === active)
+	);
+	const hiddenChips = $derived(pool.length - chips.length);
+
+	/** The ids of the roles that have the skill; nothing while all roles show. */
+	const matching = $derived(
+		active ? new Set(jobsWithSkill(jobs, active).map((job) => job.id)) : undefined
+	);
+	const isShown = (job: Job) => !matching || matching.has(job.id);
+	/** The trace of the timeline ends at the last role on show. */
+	const lastShown = $derived(jobs.findLast(isShown)?.id);
+
+	function choose(key: string | undefined) {
+		skillFilter.select(key === active ? undefined : key);
+	}
+
+	/**
+	 * What the live region says. It stays empty until a filter has been on, so loading the page
+	 * reads out nothing, and then says how many roles are in view, also after the reset.
+	 */
+	let announced = $state(false);
+	$effect(() => {
+		if (active) announced = true;
+	});
+	const status = $derived.by(() => {
+		if (!active || !matching) {
+			return announced ? m.experience_filter_status_all({ count: jobs.length }) : '';
+		}
+		const skill = pool.find((option) => option.key === active)?.label ?? active;
+		const plural = new Intl.PluralRules(localeTag(locale)).select(matching.size);
+		const say =
+			plural === 'one' ? m.experience_filter_status_one : m.experience_filter_status_other;
+		return say({ count: matching.size, skill });
+	});
 
 	/** "via Sopra Steria", only where the employer differs from the organisation. */
 	function employer(job: Job): string | undefined {
@@ -53,13 +109,16 @@
 	 * A via that is lit stays lit: the observer lets go of it.
 	 */
 	const lightVias: Attachment<HTMLOListElement> = (list) => {
+		// Look again whenever the roles on show change: a role that comes back above the window
+		// gets no notification of its own, and the first look of a new observer finds it.
+		void matching;
 		const reduced =
 			document.documentElement.classList.contains('reduced') ||
 			matchMedia('(prefers-reduced-motion: reduce)').matches;
 		if (reduced || CSS.supports('animation-timeline', 'view()')) return;
 
 		driver = 'io';
-		const vias = Array.from(list.querySelectorAll<HTMLElement>('.via'));
+		const vias = Array.from(list.querySelectorAll<HTMLElement>('.via:not([data-lit])'));
 		const light = (via: Element) => via.setAttribute('data-lit', '');
 
 		if (typeof IntersectionObserver === 'undefined') {
@@ -86,22 +145,74 @@
 	};
 </script>
 
-<Chip id="experience" designator="U5" labelledby="experience-title" side="both">
+<Chip id={EXPERIENCE_ID} designator="U5" labelledby="experience-title" side="both">
 	<h2 id="experience-title">{content.title}</h2>
 	{#if content.intro}
 		<p class="intro">{content.intro}</p>
 	{/if}
 
+	<!--
+		The filter needs scripts: it is written into the page but hidden until html.js is set, so
+		without JS every role shows and nothing inert is in the way. A chip is a toggle button;
+		only one skill is on at a time. The status line is the live region, in the page from the
+		start so a change in it is announced.
+	-->
+	<div class="filter" role="group" aria-labelledby="experience-filter-label" data-filter>
+		<p class="filter-label" id="experience-filter-label">{m.experience_filter_label()}</p>
+		<ul class="picks" id="experience-filter-picks">
+			<li>
+				<button
+					type="button"
+					class="pick"
+					aria-pressed={!active}
+					onclick={() => skillFilter.select(undefined)}
+					>{m.experience_filter_all()} <span class="count">({jobs.length})</span></button
+				>
+			</li>
+			{#each chips as option (option.key)}
+				<li>
+					<button
+						type="button"
+						class="pick"
+						data-skill={option.key}
+						aria-pressed={option.key === active}
+						onclick={() => choose(option.key)}
+						>{option.label} <span class="count">({option.count})</span></button
+					>
+				</li>
+			{/each}
+		</ul>
+		{#if expanded || hiddenChips > 0}
+			<button
+				type="button"
+				class="more"
+				aria-expanded={expanded}
+				aria-controls="experience-filter-picks"
+				onclick={() => (expanded = !expanded)}
+				>{expanded
+					? m.experience_filter_less()
+					: m.experience_filter_more({ count: hiddenChips })}</button
+			>
+		{/if}
+		<p class="status" role="status">{status}</p>
+	</div>
+
 	<ol class="timeline" data-driver={driver} {@attach lightVias}>
-		{#each jobs as job, i (job.id)}
+		{#each jobs as job (job.id)}
 			{@const [from, to] = periodParts(job.start, job.end, locale, content.labels.present)}
 			{@const via = employer(job)}
 			{@const hasDetails = job.situation.length + job.tasks.length + job.results.length > 0}
-			<li class="job" id="job-{job.id}">
+			{@const shown = isShown(job)}
+			<li
+				class="job"
+				id="job-{job.id}"
+				hidden={!shown}
+				data-last={job.id === lastShown ? '' : undefined}
+			>
 				<!-- The timeline is decoration: a trace down the left with a via at every role. -->
 				<span class="rail" aria-hidden="true">
 					<span class="via"></span>
-					{#if i < jobs.length - 1}
+					{#if shown && job.id !== lastShown}
 						<span class="trace"></span>
 					{/if}
 				</span>
@@ -124,7 +235,7 @@
 					{#if job.tech.length}
 						<ul class="tech">
 							{#each job.tech as tech (tech)}
-								<li>{tech}</li>
+								<li data-match={active && skillKey(tech) === active ? '' : undefined}>{tech}</li>
 							{/each}
 						</ul>
 					{/if}
@@ -194,6 +305,137 @@
 	.intro {
 		margin-bottom: 0;
 		color: var(--ink-muted);
+	}
+
+	/*
+	 * The filter: toggle buttons shaped like the technology tags of a role, with a pad at each
+	 * end and a small LED in front. On is a filled chip with a lit LED and a bolder label, so the
+	 * state never rests on colour alone. Without JS (no html.js) it is not shown at all.
+	 */
+	.filter {
+		display: none;
+		margin-top: 1.5rem;
+	}
+
+	:global(html.js) .filter {
+		display: block;
+	}
+
+	.filter-label {
+		margin: 0 0 0.5rem;
+		color: var(--ink-muted);
+		font-family: var(--font-display);
+		font-size: 0.8125rem;
+	}
+
+	.picks {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.pick,
+	.more {
+		min-height: 2rem;
+		font-family: var(--font-display);
+		font-size: 0.875rem;
+		line-height: 1.4;
+		cursor: pointer;
+	}
+
+	.pick {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		max-width: 100%;
+		padding: 0.125rem 0.75rem;
+		border: 1px solid var(--silk);
+		border-inline-width: 3px;
+		background: transparent;
+		color: var(--ink);
+		text-align: start;
+		overflow-wrap: anywhere;
+	}
+
+	/* The LED: a ring when off, filled when on. */
+	.pick::before {
+		content: '';
+		flex: none;
+		width: 0.5rem;
+		height: 0.5rem;
+		border: 1.5px solid currentColor;
+		border-radius: 50%;
+		background: transparent;
+	}
+
+	.pick .count {
+		color: var(--ink-muted);
+	}
+
+	.pick[aria-pressed='true'] {
+		border-color: var(--trace-cyan);
+		background: var(--trace-cyan);
+		color: var(--on-accent);
+		font-weight: 600;
+	}
+
+	.pick[aria-pressed='true']::before {
+		background: currentColor;
+	}
+
+	.pick[aria-pressed='true'] .count {
+		color: inherit;
+	}
+
+	@media (hover: hover) {
+		.pick[aria-pressed='false']:hover {
+			border-color: var(--trace-cyan);
+			background: color-mix(in srgb, var(--trace-cyan) 14%, transparent);
+		}
+	}
+
+	.more {
+		display: inline-flex;
+		align-items: center;
+		margin-top: 0.5rem;
+		padding: 0.25rem 0;
+		border: 0;
+		background: transparent;
+		color: var(--ink);
+		text-decoration: underline;
+		text-decoration-color: var(--silk);
+		text-decoration-thickness: 1px;
+		text-underline-offset: 0.25em;
+	}
+
+	/* The line keeps its room when empty, so the list below does not jump when it fills. */
+	.status {
+		min-height: 1.6em;
+		margin: 0.75rem 0 0;
+		font-family: var(--font-display);
+		font-size: 0.875rem;
+	}
+
+	/* A match among the tags of a role: filled and bolder, not only another colour. */
+	.tech li[data-match] {
+		border-color: var(--trace-cyan);
+		background: color-mix(in srgb, var(--trace-cyan) 22%, transparent);
+		color: var(--ink);
+		font-weight: 600;
+	}
+
+	/* The printed CV is the whole CV: no filter, and the roles it hid are back. */
+	@media print {
+		.filter[data-filter] {
+			display: none !important;
+		}
+
+		.job[hidden] {
+			display: grid !important;
+		}
 	}
 
 	/*
@@ -342,7 +584,8 @@
 		padding-bottom: 2.25rem;
 	}
 
-	.job:last-child .role {
+	/* The last role on show: with a filter on, that is not the last one in the list. */
+	.job[data-last] .role {
 		padding-bottom: 0;
 	}
 
