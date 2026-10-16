@@ -353,6 +353,80 @@ describe('cleaned up export', () => {
 	});
 });
 
+describe('page meta', () => {
+	const metas = both.flatMap(([name, c]) =>
+		(['company', 'personal'] as const).map((site) => ({
+			where: `${name}:${site}`,
+			site,
+			meta: c.meta[site]
+		}))
+	);
+
+	it('keeps every title within 60 characters, so a search result does not cut it', () => {
+		for (const { where, meta } of metas) {
+			expect([where, meta.title.length <= 60]).toEqual([where, true]);
+		}
+	});
+
+	it('keeps every description between 110 and 160 characters', () => {
+		for (const { where, meta } of metas) {
+			const ok = meta.description.length >= 110 && meta.description.length <= 160;
+			expect([where, ok]).toEqual([where, true]);
+		}
+	});
+
+	it('names I.T. It and Robbin Schepers in the company description, in both languages', () => {
+		for (const [name, c] of both) {
+			const where = `${name}:company`;
+			expect([where, c.meta.company.description.includes('I.T. It')]).toEqual([where, true]);
+			expect([where, c.meta.company.description.includes('Robbin Schepers')]).toEqual([
+				where,
+				true
+			]);
+		}
+	});
+
+	it('keeps the evenings-and-weekends fact in the company description', () => {
+		expect(nl.meta.company.description).toContain('18:00');
+		expect(nl.meta.company.description).toContain('weekend');
+		expect(en.meta.company.description).toContain('18:00');
+		expect(en.meta.company.description).toContain('weekends');
+	});
+
+	it('names no region in a title or a description', () => {
+		for (const { where, meta } of metas) {
+			for (const text of [meta.title, meta.description]) {
+				expect([
+					where,
+					/zwaag|hoorn|west-friesland|noord-holland|nederland|netherlands/i.test(text)
+				]).toEqual([where, false]);
+			}
+		}
+	});
+
+	it('describes the preview card in each variant and language', () => {
+		const alts = metas.map(({ meta }) => meta.ogImageAlt);
+		for (const { where, meta } of metas) {
+			expect([where, meta.ogImageAlt.length > 30]).toEqual([where, true]);
+		}
+		expect(new Set(alts).size).toBe(alts.length);
+		expect(nl.meta.company.ogImageAlt).toContain('I.T. It');
+		expect(en.meta.company.ogImageAlt).toContain('I.T. It');
+		expect(nl.meta.personal.ogImageAlt).toContain('Robbin Schepers');
+		expect(en.meta.personal.ogImageAlt).toContain('Robbin Schepers');
+	});
+
+	it('keeps the company out of the personal preview card', () => {
+		expect(nl.meta.personal.ogImageAlt).not.toContain('I.T. It');
+		expect(en.meta.personal.ogImageAlt).not.toContain('I.T. It');
+	});
+
+	it('labels the link from the company site to the personal site, in both languages', () => {
+		expect(nl.contact.labels.personal).toBe('Persoonlijke site van Robbin');
+		expect(en.contact.labels.personal).toBe("Robbin's personal site");
+	});
+});
+
 describe('experience', () => {
 	it('has valid dates, an end that is null or not before the start, and exactly 2 ongoing roles', () => {
 		for (const [, c] of both) {

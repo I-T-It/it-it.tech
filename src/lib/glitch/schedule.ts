@@ -1,32 +1,39 @@
 /**
  * The timeline of the hero photo glitch: pure, seeded, no DOM. Same seed, same timeline.
  *
- * One cycle is a wait with 1 to 3 short teasers in it, then one swap: the photo tears into the
- * avatar, the avatar holds for 3 to 5 s, and it tears back. `nextCycle` plans one cycle; the
- * component plays it and asks for the next one when it is over.
+ * The photo and the avatar fight over the signal. Whichever one holds it is what the die shows
+ * and what a screen reader finds; it starts as the photo. Then a glitch comes every 4 to 8 s,
+ * and each glitch is one of three, whichever image holds the signal:
+ *
+ * - a swap (35%): the holder tears into the other image, which takes the signal and keeps it until
+ *   a later glitch swaps it back;
+ * - a flash (30%): the other image takes over for 100 ms and the holder is back, still holding;
+ * - a tear (35%): the holder tears and nothing else changes.
+ *
+ * `nextGlitch` plans one glitch from the image that holds the signal; the component plays it,
+ * takes the image it left holding the signal and asks for the next one.
  *
  * What a glitch looks like is a hacked signal: whole horizontal slices of the picture jump
  * sideways by a lot, rectangular blocks come out in the wrong colours (a cast, a negative, a
  * posterised crush, a smear dragged along the row), and some of it spills out of the die onto the
- * board. Both images take part. In a teaser the avatar leaks into the photo as fragments; a
- * flicker shows the whole avatar for 100 ms in the middle of that; in a swap the fragments come
- * mostly from the image that is about to take over, and exactly in the middle the whole image
- * changes once.
+ * board. Both images take part in every glitch: fragments of the other one bleed into the one
+ * underneath, and in a swap they come mostly from the image that is about to take over. Exactly in
+ * the middle of a swap the whole image changes once.
  *
  * ```ts
  * const rng = createRng(seed);
- * const { events, end } = nextCycle(rng, 0);
- * // events: tease at 6.2 s, flicker at 14 s, swap-in at 27.5 s, swap-out at 32.4 s
+ * const first = nextGlitch(rng, 0, 'photo'); // a tear at 6.2 s, the photo still holds the signal
+ * const second = nextGlitch(rng, first.at + first.duration, first.to); // a swap at 13.1 s, to the avatar
  * ```
  *
  * Flash safety (WCAG 2.3.1) does not lean on the exception for small areas (a flash only counts
  * when it fills a quarter of a 10 degree field of view). Every change of the picture counts, however
  * little or much of it changes: that covers a full-die luminance flip, every block that flips
- * luminance (a negative, an avatar fragment over the light photo) and what spills outside the die.
- * A flash is two changes, 3 flashes a second is the limit, so at most 6 changes fall in any
- * second. A teaser has at most 5 frames and a swap exactly 5 (6 changes with the one back to rest),
- * and events are at least 3 s apart, so one event never shares a second with another.
- * `maxTransitionsInWindow` checks any timeline against the budget.
+ * luminance (a negative, a fragment of the dark avatar over the light photo) and what spills
+ * outside the die. A flash is two changes, 3 flashes a second is the limit, so at most 6 changes
+ * fall in any second. A tear or a flash has at most 5 frames and a swap exactly 5 (6 changes with
+ * the one back to rest), and glitches are at least 4 s apart, so one glitch never shares a second
+ * with another. `maxTransitionsInWindow` checks any timeline against the budget.
  *
  * The area of a frame is capped on top of that, so a glitch stays a glitch and not another
  * picture, and no saturated red is ever drawn: the colours are cyan, green, magenta and blue.
@@ -34,31 +41,25 @@
 import { SOCKET_DRAW_MS } from '../pcb/growth.js';
 import type { Rng } from '../pcb/rng.js';
 
-/** A teaser lasts this long, in ms. */
-export const TEASER_MIN_MS = 150;
-export const TEASER_MAX_MS = 300;
-/** At least this long between the end of a teaser and the start of the next. */
-export const TEASER_GAP_MS = 4000;
-/** No teaser starts within this long of a swap glitch, before or after it. */
-export const SWAP_CLEAR_MS = 3000;
-/** A flicker shows the avatar for this long. */
-export const FLICKER_MS = 100;
-/** The share of teasers that flicker the avatar in. */
-export const FLICKER_SHARE = 1 / 3;
-/** A flicker needs room for a frame before it, the 100 ms, and a frame after: 60 + 100 + 60. */
-export const FLICKER_TEASER_MIN_MS = 220;
-/** The swap glitch in, and the one out. */
+/** A tear lasts this long, in ms. */
+export const TEAR_MIN_MS = 150;
+export const TEAR_MAX_MS = 300;
+/**
+ * A glitch comes this long after the wait begins, which is when the glitch arms or the last glitch
+ * ends: at least 4 s clear of the one before, so the changes of two never share a second.
+ */
+export const GLITCH_WAIT_MIN_MS = 4000;
+export const GLITCH_WAIT_MAX_MS = 8000;
+/** A flash shows the other image for this long. */
+export const FLASH_MS = 100;
+/** A flash needs room for a frame before it, the 100 ms, and a frame after: 60 + 100 + 60. */
+export const FLASH_GLITCH_MIN_MS = 220;
+/** A swap glitch lasts this long. */
 export const SWAP_GLITCH_MIN_MS = 500;
 export const SWAP_GLITCH_MAX_MS = 700;
-/** The avatar holds this long between the two. */
-export const HOLD_MIN_MS = 3000;
-export const HOLD_MAX_MS = 5000;
-/** From the start of a cycle to its swap. */
-export const WAIT_MIN_MS = 20_000;
-export const WAIT_MAX_MS = 40_000;
-/** From the start of a cycle to its first teaser. */
-export const FIRST_TEASER_MIN_MS = 4000;
-export const FIRST_TEASER_MAX_MS = 8000;
+/** The share of glitches that swap the image that holds the signal, and the share that flash. The rest tear. */
+export const SWAP_SHARE = 0.35;
+export const FLASH_SHARE = 0.3;
 
 /** WCAG 2.3.1: no more than 3 flashes in any one second. */
 export const MAX_FLASHES_PER_S = 3;
@@ -66,20 +67,20 @@ export const MAX_FLASHES_PER_S = 3;
 export const MAX_TRANSITIONS_PER_S = 2 * MAX_FLASHES_PER_S;
 /** A new frame comes no sooner than this. */
 export const MIN_FRAME_MS = 60;
-/** ... and no later than this, in a teaser. */
+/** ... and no later than this, in a tear. */
 export const MAX_FRAME_MS = 110;
 /** A swap glitch is exactly this many frames: with the change back to rest, the 6 of the budget. */
 export const SWAP_FRAMES = 5;
 
-/** The fragments of a frame cover at most this share of the die, spill included, in a teaser. */
-export const MAX_TEASE_AREA = 0.4;
+/** The fragments of a frame cover at most this share of the die, spill included, in a tear or a flash. */
+export const MAX_TEAR_AREA = 0.4;
 /** ... and in a swap, which is the big moment. */
 export const MAX_SWAP_AREA = 0.65;
 /** A fragment reaches at most this far past the die's left or right edge, in die widths. Never above or below it. */
 export const MAX_SPILL = 0.55;
-/** The share of all fragments in a teaser that are cut from the avatar, so it leaks into the photo. */
-export const AVATAR_FRAGMENT_SHARE = 0.4;
-/** The share of teaser frames that have avatar fragments in them at all. */
+/** The share of all fragments in a tear that are cut from the image that is not underneath, so it leaks in. */
+export const OTHER_FRAGMENT_SHARE = 0.4;
+/** The share of tear frames that have fragments of the other image in them at all. */
 const BLEED_FRAME_SHARE = 0.6;
 /** The share of the fragments of a swap that come from the image that is not underneath. */
 const SWAP_OTHER_SHARE = 0.75;
@@ -91,7 +92,7 @@ const SWAP_OTHER_SHARE = 0.75;
 export const GLITCH_START_AFTER_POWER_MS = SOCKET_DRAW_MS + 2600;
 
 export type Shown = 'photo' | 'avatar';
-export type GlitchKind = 'tease' | 'flicker' | 'swap-in' | 'swap-out';
+export type GlitchKind = 'tear' | 'flash' | 'swap';
 
 /**
  * The colours of a glitch: the brand's cyan and green, and magenta and blue for the wrong-channel
@@ -168,21 +169,19 @@ export interface Frame {
 }
 
 export interface GlitchEvent {
-	/** In ms from the time origin the cycle was planned from. */
+	/** In ms from the time origin the glitch was planned from. */
 	at: number;
 	kind: GlitchKind;
 	duration: number;
+	/** The image that holds the signal when the glitch starts. */
+	from: Shown;
+	/** ... and when it is over: the other one after a swap, the same one after a flash or a tear. */
+	to: Shown;
 	frames: Frame[];
 }
 
-export interface Cycle {
-	events: GlitchEvent[];
-	/** When the cycle is over, and the next one can start, in the same ms as `events`. */
-	end: number;
-}
-
-export interface CycleOptions {
-	/** False when the avatar did not load: no avatar fragments, no flickers and no swap. Default true. */
+export interface GlitchOptions {
+	/** False when the avatar did not load: the photo only, torn, with no flash, no swap and no avatar fragments. Default true. */
 	avatar?: boolean;
 }
 
@@ -466,47 +465,62 @@ function spreadTimes(rng: Rng, from: number, until: number, count: number): numb
 	return times;
 }
 
-const teaseCap = (power: number) => MAX_TEASE_AREA * (0.55 + 0.45 * power);
+const tearCap = (power: number) => MAX_TEAR_AREA * (0.55 + 0.45 * power);
 const swapCap = (power: number) => MAX_SWAP_AREA * (0.35 + 0.65 * power);
 
+const otherOf = (shown: Shown): Shown => (shown === 'photo' ? 'avatar' : 'photo');
+
 /**
- * A teaser: the photo with slices thrown sideways and blocks in the wrong colours, a new set every
- * 60 to 110 ms. With the avatar there, some frames have it leak in as fragments. A flicker has
- * the same, and in the middle of it the whole avatar for exactly `FLICKER_MS`.
+ * One frame of a tear or a flash, with `show` underneath: slices thrown sideways and blocks in the
+ * wrong colours. With the avatar there, some frames have fragments of the other image leak in,
+ * the same for either image underneath.
  */
-function teaser(
-	rng: Rng,
-	at: number,
-	duration: number,
-	flicker: boolean,
-	avatar: boolean
-): GlitchEvent {
-	/** Photo fragments, or avatar ones in the frames where the avatar bleeds through. */
-	const sourceFor = (show: Shown): (() => Shown) => {
-		const bleeds = avatar && rng.chance(BLEED_FRAME_SHARE);
-		const other: Shown = show === 'photo' ? 'avatar' : 'photo';
-		const share = show === 'photo' ? AVATAR_FRAGMENT_SHARE / BLEED_FRAME_SHARE : 0.6;
-		return () => (bleeds && rng.chance(share) ? other : show);
-	};
-	const frameAt = (time: number, show: Shown): Frame => {
-		const power = rng.range(0.45, 1);
-		return makeFrame(rng, { at: time, show, power, cap: teaseCap(power), source: sourceFor(show) });
-	};
-	if (flicker) {
-		// Before, the avatar for FLICKER_MS exactly in the middle, after: three frames.
-		const on = Math.round((duration - FLICKER_MS) / 2);
-		return {
-			at,
-			kind: 'flicker',
-			duration,
-			frames: [frameAt(0, 'photo'), frameAt(on, 'avatar'), frameAt(on + FLICKER_MS, 'photo')]
-		};
-	}
+function tearFrame(rng: Rng, at: number, show: Shown, avatar: boolean): Frame {
+	const bleeds = avatar && rng.chance(BLEED_FRAME_SHARE);
+	const share = OTHER_FRAGMENT_SHARE / BLEED_FRAME_SHARE;
+	const power = rng.range(0.45, 1);
+	return makeFrame(rng, {
+		at,
+		show,
+		power,
+		cap: tearCap(power),
+		source: () => (bleeds && rng.chance(share) ? otherOf(show) : show)
+	});
+}
+
+/**
+ * A tear: the image that holds the signal with slices thrown sideways and blocks in the wrong
+ * colours, a new set every 60 to 110 ms. It holds the signal afterwards too.
+ */
+function tear(rng: Rng, at: number, duration: number, holder: Shown, avatar: boolean): GlitchEvent {
 	return {
 		at,
-		kind: 'tease',
+		kind: 'tear',
 		duration,
-		frames: frameTimes(rng, 0, duration).map((time) => frameAt(time, 'photo'))
+		from: holder,
+		to: holder,
+		frames: frameTimes(rng, 0, duration).map((time) => tearFrame(rng, time, holder, avatar))
+	};
+}
+
+/**
+ * A flash: a tear with the other image whole for exactly `FLASH_MS` in the middle of it, after
+ * which the holder is back, still holding the signal.
+ */
+function flash(rng: Rng, at: number, duration: number, holder: Shown): GlitchEvent {
+	// Before, the other image for FLASH_MS exactly in the middle, after: three frames.
+	const on = Math.round((duration - FLASH_MS) / 2);
+	return {
+		at,
+		kind: 'flash',
+		duration,
+		from: holder,
+		to: holder,
+		frames: [
+			tearFrame(rng, 0, holder, true),
+			tearFrame(rng, on, otherOf(holder), true),
+			tearFrame(rng, on + FLASH_MS, holder, true)
+		]
 	};
 }
 
@@ -519,11 +533,11 @@ const SWAP_POWER: Record<number, readonly number[]> = {
 /**
  * A swap glitch: `SWAP_FRAMES` frames of fragments, the strongest in the middle, where the whole
  * image changes once. Underneath is the image that is going; most fragments are cut from the one
- * that is coming, and before the end that turns round, so each image tears into the other.
+ * that is coming, and before the end that turns round, so each image tears into the other. The
+ * image that is coming holds the signal from then on.
  */
-function swap(rng: Rng, kind: 'swap-in' | 'swap-out', at: number, duration: number): GlitchEvent {
-	const from: Shown = kind === 'swap-in' ? 'photo' : 'avatar';
-	const to: Shown = kind === 'swap-in' ? 'avatar' : 'photo';
+function swap(rng: Rng, at: number, duration: number, from: Shown): GlitchEvent {
+	const to = otherOf(from);
 	const middle = Math.round(duration / 2);
 	const before = rng.int(2, 3);
 	const times = [
@@ -533,50 +547,45 @@ function swap(rng: Rng, kind: 'swap-in' | 'swap-out', at: number, duration: numb
 	const powers = SWAP_POWER[before];
 	const frames = times.map((time, i): Frame => {
 		const show = time < middle ? from : to;
-		const other = show === 'photo' ? 'avatar' : 'photo';
 		return makeFrame(rng, {
 			at: time,
 			show,
 			power: powers[i],
 			cap: swapCap(powers[i]),
-			source: () => (rng.chance(SWAP_OTHER_SHARE) ? other : show)
+			source: () => (rng.chance(SWAP_OTHER_SHARE) ? otherOf(show) : show)
 		});
 	});
-	return { at, kind, duration, frames };
+	return { at, kind: 'swap', duration, from, to, frames };
 }
 
 /**
- * One wait with its teasers, then one swap. `startMs` is when the cycle begins (the glitch
- * arming, or the end of the previous cycle); every time in the result counts from the same origin.
+ * The next glitch, planned while `holder` holds the signal (the photo, when the glitch has just
+ * armed; the image the last glitch left holding it after that). `startMs` is when the wait
+ * begins: the glitch arming, or the end of the previous glitch. Every time in the result counts
+ * from the same origin as `startMs`.
  *
- * The first teaser comes 4 to 8 s in, so a cycle never opens with a glitch. The swap comes 20 to
- * 40 s in. The teasers in between are 4 s apart and end 3 s before the swap. After the swap the
- * next cycle's first teaser is at least 4 s away, which keeps it clear of the swap-out too.
+ * It comes 4 to 8 s after `startMs`, so the first glitch is 4 to 8 s after the glitch arms and
+ * two glitches are never closer than 4 s. What it is does not depend on which image holds the
+ * signal: a swap, a flash or a tear at 35%, 30% and 35%. Without the avatar it is a tear of the
+ * photo, and the photo holds the signal whatever `holder` says.
  */
-export function nextCycle(rng: Rng, startMs: number, options: CycleOptions = {}): Cycle {
+export function nextGlitch(
+	rng: Rng,
+	startMs: number,
+	holder: Shown,
+	options: GlitchOptions = {}
+): GlitchEvent {
 	const avatar = options.avatar ?? true;
-	const swapAt = startMs + rng.int(WAIT_MIN_MS, WAIT_MAX_MS);
-	const events: GlitchEvent[] = [];
-
-	let wanted = rng.int(1, 3);
-	let at = startMs + rng.int(FIRST_TEASER_MIN_MS, FIRST_TEASER_MAX_MS);
-	while (wanted > 0) {
-		const flicker = avatar && rng.chance(FLICKER_SHARE);
-		const duration = rng.int(flicker ? FLICKER_TEASER_MIN_MS : TEASER_MIN_MS, TEASER_MAX_MS);
-		if (at + duration > swapAt - SWAP_CLEAR_MS) break;
-		events.push(teaser(rng, at, duration, flicker, avatar));
-		wanted--;
-		at += duration + TEASER_GAP_MS + rng.int(0, TEASER_GAP_MS);
+	const at = startMs + rng.int(GLITCH_WAIT_MIN_MS, GLITCH_WAIT_MAX_MS);
+	const roll = rng.next();
+	const home: Shown = avatar ? holder : 'photo';
+	if (!avatar || roll >= SWAP_SHARE + FLASH_SHARE) {
+		return tear(rng, at, rng.int(TEAR_MIN_MS, TEAR_MAX_MS), home, avatar);
 	}
-
-	if (!avatar) return { events, end: swapAt };
-
-	const glitchIn = rng.int(SWAP_GLITCH_MIN_MS, SWAP_GLITCH_MAX_MS);
-	const hold = rng.int(HOLD_MIN_MS, HOLD_MAX_MS);
-	const glitchOut = rng.int(SWAP_GLITCH_MIN_MS, SWAP_GLITCH_MAX_MS);
-	const outAt = swapAt + glitchIn + hold;
-	events.push(swap(rng, 'swap-in', swapAt, glitchIn), swap(rng, 'swap-out', outAt, glitchOut));
-	return { events, end: outAt + glitchOut };
+	if (roll < SWAP_SHARE) {
+		return swap(rng, at, rng.int(SWAP_GLITCH_MIN_MS, SWAP_GLITCH_MAX_MS), home);
+	}
+	return flash(rng, at, rng.int(FLASH_GLITCH_MIN_MS, TEAR_MAX_MS), home);
 }
 
 // ---- The budget --------------------------------------------------------------------------
@@ -589,12 +598,16 @@ export interface Transition {
 }
 
 /**
- * Every moment the whole image changes, photo to avatar or back, in order. The die starts on the
- * photo. A change of fragments is not one.
+ * Every moment the whole image changes, photo to avatar or back, in order. The die starts on
+ * `start`, the photo unless the events pick up where an avatar left off. A change of fragments is
+ * not one.
  */
-export function wholeImageTransitions(events: readonly GlitchEvent[]): Transition[] {
+export function wholeImageTransitions(
+	events: readonly GlitchEvent[],
+	start: Shown = 'photo'
+): Transition[] {
 	const changes: Transition[] = [];
-	let shown: Shown = 'photo';
+	let shown: Shown = start;
 	for (const event of events) {
 		for (const frame of event.frames) {
 			if (frame.show === shown) continue;

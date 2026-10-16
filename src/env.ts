@@ -1,5 +1,11 @@
 import { defineEnvVars } from '@sveltejs/kit/env';
-import { COMPANY_SITE_URL_DEFAULT, parseSite, variantDefaults } from '../scripts/site-env.mjs';
+import {
+	COMPANY_SITE_URL_DEFAULT,
+	PERSONAL_SITE_URL_DEFAULT,
+	parseSite,
+	variantDefaults,
+	withTrailingSlash
+} from '../scripts/site-env.mjs';
 
 // Build-time variant settings. vite.config.ts fills in the defaults and fails the build on an
 // invalid PUBLIC_SITE; the schemas here repeat the same rules so the values are typed.
@@ -25,5 +31,12 @@ export const variables = defineEnvVars({
 		description:
 			'Address of the company site with a trailing slash. The personal build links to it.',
 		schema: (value) => value || COMPANY_SITE_URL_DEFAULT
+	},
+	PUBLIC_PERSONAL_SITE_URL: {
+		public: true,
+		static: true,
+		description:
+			'Address of the personal site with a trailing slash. The company build links to it and names it in its structured data.',
+		schema: (value) => withTrailingSlash(value || PERSONAL_SITE_URL_DEFAULT)
 	}
 });

@@ -65,7 +65,7 @@ function rig(): Rig {
 }
 
 /** Starts a glitch with these fragments, like GlitchPhoto does. */
-function show(slices: Slice[], blocks: Block[], kind: 'tease' | 'swap-in' = 'tease') {
+function show(slices: Slice[], blocks: Block[], kind: 'tear' | 'swap' = 'tear') {
 	fx.kind = kind;
 	fx.slices = slices;
 	fx.blocks = blocks;
@@ -142,7 +142,7 @@ describe('a glitch', () => {
 		const r = rig();
 		show([slice(), slice({ top: 0.6 })], [block(), block({ look: 'smear', left: 0.5 })]);
 		expect(getComputedStyle(r.el()!).display).toBe('block');
-		expect(r.el()!.dataset.fx).toBe('tease');
+		expect(r.el()!.dataset.fx).toBe('tear');
 		expect(frags(r, 'slice')).toHaveLength(2);
 		expect(frags(r, 'block')).toHaveLength(2);
 		// 300 px, a 11th and 2 px in on each side, and a pixel more for the picture's own margin.
