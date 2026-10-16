@@ -486,6 +486,16 @@ describe('projects', () => {
 		}
 	});
 
+	it('gives the Laravel Tinker user count with the date it was measured, and not the old count', () => {
+		const text = (c: SiteContent) =>
+			c.projects.projects.find((p) => p.id === 'laravel-tinker')!.description.join(' ');
+		expect(text(nl)).toContain('164.000');
+		expect(text(nl)).toContain('16 oktober 2026');
+		expect(text(en)).toContain('164,000');
+		expect(text(en)).toContain('16 October 2026');
+		for (const [, c] of both) expect(text(c)).not.toContain('102');
+	});
+
 	it('links Framed to its website and repository, Streamline and Frontend Festival to their repositories, and GH Radio nowhere', () => {
 		for (const [, c] of both) {
 			const urls = (id: string) =>

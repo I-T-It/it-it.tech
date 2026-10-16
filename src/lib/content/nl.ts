@@ -441,7 +441,7 @@ export const nl: SiteContent = {
 				title: 'Laravel Tinker',
 				status: 'live',
 				description: [
-					'Een plugin voor PhpStorm waarmee je PHP schrijft en direct draait in Artisan Tinker van Laravel. Ongeveer 102.000 mensen gebruiken hem actief.'
+					'Een plugin voor PhpStorm waarmee je PHP schrijft en direct draait in Artisan Tinker van Laravel. Op 16 oktober 2026 had hij 164.000 gebruikers.'
 				],
 				tech: ['Kotlin', 'PHP'],
 				links: [
