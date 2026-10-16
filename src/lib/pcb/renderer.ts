@@ -19,7 +19,8 @@
  * - `spine`: halo and core, plus a brighter head at its front while it is part drawn.
  * - `branch`: halo and core, a head at its tip while it grows, a pad on the pin once it arrives.
  * - `socket`: the full glow, an extra wide halo under the normal one; no pad on the port, the
- *   socket's own artwork carries the line on.
+ *   socket's own artwork carries the line on. With a hero the socket traces are its two leads
+ *   and look like the `hero` traces instead (no wide halo), so they blend into the field.
  * - `hero`: a slightly quieter halo and core, a head at its tip while it grows, a via at its end
  *   once it arrives, and a via at its start when it starts on the board.
  * - `decor`: a quieter halo and core, a via at its end.
@@ -220,16 +221,29 @@ export class Renderer {
 		return { traces: items.length };
 	}
 
+	/**
+	 * With a hero, the socket traces are its two leads: part of the field, so they look like it
+	 * while they grow, with no wide glow of their own to mark them out.
+	 */
+	#isLead(trace: Trace): boolean {
+		return trace.kind === 'socket' && this.#board?.hero != null;
+	}
+
+	/** True for the traces drawn in the field's quieter style: the hero field and its leads. */
+	#isFieldTrace(trace: Trace): boolean {
+		return trace.kind === 'hero' || this.#isLead(trace);
+	}
+
 	/** Pass 1: one wide, faint stroke per colour and weight. */
 	#halos(items: readonly Item[]): void {
 		const ctx = this.#ctx;
 		for (const side of SIDES) {
 			const colour = this.#palette[side].trace;
 			const ofSide = items.filter((i) => i.trace.side === side);
-			const socket = ofSide.filter((i) => i.trace.kind === 'socket');
+			const socket = ofSide.filter((i) => i.trace.kind === 'socket' && !this.#isLead(i.trace));
 			const decor = ofSide.filter((i) => i.trace.kind === 'decor');
-			const hero = ofSide.filter((i) => i.trace.kind === 'hero');
-			const main = ofSide.filter((i) => i.trace.kind !== 'decor' && i.trace.kind !== 'hero');
+			const hero = ofSide.filter((i) => this.#isFieldTrace(i.trace));
+			const main = ofSide.filter((i) => i.trace.kind !== 'decor' && !this.#isFieldTrace(i.trace));
 			this.#strokeAll(socket, colour, SOCKET_GLOW_WIDTH, SOCKET_GLOW_ALPHA);
 			this.#strokeAll(decor, colour, HALO_WIDTH, DECOR_HALO_ALPHA);
 			this.#strokeAll(hero, colour, HALO_WIDTH, HERO_HALO_ALPHA);
@@ -243,8 +257,12 @@ export class Renderer {
 		const ctx = this.#ctx;
 		ctx.lineWidth = CORE_WIDTH;
 		for (const item of items) {
-			const kind = item.trace.kind;
-			ctx.globalAlpha = kind === 'decor' ? DECOR_CORE_ALPHA : kind === 'hero' ? HERO_CORE_ALPHA : 1;
+			ctx.globalAlpha =
+				item.trace.kind === 'decor'
+					? DECOR_CORE_ALPHA
+					: this.#isFieldTrace(item.trace)
+						? HERO_CORE_ALPHA
+						: 1;
 			ctx.strokeStyle = this.#gradient(item.trace);
 			ctx.beginPath();
 			this.#polyline(item.points);
