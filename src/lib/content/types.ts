@@ -84,14 +84,21 @@ export interface JobResult {
 	url?: string;
 }
 
+/**
+ * Where the work came from: `itit` is Robbin's own company (freelance), `sopra-steria` is the
+ * consultancy he works for. A role without a source is direct employment and shows no "via".
+ */
+export type JobSource = 'itit' | 'sopra-steria';
+
 /** One role in U5. Ongoing roles have `end: null` and show "heden" / "present". */
 export interface Job {
 	id: string;
 	/** Function title. */
 	title: string;
+	/** The client or employer the work was for. */
 	organisation: string;
-	/** Intermediary, shown as "via {via}" when it differs from the organisation. */
-	via?: string;
+	/** Shown as "via {source}" with the name from `experience.labels.sources`. */
+	source?: JobSource;
 	start: YearMonth;
 	end: YearMonth | null;
 	tech: string[];
@@ -107,9 +114,40 @@ export interface Experience extends SectionHead {
 		present: string;
 		/** Contains "{employer}", e.g. "via {employer}". */
 		via: string;
+		/** The name that fills "{employer}" for each source, e.g. "I.T. It (freelance)". */
+		sources: Record<JobSource, string>;
 		situation: string;
 		tasks: string;
 		results: string;
+	};
+}
+
+/** Where a project stands. `live` is out, `soon` is about to be, `wip` is being built, `past` is over. */
+export type ProjectStatus = 'live' | 'soon' | 'wip' | 'past';
+
+/** A public link of a project. The label names what the link leads to, e.g. "Source on GitHub". */
+export interface ProjectLink {
+	label: string;
+	url: string;
+}
+
+/** One entry in U10: a project of his own, open source or personal, apart from any client. */
+export interface Project {
+	id: string;
+	title: string;
+	status: ProjectStatus;
+	/** Paragraphs. */
+	description: string[];
+	tech: string[];
+	/** Empty when nothing about the project is public. */
+	links: ProjectLink[];
+}
+
+export interface Projects extends SectionHead {
+	projects: Project[];
+	labels: {
+		/** The visible word for each status. */
+		status: Record<ProjectStatus, string>;
 	};
 }
 
@@ -196,6 +234,7 @@ export interface SiteContent {
 	about: About;
 	competences: SectionHead & { items: Competence[] };
 	experience: Experience;
+	projects: Projects;
 	skills: Skills;
 	talks: Talks;
 	educationLanguages: EducationLanguages;

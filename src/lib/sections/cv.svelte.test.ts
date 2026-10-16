@@ -8,6 +8,7 @@ import { chips } from '#lib/pcb/registry.svelte.js';
 import { overwriteGetLocale } from '#lib/paraglide/runtime.js';
 import EducationLanguages from './EducationLanguages.svelte';
 import Experience, { newestFirst } from './Experience.svelte';
+import Projects from './Projects.svelte';
 import Skills, { sortSkills } from './Skills.svelte';
 import Talks, { foreignPhrase, newestTalksFirst } from './Talks.svelte';
 
@@ -120,22 +121,36 @@ describe('Experience (U5)', () => {
 			await render(Experience, {});
 			const vws = row('vws');
 			expect(vws.querySelector('.org')?.textContent).toContain('Ministerie van VWS');
-			expect(vws.querySelector('.org')?.textContent).toContain('via Sopra Steria');
+			expect(vws.querySelector('.org')?.textContent).toContain('via Sopra Steria (consultant)');
 		});
 
-		it('writes "via" only where there is an employer that differs from the organisation', async () => {
+		it('writes the source of the work on every role that has one, and nothing on the rest', async () => {
 			await render(Experience, {});
+			const names = {
+				itit: 'via I.T. It (freelance)',
+				'sopra-steria': 'via Sopra Steria (consultant)'
+			};
 			for (const job of jobsOf('nl')) {
 				const text = row(job.id).querySelector('.org')!.textContent!;
-				const differs = job.via && job.via.trim() !== job.organisation.trim();
-				expect(text.includes('via '), `${job.id}: ${text}`).toBe(Boolean(differs));
+				if (job.source) expect(text, job.id).toContain(names[job.source]);
+				else expect(text.includes('via '), `${job.id}: ${text}`).toBe(false);
 			}
+			expect(row('instore-media').querySelector('.org')?.textContent).toContain(
+				'via I.T. It (freelance)'
+			);
+			expect(row('smitties').querySelector('.org')?.textContent).toContain('De-Smitten');
 		});
 
-		it('ends the three ongoing roles with "heden" and the rest with a month', async () => {
+		it('has no restaurant role and no open-source role in the list', async () => {
+			await render(Experience, {});
+			expect(document.querySelector('#job-puur-emmen')).toBeNull();
+			expect(document.querySelector('#job-open-source')).toBeNull();
+		});
+
+		it('ends the two ongoing roles with "heden" and the rest with a month', async () => {
 			await render(Experience, {});
 			const ongoing = jobsOf('nl').filter((job) => job.end === null);
-			expect(ongoing).toHaveLength(3);
+			expect(ongoing).toHaveLength(2);
 			for (const job of jobsOf('nl')) {
 				const period = row(job.id).querySelector('.period')!;
 				expect(period.textContent).toContain(job.end === null ? 'heden' : '');
@@ -158,7 +173,7 @@ describe('Experience (U5)', () => {
 		it('hides the Resultaat label for a role without results', async () => {
 			await render(Experience, {});
 			const bare = jobsOf('nl').filter((job) => job.results.length === 0);
-			expect(bare.length).toBeGreaterThanOrEqual(2);
+			expect(bare.length).toBeGreaterThanOrEqual(1);
 			for (const job of bare) {
 				const labels = Array.from(row(job.id).querySelectorAll('dt')).map((dt) => dt.textContent);
 				expect(labels).toEqual(['Situatie', 'Taken']);
@@ -210,7 +225,7 @@ describe('Experience (U5)', () => {
 			const content = getContent('en').experience;
 			expect(document.querySelector('section#experience h2')?.textContent).toBe(content.title);
 			const vws = row('vws');
-			expect(vws.querySelector('.org')?.textContent).toContain('via Sopra Steria');
+			expect(vws.querySelector('.org')?.textContent).toContain('via Sopra Steria (consultant)');
 			expect(vws.querySelector('.period')?.textContent).toBe('Apr 2026 – present');
 			expect(Array.from(vws.querySelectorAll('dt')).map((dt) => dt.textContent)).toEqual([
 				content.labels.situation,
@@ -371,9 +386,10 @@ describe('Experience (U5)', () => {
 				expect(color(last)).not.toBe(CYAN);
 				expect(drawn(traces()[0])).toBeLessThan(0.01);
 
-				// The list top is at 20% of the window: the first via is above the front (60%), the
-				// last is still far below it.
-				await scrollList(140);
+				// The list top is at 10% of the window: the first via and its whole trace (the first
+				// role is a line taller now that it names the consultancy) are above the front (60%),
+				// the last is still far below it.
+				await scrollList(70);
 				expect(color(first)).toBe(CYAN);
 				expect(drawn(traces()[0])).toBeGreaterThan(0.99);
 				expect(color(last)).not.toBe(CYAN);
@@ -949,7 +965,121 @@ describe('EducationLanguages (U8)', () => {
 	});
 });
 
-describe('the four chips on one page', () => {
+describe('Projects (U10)', () => {
+	const section = (locale: Locale = 'nl') => getContent(locale).projects;
+	const items = () => Array.from(document.querySelectorAll<HTMLElement>('[data-project]'));
+	const item = (id: string) => document.querySelector<HTMLElement>(`[data-project="${id}"]`)!;
+
+	it('is a chip labelled by its h2, registered as U10', async () => {
+		const screen = await render(Projects, {});
+		await expect.element(screen.getByRole('region', { name: section().title })).toBeVisible();
+		expect(document.querySelector('section#projects h2')?.textContent).toBe(
+			'Open source & persoonlijke projecten'
+		);
+		const [handle] = chips();
+		expect(handle.id).toBe('projects');
+		expect(handle.designator).toBe('U10');
+		expect(handle.side).toBe('both');
+		await expect.element(screen.getByText(section().intro!)).toBeVisible();
+	});
+
+	it('lists every project in the order of the content, with the name as an h3', async () => {
+		await render(Projects, {});
+		expect(items().map((el) => el.dataset.project)).toEqual([
+			'laravel-tinker',
+			'framed',
+			'streamline',
+			'gh-radio'
+		]);
+		for (const project of section().projects) {
+			expect(item(project.id).querySelector('h3')?.textContent).toBe(project.title);
+		}
+		const headings = Array.from(document.querySelectorAll('section#projects :is(h2, h3, h4)'));
+		expect(headings.map((h) => h.tagName)).toEqual(['H2', 'H3', 'H3', 'H3', 'H3']);
+	});
+
+	it('writes the status of each project as text, not only as a mark', async () => {
+		await render(Projects, {});
+		const statuses = items().map((el) => el.querySelector('.status')?.textContent);
+		expect(statuses).toEqual([
+			'Beschikbaar',
+			'Verschijnt binnenkort',
+			'In ontwikkeling',
+			'Eerder project'
+		]);
+		expect(item('framed').dataset.status).toBe('soon');
+	});
+
+	it('shows the description paragraphs and the tags of each project', async () => {
+		await render(Projects, {});
+		for (const project of section().projects) {
+			const paragraphs = Array.from(item(project.id).querySelectorAll('.description p')).map(
+				(p) => p.textContent
+			);
+			expect(paragraphs).toEqual(project.description);
+			const tags = Array.from(item(project.id).querySelectorAll('.tech li')).map(
+				(li) => li.textContent
+			);
+			expect(tags).toEqual(project.tech);
+		}
+	});
+
+	it('links to the plugin, the repositories and nothing for GH Radio', async () => {
+		await render(Projects, {});
+		const hrefs = (id: string) =>
+			Array.from(item(id).querySelectorAll('a')).map((a) => a.getAttribute('href'));
+		expect(hrefs('laravel-tinker')).toEqual([
+			'https://plugins.jetbrains.com/plugin/14957-laravel-tinker',
+			'https://github.com/Roboroads/laravel-tinker'
+		]);
+		expect(hrefs('framed')).toEqual(['https://github.com/Roboroads/Framed']);
+		expect(hrefs('streamline')).toEqual(['https://github.com/StreamlineRadio/Streamline']);
+		expect(hrefs('gh-radio')).toEqual([]);
+		expect(item('gh-radio').querySelector('.links')).toBeNull();
+	});
+
+	it('names a link by its visible text first, then the project, and says it leaves the site', async () => {
+		await render(Projects, {});
+		for (const project of section().projects) {
+			const links = Array.from(item(project.id).querySelectorAll('a'));
+			expect(links.map((a) => a.querySelector('.sr-only')?.textContent)).toEqual(
+				project.links.map(() => `, ${project.title} (externe site)`)
+			);
+			links.forEach((a, i) => {
+				expect(a.textContent).toBe(`${project.links[i].label}, ${project.title} (externe site)`);
+				expect(a.hasAttribute('target')).toBe(false);
+				const notice = a.querySelector<HTMLElement>('.sr-only')!;
+				expect(notice.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+			});
+		}
+	});
+
+	it('speaks English on the English page', async () => {
+		setLocale('en');
+		await render(Projects, {});
+		expect(document.querySelector('section#projects h2')?.textContent).toBe(
+			'Open source & personal projects'
+		);
+		expect(items().map((el) => el.querySelector('.status')?.textContent)).toEqual([
+			'Available',
+			'Releasing soon',
+			'In development',
+			'Earlier project'
+		]);
+		expect(item('framed').querySelector('a')?.textContent).toBe(
+			`${section('en').projects[1].links[0].label}, Framed (external site)`
+		);
+	});
+
+	it('is on without waiting for the board: the content is in view with JS on', async () => {
+		root.classList.add('js');
+		const screen = await render(Projects, {});
+		await expect.element(screen.getByRole('heading', { name: 'Laravel Tinker' })).toBeVisible();
+		await expect.element(screen.getByText('Verschijnt binnenkort')).toBeVisible();
+	});
+});
+
+describe('the chips on one page', () => {
 	it('keep one h2 each and put h3 headings under it', async () => {
 		await render(Experience, {});
 		await render(Skills, {});
@@ -978,6 +1108,7 @@ describe('the four chips on one page', () => {
 		document.body.append(main);
 		room.push(main);
 		await render(Experience, { target: main });
+		await render(Projects, { target: main });
 		await render(Skills, { target: main });
 		await render(Talks, { target: main });
 		await render(EducationLanguages, { target: main });

@@ -108,6 +108,7 @@ export const en: SiteContent = {
 		labels: {
 			present: 'present',
 			via: 'via {employer}',
+			sources: { itit: 'I.T. It (freelance)', 'sopra-steria': 'Sopra Steria (consultant)' },
 			situation: 'Situation',
 			tasks: 'Tasks',
 			results: 'Result'
@@ -117,7 +118,7 @@ export const en: SiteContent = {
 				id: 'vws',
 				title: 'Backend developer (PHP)',
 				organisation: 'Ministerie van VWS',
-				via: 'Sopra Steria',
+				source: 'sopra-steria',
 				start: '2026-04',
 				end: null,
 				tech: [
@@ -150,6 +151,7 @@ export const en: SiteContent = {
 				id: 'ocw',
 				title: 'Front-end developer (Vue / TS)',
 				organisation: 'Ministerie van Onderwijs, Cultuur en Wetenschap',
+				source: 'sopra-steria',
 				start: '2025-03',
 				end: null,
 				tech: [
@@ -176,7 +178,7 @@ export const en: SiteContent = {
 				id: 'cz-chatbot',
 				title: 'Backend developer (Azure Functions / C# .NET)',
 				organisation: 'CZ',
-				via: 'Ordina',
+				source: 'sopra-steria',
 				start: '2024-03',
 				end: '2024-06',
 				tech: ['C#', '.NET', 'Azure Functions'],
@@ -225,50 +227,10 @@ export const en: SiteContent = {
 				results: [{ text: 'The new CFK web application (not accessible from outside)' }]
 			},
 			{
-				id: 'puur-emmen',
-				title: 'Fullstack developer (PHP/Laravel, TS/Svelte, Electron)',
-				organisation: 'Restaurant Puur Emmen',
-				start: '2021-11',
-				end: '2023-10',
-				tech: [
-					'TypeScript',
-					'JavaScript',
-					'Svelte',
-					'Laravel',
-					'PHP',
-					'MySQL',
-					'CSS',
-					'SCSS',
-					'HTML',
-					'Linux',
-					'Git',
-					'Node.js',
-					'Docker',
-					'SSH',
-					'CI/CD',
-					'Tailwind CSS',
-					'WebSocket',
-					'GraphQL'
-				],
-				situation: [
-					"Restaurant Puur had an old till system that crashed a lot. They asked me to build a new one. A SaaS product was not an option because of the restaurant's unique situation."
-				],
-				tasks: [
-					'Setting up the POS software in Electron with TypeScript and Svelte',
-					'Building a central API in PHP/Laravel with GraphQL, so the POS systems store their data centrally (in MySQL) and exchange it',
-					'Setting up a websocket that keeps all POS systems in sync',
-					'Building a reservation module for the website in TypeScript and Svelte'
-				],
-				results: [
-					{
-						text: 'Project Panda: the new till system for the unique situation of Restaurant Puur'
-					}
-				]
-			},
-			{
 				id: 'cz-flutter',
 				title: 'Flutter developer',
 				organisation: 'CZ',
+				source: 'sopra-steria',
 				start: '2021-05',
 				end: '2022-10',
 				tech: ['Photoshop', 'Flutter', 'Git', 'Dart'],
@@ -293,63 +255,10 @@ export const en: SiteContent = {
 				]
 			},
 			{
-				id: 'open-source',
-				title: 'Open-source developer',
-				organisation: 'Various FOSS projects',
-				start: '2020-08',
-				end: null,
-				tech: [
-					'Ansible',
-					'TypeScript',
-					'JavaScript',
-					'Vue.js',
-					'Svelte',
-					'Laravel',
-					'PHP',
-					'Flutter',
-					'MySQL',
-					'CSS',
-					'SCSS',
-					'HTML',
-					'Linux',
-					'Git',
-					'Python',
-					'Node.js',
-					'Dart',
-					'Docker',
-					'Java',
-					'SSH',
-					'Kotlin',
-					'Tailwind CSS'
-				],
-				situation: [
-					'I use many open-source frameworks, libraries and tools in my daily work. In 2020 I decided it was time to give something back to the community. Since then I have helped fix problems in several projects and started a few of my own.'
-				],
-				tasks: ['Starting and maintaining several open-source projects'],
-				results: [
-					{
-						text: 'Laravel Tinker plugin for PhpStorm, with about 102,000 active users',
-						url: 'https://plugins.jetbrains.com/plugin/14957-laravel-tinker'
-					},
-					{
-						text: 'Source code of the Laravel Tinker plugin on GitHub',
-						url: 'https://github.com/Roboroads/laravel-tinker'
-					},
-					{ text: 'Graphton', url: 'https://github.com/GraphtonLib/Graphton' },
-					{
-						text: 'The Frontend Festival website on GitHub',
-						url: 'https://github.com/Ordina-Group/frontendfestival.nl'
-					},
-					{
-						text: 'Various other small projects on GitHub',
-						url: 'https://github.com/Roboroads'
-					}
-				]
-			},
-			{
 				id: 'instore-media',
 				title: 'Fullstack developer',
 				organisation: 'Instore-Media',
+				source: 'itit',
 				start: '2020-02',
 				end: '2023-10',
 				tech: [
@@ -389,6 +298,7 @@ export const en: SiteContent = {
 				id: 'sublime-fm',
 				title: 'Fullstack developer',
 				organisation: 'Sublime FM',
+				source: 'itit',
 				start: '2019-09',
 				end: '2022-05',
 				tech: ['JavaScript', 'Vue.js', 'Laravel', 'PHP', 'MySQL', 'CSS', 'SCSS', 'Git'],
@@ -439,8 +349,8 @@ export const en: SiteContent = {
 			{
 				id: 'smitties',
 				title: 'Fullstack developer',
-				organisation: 'Smitties.eu',
-				via: 'De-Smitten',
+				organisation: 'De-Smitten',
+				source: 'itit',
 				start: '2016-06',
 				end: '2016-09',
 				tech: ['JavaScript', 'Vue.js', 'Laravel', 'PHP', 'MySQL', 'HTML', 'Git'],
@@ -454,6 +364,7 @@ export const en: SiteContent = {
 				id: 'vhu-europe',
 				title: 'Fullstack developer',
 				organisation: 'VHU Europe',
+				source: 'itit',
 				start: '2016-05',
 				end: '2016-09',
 				tech: ['PHP'],
@@ -511,22 +422,71 @@ export const en: SiteContent = {
 					'Taking care of backups'
 				],
 				results: [{ text: 'General IT matters improved' }]
+			}
+		]
+	},
+
+	projects: {
+		title: 'Open source & personal projects',
+		intro: 'Projects I started myself, apart from any client.',
+		labels: {
+			status: {
+				live: 'Available',
+				soon: 'Releasing soon',
+				wip: 'In development',
+				past: 'Earlier project'
+			}
+		},
+		projects: [
+			{
+				id: 'laravel-tinker',
+				title: 'Laravel Tinker',
+				status: 'live',
+				description: [
+					"A PhpStorm plugin for writing PHP and running it directly in Laravel's Artisan Tinker. About 102,000 people use it actively."
+				],
+				tech: ['Kotlin', 'PHP'],
+				links: [
+					{
+						label: 'Plugin on JetBrains Marketplace',
+						url: 'https://plugins.jetbrains.com/plugin/14957-laravel-tinker'
+					},
+					{ label: 'Source code on GitHub', url: 'https://github.com/Roboroads/laravel-tinker' }
+				]
+			},
+			{
+				id: 'framed',
+				title: 'Framed',
+				status: 'soon',
+				description: [
+					'A game you play in real life, in your own neighbourhood. Players hunt each other in a circle, helped by GPS and photos. The last player standing wins.'
+				],
+				tech: ['Flutter', 'Dart', 'Supabase'],
+				links: [{ label: 'Source code on GitHub', url: 'https://github.com/Roboroads/Framed' }]
+			},
+			{
+				id: 'streamline',
+				title: 'Streamline',
+				status: 'wip',
+				description: ['Simple broadcasting software for DJs of online radio stations.'],
+				tech: ['TypeScript', 'Svelte'],
+				links: [
+					{
+						label: 'Source code on GitHub',
+						url: 'https://github.com/StreamlineRadio/Streamline'
+					}
+				]
 			},
 			{
 				id: 'gh-radio',
-				title: 'Owner',
-				organisation: 'GH Radio',
-				start: '2011-05',
-				end: '2016-04',
+				title: 'GH Radio',
+				status: 'past',
+				description: [
+					'From 2011 to 2016 I was owner and manager of GH Radio, an online non-profit radio station. Together with about 90 volunteer young people I ran the radio for 100 to 200 young people between the ages of 12 and 22 every day.',
+					'I made sure the teams kept running on their own, and built and maintained the website myself.'
+				],
 				tech: ['JavaScript', 'PHP', 'MySQL', 'CSS', 'SCSS', 'HTML', 'Git', 'Node.js', 'SSH'],
-				situation: [
-					'I was owner and manager of the online non-profit radio station GH Radio for more than five years. Together with about 90 volunteer young people I ran the radio for 100 to 200 young people between the ages of 12 and 22 every day.'
-				],
-				tasks: [
-					'Making sure the teams kept running on their own',
-					'Building and maintaining the website (I did this myself)'
-				],
-				results: []
+				links: []
 			}
 		]
 	},
