@@ -106,6 +106,7 @@ export const nl: SiteContent = {
 		labels: {
 			present: 'heden',
 			via: 'via {employer}',
+			sources: { itit: 'I.T. It (freelance)', 'sopra-steria': 'Sopra Steria (consultant)' },
 			situation: 'Situatie',
 			tasks: 'Taken',
 			results: 'Resultaat'
@@ -115,7 +116,7 @@ export const nl: SiteContent = {
 				id: 'vws',
 				title: 'Backend developer (PHP)',
 				organisation: 'Ministerie van VWS',
-				via: 'Sopra Steria',
+				source: 'sopra-steria',
 				start: '2026-04',
 				end: null,
 				tech: [
@@ -148,6 +149,7 @@ export const nl: SiteContent = {
 				id: 'ocw',
 				title: 'Front-end developer (Vue / TS)',
 				organisation: 'Ministerie van Onderwijs, Cultuur en Wetenschap',
+				source: 'sopra-steria',
 				start: '2025-03',
 				end: null,
 				tech: [
@@ -174,7 +176,7 @@ export const nl: SiteContent = {
 				id: 'cz-chatbot',
 				title: 'Backend developer (Azure Functions / C# .NET)',
 				organisation: 'CZ',
-				via: 'Ordina',
+				source: 'sopra-steria',
 				start: '2024-03',
 				end: '2024-06',
 				tech: ['C#', '.NET', 'Azure Functions'],
@@ -223,50 +225,10 @@ export const nl: SiteContent = {
 				results: [{ text: 'De nieuwe webapplicatie van CFK (niet extern toegankelijk)' }]
 			},
 			{
-				id: 'puur-emmen',
-				title: 'Fullstack developer (PHP/Laravel, TS/Svelte, Electron)',
-				organisation: 'Restaurant Puur Emmen',
-				start: '2021-11',
-				end: '2023-10',
-				tech: [
-					'TypeScript',
-					'JavaScript',
-					'Svelte',
-					'Laravel',
-					'PHP',
-					'MySQL',
-					'CSS',
-					'SCSS',
-					'HTML',
-					'Linux',
-					'Git',
-					'Node.js',
-					'Docker',
-					'SSH',
-					'CI/CD',
-					'Tailwind CSS',
-					'WebSocket',
-					'GraphQL'
-				],
-				situation: [
-					'Restaurant Puur had een oud kassasysteem dat veel vastliep. Ze vroegen mij een nieuw kassasysteem te bouwen. Een SaaS-oplossing was door de unieke situatie van het restaurant geen optie.'
-				],
-				tasks: [
-					'Het opzetten van de POS-software in Electron met TypeScript en Svelte',
-					'Het maken van een centrale API in PHP/Laravel met GraphQL, zodat de POS-systemen hun data centraal opslaan (in MySQL) en uitwisselen',
-					'Het opzetten van een websocket die de synchronisatie tussen alle POS-systemen regelt',
-					'Het maken van een reserveringsmodule voor de website in TypeScript en Svelte'
-				],
-				results: [
-					{
-						text: 'Project Panda: het nieuwe kassasysteem voor de unieke situatie van Restaurant Puur'
-					}
-				]
-			},
-			{
 				id: 'cz-flutter',
 				title: 'Flutter developer',
 				organisation: 'CZ',
+				source: 'sopra-steria',
 				start: '2021-05',
 				end: '2022-10',
 				tech: ['Photoshop', 'Flutter', 'Git', 'Dart'],
@@ -291,63 +253,10 @@ export const nl: SiteContent = {
 				]
 			},
 			{
-				id: 'open-source',
-				title: 'Open-source developer',
-				organisation: 'Verschillende FOSS-projecten',
-				start: '2020-08',
-				end: null,
-				tech: [
-					'Ansible',
-					'TypeScript',
-					'JavaScript',
-					'Vue.js',
-					'Svelte',
-					'Laravel',
-					'PHP',
-					'Flutter',
-					'MySQL',
-					'CSS',
-					'SCSS',
-					'HTML',
-					'Linux',
-					'Git',
-					'Python',
-					'Node.js',
-					'Dart',
-					'Docker',
-					'Java',
-					'SSH',
-					'Kotlin',
-					'Tailwind CSS'
-				],
-				situation: [
-					'Ik gebruik in mijn dagelijkse werk veel open-source frameworks, libraries en tools. In 2020 vond ik het tijd om iets terug te geven aan de community. Sindsdien heb ik meegeholpen met het oplossen van problemen in verschillende projecten en een paar eigen projecten gestart.'
-				],
-				tasks: ['Het opstarten en onderhouden van verschillende open-source projecten'],
-				results: [
-					{
-						text: 'Laravel Tinker-plugin voor PhpStorm, met ongeveer 102.000 actieve gebruikers',
-						url: 'https://plugins.jetbrains.com/plugin/14957-laravel-tinker'
-					},
-					{
-						text: 'Broncode van de Laravel Tinker-plugin op GitHub',
-						url: 'https://github.com/Roboroads/laravel-tinker'
-					},
-					{ text: 'Graphton', url: 'https://github.com/GraphtonLib/Graphton' },
-					{
-						text: 'De website van Frontend Festival op GitHub',
-						url: 'https://github.com/Ordina-Group/frontendfestival.nl'
-					},
-					{
-						text: 'Diverse andere kleine projecten op GitHub',
-						url: 'https://github.com/Roboroads'
-					}
-				]
-			},
-			{
 				id: 'instore-media',
 				title: 'Fullstack developer',
 				organisation: 'Instore-Media',
+				source: 'itit',
 				start: '2020-02',
 				end: '2023-10',
 				tech: [
@@ -387,6 +296,7 @@ export const nl: SiteContent = {
 				id: 'sublime-fm',
 				title: 'Fullstack developer',
 				organisation: 'Sublime FM',
+				source: 'itit',
 				start: '2019-09',
 				end: '2022-05',
 				tech: ['JavaScript', 'Vue.js', 'Laravel', 'PHP', 'MySQL', 'CSS', 'SCSS', 'Git'],
@@ -437,8 +347,8 @@ export const nl: SiteContent = {
 			{
 				id: 'smitties',
 				title: 'Fullstack developer',
-				organisation: 'Smitties.eu',
-				via: 'De-Smitten',
+				organisation: 'De-Smitten',
+				source: 'itit',
 				start: '2016-06',
 				end: '2016-09',
 				tech: ['JavaScript', 'Vue.js', 'Laravel', 'PHP', 'MySQL', 'HTML', 'Git'],
@@ -452,6 +362,7 @@ export const nl: SiteContent = {
 				id: 'vhu-europe',
 				title: 'Fullstack developer',
 				organisation: 'VHU Europe',
+				source: 'itit',
 				start: '2016-05',
 				end: '2016-09',
 				tech: ['PHP'],
@@ -509,22 +420,86 @@ export const nl: SiteContent = {
 					'Het verzorgen van backups'
 				],
 				results: [{ text: 'Algemene ICT-zaken verbeterd' }]
+			}
+		]
+	},
+
+	projects: {
+		title: 'Open source & persoonlijke projecten',
+		intro: 'Projecten die ik zelf begon, los van een opdrachtgever.',
+		labels: {
+			status: {
+				live: 'Beschikbaar',
+				soon: 'Verschijnt binnenkort',
+				wip: 'In ontwikkeling',
+				past: 'Eerder project'
+			}
+		},
+		projects: [
+			{
+				id: 'laravel-tinker',
+				title: 'Laravel Tinker',
+				status: 'live',
+				description: [
+					'Een plugin voor PhpStorm waarmee je PHP schrijft en direct draait in Artisan Tinker van Laravel. Op 16 oktober 2026 had hij 164.000 gebruikers.'
+				],
+				tech: ['Kotlin', 'PHP'],
+				links: [
+					{
+						label: 'Plugin op JetBrains Marketplace',
+						url: 'https://plugins.jetbrains.com/plugin/14957-laravel-tinker'
+					},
+					{ label: 'Broncode op GitHub', url: 'https://github.com/Roboroads/laravel-tinker' }
+				]
+			},
+			{
+				id: 'framed',
+				title: 'Framed',
+				status: 'soon',
+				description: [
+					"Een spel dat je in het echt speelt, in je eigen buurt. Spelers jagen elkaar in een kring op met hulp van GPS en foto's. De laatste speler die overblijft wint."
+				],
+				tech: ['Flutter', 'Dart', 'Supabase'],
+				links: [
+					{ label: 'Projectwebsite', url: 'https://getframed.fun' },
+					{ label: 'Broncode op GitHub', url: 'https://github.com/Roboroads/Framed' }
+				]
+			},
+			{
+				id: 'streamline',
+				title: 'Streamline',
+				status: 'wip',
+				description: ["Eenvoudige software om uit te zenden, voor dj's van online radiostations."],
+				tech: ['TypeScript', 'Svelte'],
+				links: [
+					{ label: 'Broncode op GitHub', url: 'https://github.com/StreamlineRadio/Streamline' }
+				]
+			},
+			{
+				id: 'frontend-festival',
+				title: 'Frontend Festival',
+				status: 'live',
+				description: [
+					'Ik werkte mee aan de website van Frontend Festival, een avond met talks en workshops over open source front-end. De code staat open op GitHub.'
+				],
+				tech: ['Svelte', 'JavaScript', 'CSS', 'HTML'],
+				links: [
+					{
+						label: 'Broncode op GitHub',
+						url: 'https://github.com/Ordina-Group/frontendfestival.nl'
+					}
+				]
 			},
 			{
 				id: 'gh-radio',
-				title: 'Eigenaar',
-				organisation: 'GH Radio',
-				start: '2011-05',
-				end: '2016-04',
+				title: 'GH Radio',
+				status: 'past',
+				description: [
+					'Van 2011 tot 2016 was ik eigenaar en leidinggevende van GH Radio, een online non-profit radiostation. Samen met ongeveer 90 vrijwillige jongeren maakte ik de radio voor dagelijks 100 tot 200 jongeren tussen de 12 en 22 jaar.',
+					'Ik zorgde dat de teams op zichzelf bleven draaien en maakte en onderhield de website zelf.'
+				],
 				tech: ['JavaScript', 'PHP', 'MySQL', 'CSS', 'SCSS', 'HTML', 'Git', 'Node.js', 'SSH'],
-				situation: [
-					'Ik was meer dan vijf jaar eigenaar en leidinggevende van het online non-profit radiostation GH Radio. Samen met ongeveer 90 vrijwillige jongeren verzorgde ik de radio voor dagelijks 100 tot 200 jongeren tussen de 12 en 22 jaar.'
-				],
-				tasks: [
-					'Zorgen dat de teams op zichzelf bleven draaien',
-					'Het maken en onderhouden van de website (dit deed ik zelf)'
-				],
-				results: []
+				links: []
 			}
 		]
 	},

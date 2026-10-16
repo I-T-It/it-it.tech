@@ -9,7 +9,10 @@ import SiteHeader from './SiteHeader.svelte';
 // scrolled a bit: 40% of the first window, at most 200px. This file runs the company build; the
 // variant does not change the behaviour. The real site.ts needs the SvelteKit dev runtime, so it
 // is mocked.
-vi.mock('../site.js', () => ({ site: 'company' }));
+vi.mock('../site.js', () => ({
+	site: 'company',
+	variant: { availabilityOrder: ['freelance', 'job'] }
+}));
 
 const root = document.documentElement;
 const header = () => document.querySelector<HTMLElement>('header')!;
@@ -194,9 +197,10 @@ describe('keyboard focus', () => {
 
 	it('shows the focus ring on what it revealed', async () => {
 		await render(SiteHeader, {});
-		const link = header().querySelector<HTMLAnchorElement>('.menu a')!;
-		link.focus();
-		expect(getComputedStyle(link).outlineWidth).toBe('2px');
+		for (const el of header().querySelectorAll<HTMLElement>('.menu summary, .menu .contact')) {
+			el.focus();
+			expect(getComputedStyle(el).outlineWidth).toBe('2px');
+		}
 	});
 });
 

@@ -3,7 +3,7 @@ import { company } from './company.js';
 import { en } from './en.js';
 import { getContent } from './index.js';
 import { nl } from './nl.js';
-import type { Job, SiteContent, TalkGiven, TalkOffer } from './types.js';
+import type { Job, Project, SiteContent, TalkGiven, TalkOffer } from './types.js';
 
 const both: [string, SiteContent][] = [
 	['nl', nl],
@@ -72,7 +72,15 @@ describe('NL and EN parity', () => {
 
 	it('has the same job ids in the same order', () => {
 		expect(en.experience.jobs.map((j) => j.id)).toEqual(nl.experience.jobs.map((j) => j.id));
-		expect(nl.experience.jobs).toHaveLength(15);
+		expect(nl.experience.jobs).toHaveLength(12);
+	});
+
+	it('has the same projects in the same order, with the same status, tags and links', () => {
+		const facts = (p: Project) => [p.id, p.status, p.tech, p.links.map((l) => l.url)];
+		expect(en.projects.projects.map(facts)).toEqual(nl.projects.projects.map(facts));
+		expect(en.projects.projects.map((p) => p.description.length)).toEqual(
+			nl.projects.projects.map((p) => p.description.length)
+		);
 	});
 
 	it('has the same skill groups and skill ids with the same level and years', () => {
@@ -115,8 +123,8 @@ describe('NL and EN parity', () => {
 		);
 	});
 
-	it('has the same dates, links, tech tags and intermediaries on every job', () => {
-		const facts = (j: Job) => [j.start, j.end, j.tech, j.via, j.results.map((r) => r.url)];
+	it('has the same dates, links, tech tags and source on every job', () => {
+		const facts = (j: Job) => [j.start, j.end, j.tech, j.source, j.results.map((r) => r.url)];
 		expect(en.experience.jobs.map(facts)).toEqual(nl.experience.jobs.map(facts));
 	});
 
@@ -146,8 +154,10 @@ describe('NL and EN parity', () => {
 			path.startsWith('profile.') ||
 			/\.(id|kind|lang|titleLang|offerId)$/.test(path) ||
 			/\.langs\[\d+\]$/.test(path) ||
-			/jobs\[\d+\]\.(organisation|via|title)$/.test(path) ||
-			/jobs\[\d+\]\.tech\[\d+\]$/.test(path) ||
+			/jobs\[\d+\]\.(organisation|title|source)$/.test(path) ||
+			/^experience\.labels\.sources\./.test(path) ||
+			/(jobs|projects)\[\d+\]\.tech\[\d+\]$/.test(path) ||
+			/projects\[\d+\]\.(title|status)$/.test(path) ||
 			/groups\[\d+\]\.(title|skills\[\d+\]\.title)$/.test(path) ||
 			/^talks\.offers\[\d+\]\.title$/.test(path) ||
 			/^talks\.given\[\d+\]\.(event|talk\.title)$/.test(path) ||
@@ -325,7 +335,7 @@ describe('cleaned up export', () => {
 });
 
 describe('experience', () => {
-	it('has valid dates, an end that is null or not before the start, and exactly 3 ongoing roles', () => {
+	it('has valid dates, an end that is null or not before the start, and exactly 2 ongoing roles', () => {
 		for (const [, c] of both) {
 			for (const job of c.experience.jobs) {
 				expect(job.start).toMatch(MONTH);
@@ -336,7 +346,7 @@ describe('experience', () => {
 					expect(job.end <= EXPORT_MONTH).toBe(true);
 				}
 			}
-			expect(c.experience.jobs.filter((j) => j.end === null)).toHaveLength(3);
+			expect(c.experience.jobs.filter((j) => j.end === null)).toHaveLength(2);
 		}
 	});
 
@@ -355,17 +365,50 @@ describe('experience', () => {
 				expect(job.situation.length).toBeGreaterThan(0);
 				expect(job.tasks.length).toBeGreaterThan(0);
 				expect(new Set(job.tech).size).toBe(job.tech.length);
-				if (job.via !== undefined) expect(job.via).not.toBe(job.organisation);
 			}
+		}
+	});
+
+	it('names the source of each role: I.T. It, Sopra Steria, or none for direct employment', () => {
+		const sources = (c: SiteContent) =>
+			Object.fromEntries(c.experience.jobs.map((j) => [j.id, j.source ?? 'direct']));
+		for (const [, c] of both) {
+			expect(sources(c)).toEqual({
+				vws: 'sopra-steria',
+				ocw: 'sopra-steria',
+				'cz-chatbot': 'sopra-steria',
+				cfk: 'direct',
+				'cz-flutter': 'sopra-steria',
+				'instore-media': 'itit',
+				'sublime-fm': 'itit',
+				'social-blue': 'direct',
+				smitties: 'itit',
+				'vhu-europe': 'itit',
+				'truman-scout': 'direct',
+				amwittools: 'direct'
+			});
+			expect(c.experience.labels.sources.itit).toContain('I.T. It');
+			expect(c.experience.labels.sources['sopra-steria']).toContain('Sopra Steria');
+		}
+	});
+
+	it('has dropped the restaurant and open-source roles, and moved GH Radio to the projects', () => {
+		for (const [, c] of both) {
+			const ids = c.experience.jobs.map((j) => j.id);
+			expect(ids).not.toContain('puur-emmen');
+			expect(ids).not.toContain('open-source');
+			expect(ids).not.toContain('gh-radio');
+			expect(c.experience.jobs.some((j) => /Puur|GH Radio/.test(j.organisation))).toBe(false);
+			expect(c.projects.projects.map((p) => p.id)).toContain('gh-radio');
 		}
 	});
 
 	it('shows the Sopra Steria role as via and fills the tags of the CZ C# role', () => {
 		for (const [, c] of both) {
 			const vws = c.experience.jobs.find((j) => j.organisation === 'Ministerie van VWS');
-			expect(vws?.via).toBe('Sopra Steria');
+			expect(vws?.source).toBe('sopra-steria');
 			expect(vws?.end).toBeNull();
-			const cz = c.experience.jobs.find((j) => j.via === 'Ordina');
+			const cz = c.experience.jobs.find((j) => j.id === 'cz-chatbot');
 			expect(cz?.organisation).toBe('CZ');
 			expect(cz?.tech).toEqual(['C#', '.NET', 'Azure Functions']);
 		}
@@ -394,7 +437,7 @@ describe('experience', () => {
 					}
 				}
 			}
-			expect(urls.length).toBeGreaterThan(8);
+			expect(urls.length).toBeGreaterThan(4);
 			expect(new Set(urls).size).toBe(urls.length);
 		}
 	});
@@ -406,6 +449,108 @@ describe('experience', () => {
 		}
 		expect(nl.experience.labels.present).toBe('heden');
 		expect(en.experience.labels.present).toBe('present');
+	});
+});
+
+describe('projects', () => {
+	it('lists Laravel Tinker, Framed, Streamline, Frontend Festival and GH Radio, in that order', () => {
+		for (const [, c] of both) {
+			expect(c.projects.projects.map((p) => [p.id, p.title, p.status])).toEqual([
+				['laravel-tinker', 'Laravel Tinker', 'live'],
+				['framed', 'Framed', 'soon'],
+				['streamline', 'Streamline', 'wip'],
+				['frontend-festival', 'Frontend Festival', 'live'],
+				['gh-radio', 'GH Radio', 'past']
+			]);
+		}
+	});
+
+	it('has a title with the ampersand of the brief and a label for every status', () => {
+		expect(nl.projects.title).toBe('Open source & persoonlijke projecten');
+		expect(en.projects.title).toBe('Open source & personal projects');
+		for (const [, c] of both) {
+			expect(Object.keys(c.projects.labels.status).sort()).toEqual(['live', 'past', 'soon', 'wip']);
+			expect(c.projects.labels.status.soon.length).toBeGreaterThan(5);
+		}
+		expect(nl.projects.labels.status.soon).toBe('Verschijnt binnenkort');
+		expect(en.projects.labels.status.soon).toBe('Releasing soon');
+	});
+
+	it('links Laravel Tinker to the JetBrains plugin and its GitHub repository', () => {
+		for (const [, c] of both) {
+			const links = c.projects.projects.find((p) => p.id === 'laravel-tinker')!.links;
+			expect(links.map((l) => l.url)).toEqual([
+				'https://plugins.jetbrains.com/plugin/14957-laravel-tinker',
+				'https://github.com/Roboroads/laravel-tinker'
+			]);
+		}
+	});
+
+	it('gives the Laravel Tinker user count with the date it was measured, and not the old count', () => {
+		const text = (c: SiteContent) =>
+			c.projects.projects.find((p) => p.id === 'laravel-tinker')!.description.join(' ');
+		expect(text(nl)).toContain('164.000');
+		expect(text(nl)).toContain('16 oktober 2026');
+		expect(text(en)).toContain('164,000');
+		expect(text(en)).toContain('16 October 2026');
+		for (const [, c] of both) expect(text(c)).not.toContain('102');
+	});
+
+	it('links Framed to its website and repository, Streamline and Frontend Festival to their repositories, and GH Radio nowhere', () => {
+		for (const [, c] of both) {
+			const urls = (id: string) =>
+				c.projects.projects.find((p) => p.id === id)!.links.map((l) => l.url);
+			expect(urls('framed')).toEqual([
+				'https://getframed.fun',
+				'https://github.com/Roboroads/Framed'
+			]);
+			expect(urls('streamline')).toEqual(['https://github.com/StreamlineRadio/Streamline']);
+			expect(urls('frontend-festival')).toEqual([
+				'https://github.com/Ordina-Group/frontendfestival.nl'
+			]);
+			expect(urls('gh-radio')).toEqual([]);
+		}
+	});
+
+	it('has no link to Graphton, which is dead', () => {
+		for (const [, c] of both) {
+			const urls = c.projects.projects.flatMap((p) => p.links.map((l) => l.url));
+			expect(urls.some((u) => /graphton/i.test(u))).toBe(false);
+			expect(leaves(c).some(([, value]) => /graphton/i.test(value))).toBe(false);
+		}
+	});
+
+	it('has valid, unique https links with a label, and unique ids', () => {
+		for (const [, c] of both) {
+			const ids = c.projects.projects.map((p) => p.id);
+			expect(new Set(ids).size).toBe(ids.length);
+			const urls = c.projects.projects.flatMap((p) => p.links.map((l) => l.url));
+			expect(new Set(urls).size).toBe(urls.length);
+			for (const link of c.projects.projects.flatMap((p) => p.links)) {
+				expect(new URL(link.url).protocol).toBe('https:');
+				expect(link.label.length).toBeGreaterThan(3);
+				expect(link.label).not.toMatch(/https?:/);
+			}
+		}
+	});
+
+	it('has a description on every project and no duplicate tag', () => {
+		for (const [, c] of both) {
+			for (const p of c.projects.projects) {
+				expect(p.description.length, p.id).toBeGreaterThan(0);
+				expect(p.tech.length, p.id).toBeGreaterThan(0);
+				expect(new Set(p.tech).size, p.id).toBe(p.tech.length);
+			}
+		}
+	});
+
+	it('keeps the GH Radio facts that left the experience list', () => {
+		for (const [, c] of both) {
+			const gh = c.projects.projects.find((p) => p.id === 'gh-radio')!;
+			expect(gh.description.join(' ')).toContain('2011');
+			expect(gh.description.join(' ')).toContain('2016');
+			expect(gh.description.join(' ')).toContain('90');
+		}
 	});
 });
 

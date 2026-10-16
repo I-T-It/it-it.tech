@@ -75,12 +75,10 @@
 		return say({ count: matching.size, skill });
 	});
 
-	/** "via Sopra Steria", only where the employer differs from the organisation. */
+	/** "via Sopra Steria (consultant)", only on a role that has a source. */
 	function employer(job: Job): string | undefined {
-		if (!job.via || job.via.trim().toLowerCase() === job.organisation.trim().toLowerCase()) {
-			return undefined;
-		}
-		return content.labels.via.replace('{employer}', job.via);
+		if (!job.source) return undefined;
+		return content.labels.via.replace('{employer}', content.labels.sources[job.source]);
 	}
 
 	/**

@@ -1,14 +1,18 @@
 import '../../app.css';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
+import { sectionIds } from '#lib/nav.js';
 import SiteHeader from './SiteHeader.svelte';
 
 // This file runs the company build. SiteHeader.personal.svelte.test.ts runs the personal one: the
 // variant is a build-time constant, so one file cannot hold both. The real site.ts needs the
 // SvelteKit dev runtime, which a component test does not have, so it is mocked either way.
-vi.mock('../site.js', () => ({ site: 'company' }));
+vi.mock('../site.js', () => ({
+	site: 'company',
+	variant: { availabilityOrder: ['freelance', 'job'] }
+}));
 
 const root = document.documentElement;
 
@@ -17,6 +21,10 @@ function setLocale(locale: Locale) {
 }
 
 const header = () => document.querySelector<HTMLElement>('header')!;
+const frame = () =>
+	new Promise<void>((resolve) =>
+		requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+	);
 
 afterEach(async () => {
 	setLocale('nl');
@@ -59,13 +67,36 @@ describe('company mark', () => {
 	});
 });
 
+const menu = () => header().querySelector<HTMLDetailsElement>('details.sections')!;
+const summary = () => menu().querySelector<HTMLElement>('summary')!;
+const sectionLinks = () => Array.from(menu().querySelectorAll<HTMLAnchorElement>('a'));
+const text = (links: HTMLElement[]) => links.map((a) => a.textContent?.trim());
+
+/** A click on a link would load another page into the test frame: stop it, keep the handlers. */
+function keepOnPage() {
+	menu().addEventListener('click', (event) => {
+		if ((event.target as Element).closest('a')) event.preventDefault();
+	});
+}
+
 describe('links', () => {
-	it('anchors to the sections of the page in the current locale', async () => {
+	it('anchors to every section of the page in the current locale, in page order', async () => {
 		await render(SiteHeader, {});
-		const hrefs = Array.from(
-			header().querySelectorAll<HTMLAnchorElement>('nav a:not([hreflang])')
-		).map((a) => a.getAttribute('href'));
-		expect(hrefs).toEqual(['/#about', '/#experience', '/#skills', '/#talks', '/#contact']);
+		const hrefs = sectionLinks().map((a) => a.getAttribute('href'));
+		expect(hrefs).toEqual([
+			'/#hero',
+			'/#freelance',
+			'/#job',
+			'/#about',
+			'/#competences',
+			'/#experience',
+			'/#projects',
+			'/#skills',
+			'/#talks',
+			'/#education',
+			'/#contact'
+		]);
+		expect(hrefs).toEqual(sectionIds(['freelance', 'job']).map((id) => `/#${id}`));
 	});
 
 	it('links the mark to the top of the page in the current locale', async () => {
@@ -80,21 +111,41 @@ describe('links', () => {
 		expect(header().querySelector('a[href$="#contact"]')?.getAttribute('href')).toBe(
 			'/en/#contact'
 		);
+		expect(sectionLinks().every((a) => a.getAttribute('href')!.startsWith('/en/#'))).toBe(true);
 	});
 
-	it('has a Contact anchor that reads the same in both locales', async () => {
+	it('has a Contact button next to the menu on a wide window, reading the same in both locales', async () => {
+		await page.viewport(1280, 800);
 		const screen = await render(SiteHeader, {});
-		await expect.element(screen.getByRole('link', { name: 'Contact' })).toBeVisible();
+		const contact = screen.getByRole('link', { name: 'Contact' }).first();
+		await expect.element(contact).toBeVisible();
+		expect(header().querySelector('.contact')?.getAttribute('href')).toBe('/#contact');
+		setLocale('en');
+		screen.unmount();
+		await render(SiteHeader, {});
+		expect(header().querySelector('.contact')?.textContent?.trim()).toBe('Contact');
+		expect(header().querySelector('.contact')?.getAttribute('href')).toBe('/en/#contact');
 	});
 
-	it('has pointer targets of at least 24 by 24 CSS pixels', async () => {
+	it('leaves Contact to the menu on a narrow window, where the bar has no room for it', async () => {
+		await page.viewport(414, 800);
+		await render(SiteHeader, {});
+		expect(header().querySelector('.contact')!.getBoundingClientRect().width).toBe(0);
+		expect(text(sectionLinks()).at(-1)).toBe('Contact');
+	});
+
+	it('has pointer targets of at least 24 by 24 CSS pixels, with the menu open', async () => {
 		await page.viewport(1280, 800);
 		await render(SiteHeader, {});
+		menu().open = true;
 		for (const link of header().querySelectorAll('a')) {
 			const box = link.getBoundingClientRect();
 			expect(box.width, link.textContent ?? '').toBeGreaterThanOrEqual(24);
 			expect(box.height, link.textContent ?? '').toBeGreaterThanOrEqual(24);
 		}
+		const button = summary().getBoundingClientRect();
+		expect(button.width).toBeGreaterThanOrEqual(24);
+		expect(button.height).toBeGreaterThanOrEqual(24);
 	});
 });
 
@@ -112,7 +163,9 @@ describe('size and spacing', () => {
 			await page.viewport(width, 800);
 			await render(SiteHeader, {});
 			const bar = header().getBoundingClientRect();
-			for (const el of header().querySelectorAll('.brand, .menu a, .language a')) {
+			for (const el of header().querySelectorAll(
+				'.brand, .menu summary, .menu .contact, .language a'
+			)) {
 				const box = el.getBoundingClientRect();
 				if (box.width === 0) continue;
 				expect(box.top - bar.top, `${el.className} top at ${width}`).toBeGreaterThanOrEqual(8);
@@ -142,21 +195,142 @@ describe('size and spacing', () => {
 	});
 });
 
-describe('desktop anchors', () => {
-	it('shows Over, Ervaring, Vaardigheden and Talks on a wide screen', async () => {
+describe('menu', () => {
+	it('is a Menu button with every section behind it, closed at first', async () => {
+		const screen = await render(SiteHeader, {});
+		expect(summary().textContent?.trim()).toBe('Menu');
+		expect(menu().open).toBe(false);
+		await expect.element(screen.getByText('Menu', { exact: true })).toBeVisible();
+		expect(sectionLinks()).toHaveLength(11);
+		// Closed, none of its links can be seen or reached.
+		for (const link of sectionLinks()) expect(link.checkVisibility()).toBe(false);
+		await userEvent.click(summary());
+		for (const link of sectionLinks()) expect(link.checkVisibility()).toBe(true);
+	});
+
+	it('names the sections in Dutch', async () => {
+		await render(SiteHeader, {});
+		expect(text(sectionLinks())).toEqual([
+			'Start',
+			'Freelance',
+			'Loondienst',
+			'Over',
+			'Competenties',
+			'Ervaring',
+			'Projecten',
+			'Vaardigheden',
+			'Talks',
+			'Opleiding',
+			'Contact'
+		]);
+	});
+
+	it('names the sections in English', async () => {
+		setLocale('en');
+		await render(SiteHeader, {});
+		expect(text(sectionLinks())).toEqual([
+			'Start',
+			'Freelance',
+			'Employed',
+			'About',
+			'Competences',
+			'Experience',
+			'Projects',
+			'Skills',
+			'Talks',
+			'Education',
+			'Contact'
+		]);
+		expect(summary().textContent?.trim()).toBe('Menu');
+	});
+
+	it('opens on a click and shows every section', async () => {
 		await page.viewport(1280, 800);
 		const screen = await render(SiteHeader, {});
-		for (const name of ['Over', 'Ervaring', 'Vaardigheden', 'Talks', 'Contact']) {
+		await userEvent.click(summary());
+		expect(menu().open).toBe(true);
+		for (const name of ['Start', 'Over', 'Competenties', 'Projecten', 'Opleiding']) {
 			await expect.element(screen.getByRole('link', { name, exact: true })).toBeVisible();
 		}
 	});
 
-	it('keeps only the mark, Contact and the toggle on a narrow screen', async () => {
-		await page.viewport(414, 800);
-		const screen = await render(SiteHeader, {});
-		await expect.element(screen.getByRole('link', { name: 'Contact' })).toBeVisible();
-		for (const name of ['Over', 'Ervaring', 'Vaardigheden', 'Talks']) {
-			await expect.element(screen.getByRole('link', { name, exact: true })).not.toBeInTheDocument();
+	it('opens with Enter and Space from the keyboard, as a button does', async () => {
+		await render(SiteHeader, {});
+		summary().focus();
+		await userEvent.keyboard('{Enter}');
+		expect(menu().open).toBe(true);
+		await userEvent.keyboard(' ');
+		expect(menu().open).toBe(false);
+	});
+
+	it('closes on Escape and puts focus back on the button', async () => {
+		await render(SiteHeader, {});
+		await userEvent.click(summary());
+		sectionLinks()[3].focus();
+		await userEvent.keyboard('{Escape}');
+		expect(menu().open).toBe(false);
+		expect(document.activeElement).toBe(summary());
+	});
+
+	it('closes when a section is chosen', async () => {
+		await render(SiteHeader, {});
+		keepOnPage();
+		await userEvent.click(summary());
+		await userEvent.click(sectionLinks()[5]);
+		expect(menu().open).toBe(false);
+	});
+
+	it('closes when focus moves out of it', async () => {
+		await render(SiteHeader, {});
+		await userEvent.click(summary());
+		sectionLinks()[0].focus();
+		header().querySelector<HTMLAnchorElement>('.brand')!.focus();
+		await expect.poll(() => menu().open).toBe(false);
+	});
+
+	it('stays open while focus moves between its own links', async () => {
+		await render(SiteHeader, {});
+		await userEvent.click(summary());
+		sectionLinks()[0].focus();
+		sectionLinks()[1].focus();
+		await frame();
+		expect(menu().open).toBe(true);
+	});
+
+	it('is a native disclosure, so it opens and closes without script', async () => {
+		await render(SiteHeader, {});
+		expect(menu().tagName).toBe('DETAILS');
+		expect(summary().tagName).toBe('SUMMARY');
+		// Its links sit in the nav landmark, inside the details.
+		expect(menu().closest('nav')?.getAttribute('aria-label')).toBe('Hoofdmenu');
+	});
+
+	it('shows the focus ring on the button when the keyboard reaches it', async () => {
+		await render(SiteHeader, {});
+		header().querySelector<HTMLAnchorElement>('.brand')!.focus();
+		await userEvent.keyboard('{Tab}');
+		expect(document.activeElement).toBe(summary());
+		expect(getComputedStyle(summary()).outlineWidth).toBe('2px');
+		expect(getComputedStyle(summary()).outlineStyle).toBe('solid');
+	});
+
+	it('draws the open panel inside the window, with no sideways scroll, from 320px up', async () => {
+		for (const width of [320, 414, 1280]) {
+			await page.viewport(width, 700);
+			await render(SiteHeader, {});
+			menu().open = true;
+			await frame();
+			const html = document.documentElement;
+			expect(html.scrollWidth, `scroll at ${width}`).toBeLessThanOrEqual(html.clientWidth);
+			for (const link of sectionLinks()) {
+				const box = link.getBoundingClientRect();
+				expect(box.left, `${link.textContent} left at ${width}`).toBeGreaterThanOrEqual(0);
+				expect(box.right, `${link.textContent} right at ${width}`).toBeLessThanOrEqual(width);
+			}
+			// Every entry is on the screen at once: the panel never needs a scroll of its own.
+			const last = sectionLinks()[sectionLinks().length - 1].getBoundingClientRect();
+			expect(last.bottom, `bottom at ${width}`).toBeLessThanOrEqual(700);
+			document.body.replaceChildren();
 		}
 	});
 });

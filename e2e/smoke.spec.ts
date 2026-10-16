@@ -13,6 +13,7 @@ const sectionOrder: Record<Site, string[]> = {
 		'about',
 		'competences',
 		'experience',
+		'projects',
 		'skills',
 		'talks',
 		'education',
@@ -25,6 +26,7 @@ const sectionOrder: Record<Site, string[]> = {
 		'about',
 		'competences',
 		'experience',
+		'projects',
 		'skills',
 		'talks',
 		'education',
@@ -57,7 +59,7 @@ test.describe('skeleton', () => {
 		// The two availability chips sit in the #availability wrapper, so not only direct children.
 		const ids = await page.locator('main section').evaluateAll((els) => els.map((el) => el.id));
 		expect(ids).toEqual(sectionOrder[site]);
-		await expect(page.locator('main h2')).toHaveCount(9);
+		await expect(page.locator('main h2')).toHaveCount(10);
 
 		expect(problems).toEqual([]);
 	});

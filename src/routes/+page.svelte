@@ -8,6 +8,7 @@
 	import About from '#lib/sections/About.svelte';
 	import Competences from '#lib/sections/Competences.svelte';
 	import Experience from '#lib/sections/Experience.svelte';
+	import Projects from '#lib/sections/Projects.svelte';
 	import Skills from '#lib/sections/Skills.svelte';
 	import Talks from '#lib/sections/Talks.svelte';
 	import EducationLanguages from '#lib/sections/EducationLanguages.svelte';
@@ -31,6 +32,7 @@
 	<About />
 	<Competences />
 	<Experience />
+	<Projects />
 	<Skills />
 	<Talks />
 	<EducationLanguages />
