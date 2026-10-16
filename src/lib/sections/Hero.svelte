@@ -6,6 +6,8 @@
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { registerHero, registerObstacle, registerSocket } from '#lib/pcb/registry.svelte.js';
 	import { site } from '#lib/site.js';
+	import GlitchPhoto from '#lib/components/GlitchPhoto.svelte';
+	import GlitchToggle from '#lib/components/GlitchToggle.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Logo from '#lib/components/Logo.svelte';
 	import { profileIcons } from '#lib/components/profile-icons.js';
@@ -174,13 +176,11 @@
 					{/each}
 				</div>
 				<div class="die">
-					<enhanced:img
-						class="photo"
-						src="../assets/robbin-schepers.jpg"
-						alt={content.hero.photoAlt}
-						sizes="(min-width: 40rem) 26rem, 46vw"
-					/>
+					<!-- The photo, which now and then glitches into the Roboroads avatar and back. -->
+					<GlitchPhoto photoAlt={content.hero.photoAlt} avatarAlt={content.hero.avatarAlt} />
 				</div>
+				<!-- The stop switch sits outside the die: the die clips. It shows once the glitch starts. -->
+				<GlitchToggle />
 			</div>
 		{/if}
 
@@ -368,17 +368,6 @@
 			transparent 1px 4px
 		);
 		pointer-events: none;
-	}
-
-	/* enhanced:img puts the class on the <img> inside a <picture>. */
-	.photo {
-		display: block;
-		width: calc(100% - 2px);
-		height: calc(100% - 2px);
-		margin: 1px;
-		object-fit: cover;
-		object-position: 45% 30%;
-		clip-path: polygon(14% 0, 100% 0, 100% 100%, 0 100%, 0 14%);
 	}
 
 	.copy {
@@ -631,7 +620,8 @@
 			animation: scan 1.2s ease-in 1s backwards;
 		}
 
-		:global(html.js:not(.reduced) [data-power='on']) .photo {
+		/* The photo is the <img> of GlitchPhoto, a component of its own: hence :global. */
+		:global(html.js:not(.reduced) [data-power='on']) .die :global(.photo) {
 			animation: settle 1.9s ease-out 0.3s backwards;
 		}
 

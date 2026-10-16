@@ -10,6 +10,7 @@ import { company } from '#lib/content/company.js';
 import { getContent } from '#lib/content/index.js';
 import { profiles, visibleProfiles } from '#lib/content/profiles.js';
 import { EMAIL_FALLBACK_TEXT } from '#lib/email.js';
+import { glitch } from '#lib/glitch/state.svelte.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
 import { SOCKET_DRAW_MS } from '#lib/pcb/growth.js';
 import { chips, obstacles, socket } from '#lib/pcb/registry.svelte.js';
@@ -174,6 +175,58 @@ describe('Hero', () => {
 		await expect.element(screen.getByRole('img', { name: content.en.hero.photoAlt })).toBeVisible();
 	});
 
+	it('asks for no avatar until the glitch starts, and shows no switch either', async () => {
+		await mount(Hero);
+		expect(hero().querySelectorAll('picture')).toHaveLength(1);
+		expect(hero().querySelector('img.avatar')).toBeNull();
+		expect(hero().querySelector('button')).toBeNull();
+		expect(hero().querySelector('[data-glitch]')).toBeNull();
+	});
+
+	// Like the photo: the avatar is offered as AVIF and WebP with a PNG behind them, and every file
+	// is served. It is hidden from screen readers until a swap shows it.
+	it('offers the avatar as AVIF and WebP once it is mounted, and every file is served', async () => {
+		const screen = await mount(Hero);
+		glitch.armed = true;
+		await vi.waitFor(() => expect(hero().querySelectorAll('picture')).toHaveLength(2));
+		const picture = hero().querySelector<HTMLElement>('img.avatar')!.closest('picture')!;
+		const types = Array.from(picture.querySelectorAll('source')).map((s) => s.type);
+		expect(types).toEqual(expect.arrayContaining(['image/avif', 'image/webp']));
+
+		const img = picture.querySelector('img')!;
+		expect(img.getAttribute('src')).toBeTruthy();
+		expect(img.getAttribute('width')).toBeTruthy();
+		expect(img.getAttribute('height')).toBeTruthy();
+		expect(img.getAttribute('decoding')).toBe('async');
+		expect(img.getAttribute('fetchpriority')).toBe('low');
+		expect(img.getAttribute('aria-hidden')).toBe('true');
+		expect(img.getAttribute('alt')).toBe(content.nl.hero.avatarAlt);
+
+		const files = [
+			img.getAttribute('src')!,
+			...Array.from(picture.querySelectorAll('source')).map(
+				(s) => s.getAttribute('srcset')!.split(',')[0].trim().split(' ')[0]
+			)
+		];
+		expect(files.length).toBeGreaterThanOrEqual(3);
+		for (const file of files) {
+			const response = await fetch(new URL(file, document.baseURI));
+			expect(response.ok, file).toBe(true);
+			expect(response.headers.get('content-type'), file).toMatch(/^image\//);
+		}
+		// Still the photo alone for a screen reader.
+		await expect.element(screen.getByRole('img', { name: content.nl.hero.photoAlt })).toBeVisible();
+		expect(screen.getByRole('img').elements()).toHaveLength(1);
+	}, 60_000);
+
+	it('says the avatar alt text in English too', async () => {
+		setLocale('en');
+		await mount(Hero);
+		glitch.armed = true;
+		await vi.waitFor(() => expect(hero().querySelector('img.avatar')).not.toBeNull());
+		expect(hero().querySelector('img.avatar')!.getAttribute('alt')).toBe(content.en.hero.avatarAlt);
+	});
+
 	it('does not hide the photo from screen readers, and hides the footprint', async () => {
 		await mount(Hero);
 		const img = hero().querySelector('img')!;
@@ -238,6 +291,27 @@ describe('Hero socket and obstacle', () => {
 		expect(list).toHaveLength(1);
 		expect(list[0].contains(hero().querySelector('h1'))).toBe(true);
 		expect(list[0].contains(socket()!.el)).toBe(false);
+	});
+
+	it('puts the stop switch on the corner pad of the footprint, outside the die, and it is no obstacle', async () => {
+		await mount(Hero);
+		glitch.armed = true;
+		await vi.waitFor(() => expect(hero().querySelector('button.glitch-toggle')).not.toBeNull());
+		const toggle = hero().querySelector<HTMLElement>('button.glitch-toggle')!;
+		const frame = socket()!.el;
+		expect(frame.contains(toggle)).toBe(true);
+		// The die clips its content, so the switch is next to it, not in it.
+		expect(frame.querySelector('.die')!.contains(toggle)).toBe(false);
+		expect(frame.querySelector('.pads')!.contains(toggle)).toBe(false);
+		const box = toggle.getBoundingClientRect();
+		const outer = frame.getBoundingClientRect();
+		const cell = outer.width / 11;
+		expect(box.left + box.width / 2).toBeCloseTo(outer.right - cell / 2, 0);
+		expect(box.top + box.height / 2).toBeCloseTo(outer.bottom - cell / 2, 0);
+		// The text block stays the only obstacle; the board keeps the socket's corner clear anyway.
+		expect(obstacles()).toHaveLength(1);
+		expect(obstacles()[0].contains(toggle)).toBe(false);
+		expect(hero().querySelectorAll('button')).toHaveLength(1);
 	});
 
 	it('leaves a corridor between socket and text for the traces that come in from below', async () => {
@@ -392,6 +466,20 @@ describe('Hero power-up', () => {
 				.find((a) => /etch-powered/.test((a as CSSAnimation).animationName))!;
 			etch.finish();
 			expect(getComputedStyle(die).getPropertyValue('--etch').trim()).toBe('150%');
+		});
+
+		it('settles the photo as the frame is etched in, though the photo is the <img> of a component of its own', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			const photo = hero().querySelector<HTMLElement>('.die img.photo')!;
+			expect(getComputedStyle(photo).animationName).toBe('none');
+			socket()!.el.setAttribute('data-power', 'on');
+			expect(getComputedStyle(photo).animationName).toMatch(/settle/);
+			// It is still the full frame: the photo fills the die inside its 1px edge.
+			const die = hero().querySelector('.die')!.getBoundingClientRect();
+			const box = photo.getBoundingClientRect();
+			expect(box.width).toBeCloseTo(die.width - 2, 0);
+			expect(box.height).toBeCloseTo(die.height - 2, 0);
 		});
 
 		it('is done drawing when the board is: within the time the board gives it', async () => {

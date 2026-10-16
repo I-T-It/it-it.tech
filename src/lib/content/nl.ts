@@ -32,7 +32,8 @@ export const nl: SiteContent = {
 			freelance: 'Project voor I.T. It'
 		},
 		logoAlt: 'Logo van I.T. It',
-		photoAlt: 'Portret van Robbin Schepers'
+		photoAlt: 'Portret van Robbin Schepers',
+		avatarAlt: 'Avatar van Roboroads: een low-poly portret in groen met een gloeiende cowboyhoed'
 	},
 
 	availability: {
