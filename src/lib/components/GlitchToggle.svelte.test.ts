@@ -2,7 +2,7 @@ import '../../app.css';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { flushSync, mount, unmount } from 'svelte';
-import { GLITCH_START_AFTER_POWER_MS, nextCycle } from '#lib/glitch/schedule.js';
+import { GLITCH_START_AFTER_POWER_MS, nextGlitch } from '#lib/glitch/schedule.js';
 import { glitch, PAUSED_KEY } from '#lib/glitch/state.svelte.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
 import { createRng } from '#lib/pcb/rng.js';
@@ -253,7 +253,15 @@ describe('with the photo', () => {
 	const avatarAlt = 'Avatar van Roboroads: een low-poly portret';
 	const realSetTimeout = globalThis.setTimeout;
 
-	function mountBoth() {
+	/** A seed whose first glitch is a swap to the avatar, which then holds the signal. */
+	function swapFirstSeed(): number {
+		for (let seed = 1; seed < 5000; seed++) {
+			if (nextGlitch(createRng(seed), 0, 'photo').kind === 'swap') return seed;
+		}
+		throw new Error('no seed swaps first');
+	}
+
+	function mountBoth(seed = 5) {
 		const socket = document.createElement('div');
 		socket.className = 'photo-socket';
 		socket.style.cssText = 'position:relative;width:300px;height:300px;margin:20px';
@@ -262,7 +270,7 @@ describe('with the photo', () => {
 		die.style.cssText = 'position:absolute;inset:0';
 		socket.append(die);
 		document.body.append(socket);
-		const photo = mount(GlitchPhoto, { target: die, props: { photoAlt, avatarAlt, seed: 5 } });
+		const photo = mount(GlitchPhoto, { target: die, props: { photoAlt, avatarAlt, seed } });
 		const toggle = mount(GlitchToggle, { target: socket });
 		flushSync();
 		mounted.push(() => {
@@ -279,12 +287,13 @@ describe('with the photo', () => {
 			.elements()
 			.map((el) => el.getAttribute('alt'));
 
-	it('puts the photo and its alt text back at once when it is pressed in the middle of a swap', async () => {
+	it('puts the photo and its alt text back at once when it is pressed while the avatar holds the signal', async () => {
 		vi.useFakeTimers({
 			toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date']
 		});
-		const [swapIn] = nextCycle(createRng(5), 0).events.slice(-2);
-		const socket = mountBoth();
+		const seed = swapFirstSeed();
+		const swap = nextGlitch(createRng(seed), 0, 'photo');
+		const socket = mountBoth(seed);
 		socket.setAttribute('data-power', 'on');
 		await vi.advanceTimersByTimeAsync(GLITCH_START_AFTER_POWER_MS);
 		const avatar = () => socket.querySelector<HTMLImageElement>('img.avatar');
@@ -292,7 +301,7 @@ describe('with the photo', () => {
 			await new Promise<void>((resolve) => realSetTimeout(resolve, 50));
 		}
 		await new Promise<void>((resolve) => realSetTimeout(resolve, 30));
-		await vi.advanceTimersByTimeAsync(swapIn.at + swapIn.duration + 500);
+		await vi.advanceTimersByTimeAsync(swap.at + swap.duration + 500);
 		expect(names()).toEqual([avatarAlt]);
 		expect(button()!.getAttribute('aria-pressed')).toBe('false');
 
@@ -301,7 +310,7 @@ describe('with the photo', () => {
 		expect(names()).toEqual([photoAlt]);
 		expect(socket.querySelector<HTMLElement>('.glitch')!.dataset.show).toBe('photo');
 		expect(button()!.getAttribute('aria-pressed')).toBe('true');
-		// No swap-out glitch on the way: it is over at once.
+		// No swap back on the way: the photo has the signal again at once.
 		expect(socket.querySelector('[data-glitch]')).toBeNull();
 	}, 60_000);
 

@@ -2,11 +2,11 @@
 	import { dev } from '$app/env';
 	import { onMount, untrack } from 'svelte';
 	import {
-		FIRST_TEASER_MIN_MS,
 		GLITCH_START_AFTER_POWER_MS,
+		GLITCH_WAIT_MIN_MS,
 		MAX_TRANSITIONS_PER_S,
 		maxTransitionsInWindow,
-		nextCycle,
+		nextGlitch,
 		type Frame,
 		type GlitchEvent,
 		type GlitchKind,
@@ -16,9 +16,9 @@
 	import { createRng, type Rng } from '#lib/pcb/rng.js';
 
 	interface Props {
-		/** The photo's alt text: what a screen reader gets, except while a swap shows the avatar. */
+		/** The photo's alt text: what a screen reader gets while the photo holds the signal. */
 		photoAlt: string;
-		/** The avatar's alt text, the accessible image while a swap shows it. */
+		/** The avatar's alt text, the accessible image while the avatar holds the signal. */
 		avatarAlt: string;
 		/** The seed of this visit's glitch. Default: a random one, or `?glitch-seed=` in a test run. */
 		seed?: number;
@@ -40,8 +40,13 @@
 	// glitch tears off are drawn by GlitchFx from `fx`, outside the die.
 	let shown: Shown = $state('photo');
 	let kind: GlitchKind | null = $state(null);
-	/** The avatar is the image in the accessibility tree: between the middles of the two swap glitches. */
-	let held = $state(false);
+	/**
+	 * The image that holds the signal: the one the die shows between glitches and the one in the
+	 * accessibility tree. The photo and the avatar fight over it. Only a swap hands it over, in the
+	 * middle of its glitch; a flash shows the other image for a moment and a tear shows neither, and
+	 * both leave it where it was.
+	 */
+	let holder: Shown = $state('photo');
 
 	// The avatar loads only once the glitch has started, and is used only once it has decoded.
 	let avatarMounted = $state(false);
@@ -82,14 +87,14 @@
 		return crypto.getRandomValues(new Uint32Array(1))[0];
 	}
 
-	/** One generator for the whole visit, so a restart after a pause is a new cycle, not a replay. */
+	/** One generator for the whole visit, so a restart after a pause is a new run, not a replay. */
 	let rng: Rng | undefined;
 
-	/** The photo, nothing running: where every pause and every stop leaves the die. */
+	/** The photo holds the signal, nothing running: where every pause and every stop leaves the die. */
 	function rest() {
 		kind = null;
 		shown = 'photo';
-		held = false;
+		holder = 'photo';
 		clearFx();
 	}
 
@@ -98,61 +103,48 @@
 	}
 
 	/**
-	 * Plays cycle after cycle until the returned function is called, which also snaps the die to rest.
-	 * An event the avatar is not ready for is played as far as it can be: a flicker as a plain
-	 * teaser, a swap not at all.
+	 * Plays glitch after glitch until the returned function is called, which also snaps the die to
+	 * rest. Each glitch is planned when the one before it is over, from the image that holds the
+	 * signal by then. A glitch that needs the whole avatar (a flash, or a swap to it) is played as a
+	 * plain tear of the holder while the avatar has not decoded: the signal stays where it is.
 	 */
 	function play(random: Rng): () => void {
 		let timer: ReturnType<typeof setTimeout> | undefined;
-		let swapping = false;
-		let flickering = false;
+		/** The glitch playing may change the whole image; false while the avatar is not ready for it. */
+		let whole = true;
 
 		const frame = (event: GlitchEvent, f: Frame) => {
-			const isSwap = event.kind === 'swap-in' || event.kind === 'swap-out';
-			if (event.kind === 'swap-in' && f.at === 0) swapping = usable();
-			if (event.kind === 'flicker' && f.at === 0) flickering = usable();
-			if (isSwap && !swapping) return;
-			if (event.kind === 'flicker' && !flickering) {
-				kind = 'tease';
-				shown = 'photo';
-			} else {
-				kind = event.kind;
-				shown = f.show;
-			}
+			if (f.at === 0) whole = event.kind === 'tear' || usable();
+			kind = whole ? event.kind : 'tear';
+			shown = whole ? f.show : holder;
 			fx.kind = kind;
 			fx.slices = f.slices;
 			fx.blocks = f.blocks;
 			fx.frame++;
-			if (isSwap) held = f.show === 'avatar';
+			// The signal changes hands where the whole image does, in the middle of a swap.
+			if (whole && event.kind === 'swap') holder = f.show;
 		};
 
-		const end = (event: GlitchEvent) => {
-			const isSwap = event.kind === 'swap-in' || event.kind === 'swap-out';
-			if (isSwap && !swapping) return;
-			if (event.kind === 'swap-out') swapping = false;
+		const end = () => {
 			kind = null;
+			shown = holder;
 			clearFx();
 		};
 
-		const cycle = () => {
-			const planned = nextCycle(random, 0, { avatar: !avatarFailed });
-			if (dev && maxTransitionsInWindow(planned.events, 1000) > MAX_TRANSITIONS_PER_S) {
+		const glitchOnce = () => {
+			const planned = nextGlitch(random, 0, holder, { avatar: !avatarFailed });
+			if (dev && maxTransitionsInWindow([planned], 1000) > MAX_TRANSITIONS_PER_S) {
 				console.error('The photo glitch would flash more than 3 times a second.');
 			}
-			const steps: { at: number; run: () => void }[] = [];
-			for (const event of planned.events) {
-				for (const f of event.frames) {
-					steps.push({ at: event.at + f.at, run: () => frame(event, f) });
-				}
-				steps.push({ at: event.at + event.duration, run: () => end(event) });
-			}
-			// The cycle is over when its last glitch is, or, without the avatar, where the swap would be.
-			steps.push({ at: planned.end, run: () => {} });
+			const steps = [
+				...planned.frames.map((f) => ({ at: planned.at + f.at, run: () => frame(planned, f) })),
+				{ at: planned.at + planned.duration, run: end }
+			];
 
 			let i = 0;
 			let cursor = 0;
 			const next = () => {
-				if (i === steps.length) return cycle();
+				if (i === steps.length) return glitchOnce();
 				const step = steps[i++];
 				timer = setTimeout(() => {
 					cursor = step.at;
@@ -163,7 +155,7 @@
 			next();
 		};
 
-		cycle();
+		glitchOnce();
 		return () => {
 			clearTimeout(timer);
 			rest();
@@ -241,7 +233,7 @@
 			avatarFailed = false;
 		} else if (wasReduced) {
 			wasReduced = false;
-			if (powered) armIn(FIRST_TEASER_MIN_MS);
+			if (powered) armIn(GLITCH_WAIT_MIN_MS);
 		}
 	});
 
@@ -253,7 +245,7 @@
 	// The photo as the browser picked it, for the fragments that tear off it.
 	$effect(rememberPhoto);
 
-	// Flickers and swaps wait until the avatar has decoded, so a 100 ms flash is never half an image.
+	// Flashes and swaps wait until the avatar has decoded, so a 100 ms flash is never half an image.
 	$effect(() => {
 		const el = avatarEl;
 		if (!el) return;
@@ -284,10 +276,12 @@
 </script>
 
 <!--
-	The photo, and over it what the glitch does. The photo is the only image a screen reader finds,
-	except between the middles of the two swap glitches, when the avatar takes its place (silently:
-	no live region). What the glitch tears off (slices, blocks, the avatar bleeding through) is drawn
-	by GlitchFx, outside the die, and the avatar's flickers are decoration: none of it is announced.
+	The photo and the avatar, and over them what the glitch does. They fight over the signal: the one
+	that holds it is the image a screen reader finds, and it is the photo until a swap hands it to the
+	avatar, and the avatar until a swap hands it back (silently: no live region). A flash shows the
+	other image for a moment and what a glitch tears off (slices, blocks, the other image bleeding
+	through) is drawn by GlitchFx, outside the die; none of it touches the accessibility tree. The
+	avatar is hidden with opacity, not visibility, so it stays in the tree through a flash of the photo.
 -->
 <div class="glitch" bind:this={host} data-show={shown} data-glitch={kind ?? undefined}>
 	<!-- The avatar fills the same frame, so both pictures say the same sizes (a literal: enhanced:img reads it at build time). -->
@@ -297,7 +291,7 @@
 		alt={photoAlt}
 		sizes="(min-width: 40rem) 26rem, 46vw"
 		bind:this={photoEl}
-		aria-hidden={held ? 'true' : undefined}
+		aria-hidden={holder === 'avatar' ? 'true' : undefined}
 		onload={rememberPhoto}
 	/>
 	{#if avatarMounted}
@@ -309,7 +303,7 @@
 			decoding="async"
 			fetchpriority="low"
 			bind:this={avatarEl}
-			aria-hidden={held ? undefined : 'true'}
+			aria-hidden={holder === 'avatar' ? undefined : 'true'}
 			onerror={() => (avatarFailed = true)}
 		/>
 	{/if}
@@ -336,16 +330,20 @@
 		object-position: 45% 30%;
 	}
 
-	/* Over the photo, the same size: it shows only while a swap or a flicker says so, with no fade. */
+	/*
+	 * Over the photo, the same size: it shows only while it holds the signal or a flash says so,
+	 * with no fade. Opacity and not visibility, which would take it out of the accessibility tree
+	 * for as long as a flash shows the photo over the avatar that holds the signal.
+	 */
 	.avatar {
 		position: absolute;
 		top: 0;
 		left: 0;
-		visibility: hidden;
+		opacity: 0;
 	}
 
 	.glitch[data-show='avatar'] .avatar {
-		visibility: visible;
+		opacity: 1;
 	}
 
 	/* The page in print, and a visitor who asked for less motion, get the photo and nothing else. */

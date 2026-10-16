@@ -177,7 +177,7 @@
 					{/each}
 				</div>
 				<div class="die">
-					<!-- The photo, which now and then glitches into the Roboroads avatar and back. -->
+					<!-- The photo and the Roboroads avatar, which glitch and fight over the signal. -->
 					<GlitchPhoto photoAlt={content.hero.photoAlt} avatarAlt={content.hero.avatarAlt} />
 				</div>
 				<!-- What the glitch tears off the photo is drawn outside the die too: the die clips, the fragments spill. -->
