@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
+import { describeMeasure, measureAgainstReference } from './budget.testing.js';
 import { pointAt } from './geometry.js';
 import { BOOT_FALLBACK_MS, FRONT_RATIO, HERO_MS, LEAD_MS, SOCKET_MS } from './growth.js';
 import { ellipseDistance, type Ellipse } from './hero.js';
@@ -190,6 +191,14 @@ async function scrollTo(y: number): Promise<void> {
 	await frames(2);
 }
 
+/**
+ * The layout of a real page may take this many times the reference run. It takes about 2 times as
+ * long (25 ms against 12 ms on a laptop), and 1.1 to 2.3 times under a heavy CPU load, where both
+ * slow down 2 to 4x. A layout that got 3x slower or more fails; a fixed 100 ms failed on CI at
+ * 139 ms.
+ */
+const BUDGET_RATIO = 6;
+
 function tracesOf(runtime: BoardRuntime, kind: Trace['kind']): Trace[] {
 	return runtime.board?.traces.filter((t) => t.kind === kind) ?? [];
 }
@@ -260,13 +269,16 @@ describe('start', () => {
 	it('lays out a real page well within budget', async () => {
 		await page.viewport(1440, 900);
 		buildPage({ chips: [700, 400, 500, 520, 2600, 900, 700, 420, 380] });
-		const { runtime } = launch();
-		await runtime.start();
-		console.info(
-			`measure ${runtime.lastMeasureMs.toFixed(1)} ms, layout ${runtime.lastLayoutMs.toFixed(1)} ms`
-		);
-		// The budget is 30 ms on a mid-range laptop; CI machines get headroom.
-		expect(runtime.lastLayoutMs).toBeLessThan(100);
+		// A fixed limit failed on CI at 139 ms against 24 ms here (see budget.testing.ts), so the
+		// layout is timed best-of-5 after a warm-up and held to a multiple of a reference run.
+		const measure = await measureAgainstReference(async () => {
+			const { runtime } = launch();
+			await runtime.start();
+			runtime.destroy();
+			return runtime.lastLayoutMs;
+		});
+		console.info(describeMeasure('layout', measure, BUDGET_RATIO));
+		expect(measure.ratio).toBeLessThan(BUDGET_RATIO);
 	});
 });
 

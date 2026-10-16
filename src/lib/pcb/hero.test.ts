@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { describeMeasure, measureAgainstReference } from './budget.testing.js';
 import {
 	DX,
 	DY,
@@ -555,12 +556,23 @@ describe('layoutBoard hero field', () => {
 		});
 	}
 
-	it('builds the hero field of a 1440 x 900 window in well under the frame budget', () => {
+	/**
+	 * The hero field of a 1440 x 900 window takes about 0.9 times `referenceMs` (10 ms against 12 ms
+	 * on a laptop) and 1 to 1.5 times under a heavy CPU load, where both slow down 2x or more. It
+	 * fails once the layout is about 5x slower, which is what a fixed 60 ms allowed; that limit
+	 * failed on CI at 64.9 ms.
+	 */
+	const FRAME_BUDGET_RATIO = 4;
+
+	it('builds the hero field of a 1440 x 900 window in well under the frame budget', async () => {
 		const page = heroPage('1440x900');
-		layoutBoard(page);
-		const start = performance.now();
-		layoutBoard(page);
-		expect(performance.now() - start).toBeLessThan(60);
+		const measure = await measureAgainstReference(() => {
+			const start = performance.now();
+			layoutBoard(page);
+			return performance.now() - start;
+		});
+		console.info(describeMeasure('hero layout', measure, FRAME_BUDGET_RATIO));
+		expect(measure.ratio).toBeLessThan(FRAME_BUDGET_RATIO);
 	});
 
 	it('lays out 1440 x 8000 with a hero in under 200 ms', () => {
