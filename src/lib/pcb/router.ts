@@ -8,7 +8,8 @@
  *
  * The search state is (cell, heading):
  * - every step goes to one of the 8 neighbours, turning at most 45 degrees (no U-turns, no 90s);
- * - a straight step costs 1, a diagonal one sqrt(2), and every turn adds `TURN_COST`;
+ * - a straight step costs 1, a diagonal one sqrt(2), and every turn adds `TURN_COST` (or
+ *   `options.turnCost`);
  * - a step onto a lane cell of the same bus (`options.bus`, see `Grid.lane`) costs `LANE_FACTOR`
  *   of that, so the traces of a bus run in parallel;
  * - only `FREE` cells can be entered.
@@ -49,6 +50,8 @@ export interface RouteOptions {
 	partial?: boolean;
 	/** Give up after this many expanded states. */
 	maxExpansions?: number;
+	/** Extra cost of a turn, in cell lengths. Default: `TURN_COST`. */
+	turnCost?: number;
 }
 
 const SQRT2 = Math.SQRT2;
@@ -201,6 +204,7 @@ export function route(grid: Grid, from: Cell, to: Cell, options: RouteOptions = 
 	const bus = options.bus ?? 0;
 	const hScale = bus > 0 ? LANE_FACTOR : 1;
 	const maxExpansions = options.maxExpansions ?? MAX_EXPANSIONS;
+	const turnCost = options.turnCost ?? TURN_COST;
 	const cells = grid.cells;
 	const lane = grid.lane;
 	const cols = grid.cols;
@@ -254,7 +258,7 @@ export function route(grid: Grid, from: Cell, to: Cell, options: RouteOptions = 
 			if (closedGen[ns] === gen) continue;
 			let step = nd & 1 ? SQRT2 : 1;
 			if (bus > 0 && lane[gi] === bus) step *= LANE_FACTOR;
-			const cost = g + step + (k === 0 ? 0 : TURN_COST);
+			const cost = g + step + (k === 0 ? 0 : turnCost);
 			if (seenGen[ns] !== gen || cost < gScore[ns]) {
 				seenGen[ns] = gen;
 				gScore[ns] = cost;

@@ -12,6 +12,7 @@ import { getContent } from '#lib/content/index.js';
 import { profiles, visibleProfiles } from '#lib/content/profiles.js';
 import { decodeEmail, EMAIL_FALLBACK_TEXT } from '#lib/email.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
+import { SOCKET_DRAW_MS } from '#lib/pcb/growth.js';
 import { chips, obstacles, socket } from '#lib/pcb/registry.svelte.js';
 import About from './About.svelte';
 import Availability from './Availability.svelte';
@@ -102,6 +103,37 @@ describe('Hero', () => {
 		expect(Array.from(quotes).map((q) => q.textContent)).toEqual(['"', '"']);
 		expect(getComputedStyle(quotes[0]).color).not.toBe(style.color);
 	});
+
+	for (const [width, height] of [
+		[1440, 900],
+		[375, 667]
+	]) {
+		it(`underlines the whole name, its pads on the first and last glyph, at ${width} px`, async () => {
+			await page.viewport(width, height);
+			await mount(Hero, true);
+			const h1 = hero().querySelector('h1')!;
+			// The widest line of the name, from its glyphs.
+			const range = document.createRange();
+			range.selectNodeContents(h1);
+			const boxes = [...range.getClientRects()].filter((r) => r.width > 0);
+			const lines: { top: number; bottom: number; left: number; right: number }[] = [];
+			for (const box of boxes) {
+				const middle = (box.top + box.bottom) / 2;
+				const line = lines.find((l) => middle > l.top && middle < l.bottom);
+				if (line) {
+					line.left = Math.min(line.left, box.left);
+					line.right = Math.max(line.right, box.right);
+				} else lines.push({ top: box.top, bottom: box.bottom, left: box.left, right: box.right });
+			}
+			const widest = lines.reduce((a, b) => (b.right - b.left > a.right - a.left ? b : a));
+			await expect
+				.poll(() => {
+					const rule = hero().querySelector('.rule')!.getBoundingClientRect();
+					return [rule.left - widest.left, rule.right - widest.right].map(Math.round);
+				})
+				.toEqual([0, 0]);
+		});
+	}
 
 	it('keeps the name on one line on a desktop window and on at most two lines on a phone', async () => {
 		await page.viewport(1440, 900);
@@ -388,6 +420,69 @@ describe('Hero power-up', () => {
 		} finally {
 			document.documentElement.classList.remove('reduced');
 		}
+	});
+});
+
+describe('Hero text with scripts', () => {
+	const root = document.documentElement;
+	afterEach(() => root.classList.remove('js', 'reduced'));
+	const copy = () => hero().querySelector<HTMLElement>('.copy')!;
+	const indicator = () => hero().querySelector<HTMLElement>('.scroll-indicator')!;
+	const pulse = () => indicator().querySelector<HTMLElement>('.pulse')!;
+	const seconds = (value: string) => parseFloat(value);
+
+	it('keeps the text out of sight until the board is built, and in the accessibility tree', async () => {
+		root.classList.add('js');
+		const screen = await mount(Hero);
+		expect(getComputedStyle(copy()).opacity).toBe('0');
+		expect(getComputedStyle(indicator()).opacity).toBe('0');
+		// Only out of sight: still there for screen readers, search engines and the layout.
+		for (const el of [copy(), indicator()]) {
+			const style = getComputedStyle(el);
+			expect(style.display).not.toBe('none');
+			expect(style.visibility).toBe('visible');
+			expect(el.closest('[aria-hidden="true"]')).toBeNull();
+		}
+		await expect
+			.element(screen.getByRole('heading', { level: 1, name: 'Robbin "Roboroads" Schepers' }))
+			.toBeInTheDocument();
+		await expect.element(screen.getByRole('link', { name: /Verder|Continue/ })).toBeInTheDocument();
+	});
+
+	it('brings the text in as the logo finishes, the scroll link 2 s later, its pulse with it', async () => {
+		root.classList.add('js');
+		await mount(Hero);
+		socket()!.el.setAttribute('data-power', 'on');
+		const text = getComputedStyle(copy());
+		expect(text.animationName).toMatch(/text-in-powered/);
+		expect(seconds(text.animationDelay) * 1000).toBe(SOCKET_DRAW_MS);
+		const link = getComputedStyle(indicator());
+		expect(link.animationName).toMatch(/text-in-powered/);
+		expect(seconds(link.animationDelay) * 1000).toBe(SOCKET_DRAW_MS + 2000);
+		const light = getComputedStyle(pulse());
+		expect(seconds(light.animationDelay) * 1000).toBeGreaterThanOrEqual(SOCKET_DRAW_MS + 2000);
+		expect(light.animationIterationCount).toBe('3');
+		for (const el of [copy(), indicator()]) for (const a of el.getAnimations()) a.finish();
+		expect(getComputedStyle(copy()).opacity).toBe('1');
+		expect(getComputedStyle(indicator()).opacity).toBe('1');
+	});
+
+	it('shows it all at once when keyboard focus lands in the hero', async () => {
+		root.classList.add('js');
+		await mount(Hero);
+		hero().querySelector<HTMLElement>('.profiles a')!.focus();
+		expect(getComputedStyle(copy()).opacity).toBe('1');
+		expect(getComputedStyle(indicator()).opacity).toBe('1');
+	});
+
+	it('shows it from the first frame under reduced motion and without scripts', async () => {
+		root.classList.add('js', 'reduced');
+		await mount(Hero);
+		expect(getComputedStyle(copy()).opacity).toBe('1');
+		expect(getComputedStyle(indicator()).opacity).toBe('1');
+		root.classList.remove('js', 'reduced');
+		expect(getComputedStyle(copy()).opacity).toBe('1');
+		expect(getComputedStyle(indicator()).opacity).toBe('1');
 	});
 });
 

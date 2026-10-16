@@ -1,10 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { pointAt } from './geometry.js';
-import { BOOT_FALLBACK_MS, FRONT_RATIO, SOCKET_MS } from './growth.js';
+import { BOOT_FALLBACK_MS, FRONT_RATIO, HERO_MS, LEAD_MS, SOCKET_MS } from './growth.js';
+import { ellipseDistance, type Ellipse } from './hero.js';
 import type { Trace } from './layout.js';
 import { MAX_DPR } from './renderer.js';
-import { registerChip, registerSocket, type ChipHandle } from './registry.svelte.js';
+import { boardSeed } from './rng.js';
+import {
+	registerChip,
+	registerHero,
+	registerObstacle,
+	registerSocket,
+	type ChipHandle
+} from './registry.svelte.js';
 import { BoardRuntime, RELAYOUT_DEBOUNCE_MS, type MotionQuery } from './runtime.svelte.js';
 
 const WIDTH = 1200;
@@ -19,12 +27,17 @@ interface PageOptions {
 	/** Indexes of chips that get no pins (they boot on the timer). */
 	pinless?: number[];
 	socket?: boolean;
+	/** Registers the hero, with a text block (an obstacle) under the socket and a link below. */
+	hero?: boolean;
 }
 
 interface TestPage {
 	root: HTMLElement;
 	handles: ChipHandle[];
 	sections: HTMLElement[];
+	/** With `hero`: the text block and the link in the hero. */
+	copy?: HTMLElement;
+	link?: HTMLElement;
 }
 
 let cleanups: (() => void)[] = [];
@@ -33,15 +46,31 @@ let cleanups: (() => void)[] = [];
 function buildPage({
 	chips = [400, 600, 500, 900, 500],
 	pinless = [],
-	socket = true
+	socket = true,
+	hero: withHero = false
 }: PageOptions = {}): TestPage {
 	document.body.style.margin = '0';
 	const root = document.createElement('div');
 	const hero = document.createElement('div');
-	hero.style.cssText = `height:${HERO}px;padding-top:300px;box-sizing:border-box`;
+	hero.style.cssText = `position:relative;height:${HERO}px;padding-top:300px;box-sizing:border-box`;
 	root.append(hero);
 	document.body.append(root);
 	cleanups.push(() => root.remove());
+
+	let copy: HTMLElement | undefined;
+	let link: HTMLElement | undefined;
+	if (withHero) {
+		hero.style.paddingTop = '200px';
+		copy = document.createElement('div');
+		copy.style.cssText = 'position:absolute;left:400px;top:360px;width:400px;height:140px';
+		link = document.createElement('a');
+		link.setAttribute('href', '#c0');
+		link.textContent = 'Next';
+		link.style.cssText = 'position:absolute;left:570px;top:700px;width:60px;height:60px';
+		hero.append(copy, link);
+		cleanups.push(registerObstacle(copy));
+		cleanups.push(registerHero(hero));
+	}
 
 	if (socket) {
 		const el = document.createElement('div');
@@ -49,6 +78,8 @@ function buildPage({
 		for (const side of ['left', 'right']) {
 			const port = document.createElement('span');
 			port.setAttribute('data-port', side);
+			// In the hero both ports take a lead trace.
+			if (withHero) port.setAttribute('data-lead', '');
 			port.style.cssText = `position:absolute;${side}:40px;top:60px;width:2px;height:2px`;
 			el.append(port);
 		}
@@ -87,7 +118,7 @@ function buildPage({
 	const footer = document.createElement('div');
 	footer.style.height = '400px';
 	root.append(footer);
-	return { root, handles, sections };
+	return { root, handles, sections, copy, link };
 }
 
 function makeCanvas(): HTMLCanvasElement {
@@ -483,6 +514,135 @@ describe('pointer pulses', () => {
 	});
 });
 
+describe('hero field', () => {
+	/** Points every 3 px along a trace. */
+	function samples(trace: Trace): { x: number; y: number }[] {
+		const out = [];
+		for (let along = 0; along <= trace.length; along += 3) {
+			out.push(pointAt(trace.points, trace.lengths, along));
+		}
+		return out;
+	}
+
+	function docRect(el: Element) {
+		const r = el.getBoundingClientRect();
+		return { x: r.left + window.scrollX, y: r.top + window.scrollY, w: r.width, h: r.height };
+	}
+
+	function ellipseOf(canvas: HTMLCanvasElement): Ellipse {
+		const [cx, cy, rx, ry] = (canvas.dataset.heroEllipse ?? '').split(' ').map(Number);
+		return { cx, cy, rx, ry };
+	}
+
+	it('fills the hero across the window, round a clear ellipse that holds the socket and the text', async () => {
+		const { copy } = buildPage({ hero: true });
+		const { canvas, runtime } = launch();
+		await runtime.start();
+		const field = tracesOf(runtime, 'hero');
+		expect(field.length).toBeGreaterThan(20);
+		expect(Number(canvas.dataset.heroTraces)).toBe(field.length);
+		expect(runtime.board!.hero!.rect.width).toBe(document.documentElement.clientWidth);
+
+		const e = ellipseOf(canvas);
+		const socketEl = document.querySelector<HTMLElement>('[data-port]')!.parentElement!;
+		for (const el of [socketEl, copy!]) {
+			const r = docRect(el);
+			for (const [x, y] of [
+				[r.x, r.y],
+				[r.x + r.w, r.y],
+				[r.x, r.y + r.h],
+				[r.x + r.w, r.y + r.h]
+			]) {
+				expect(ellipseDistance(e, { x, y })).toBeLessThan(1);
+			}
+		}
+		// Only the two lead traces enter it.
+		for (const trace of runtime.board!.traces.filter((t) => t.kind !== 'socket')) {
+			for (const p of samples(trace)) expect(ellipseDistance(e, p), trace.id).toBeGreaterThan(1);
+		}
+	});
+
+	it('keeps out from under the links in the hero', async () => {
+		const { link } = buildPage({ hero: true });
+		const { runtime } = launch();
+		await runtime.start();
+		const r = docRect(link!);
+		for (const trace of tracesOf(runtime, 'hero')) {
+			for (const p of samples(trace)) {
+				const inside = p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h;
+				expect(inside, trace.id).toBe(false);
+			}
+		}
+	});
+
+	it('builds up over a few seconds after the load, then rests', async () => {
+		buildPage({ hero: true });
+		const clock = manualClock();
+		const { canvas, runtime } = launch({ now: clock.now });
+		await runtime.start();
+		const field = tracesOf(runtime, 'hero');
+		clock.advance(1000);
+		await frames(2);
+		const early = field.filter((t) => runtime.growth!.isFull(t.id)).length;
+		expect(early).toBeLessThan(field.length / 2);
+		expect(canvas.dataset.pcbState).toBe('running');
+		clock.advance(HERO_MS);
+		await until(() => canvas.dataset.pcbState === 'idle', 1000);
+		expect(field.every((t) => runtime.growth!.isFull(t.id))).toBe(true);
+	});
+
+	it('is drawn complete at once under reduced motion', async () => {
+		buildPage({ hero: true });
+		const { canvas, runtime } = launch({ reducedMotion: fakeMotionQuery(true) });
+		await runtime.start();
+		expect(canvas.dataset.pcbState).toBe('static');
+		expect(tracesOf(runtime, 'hero').every((t) => runtime.growth!.isFull(t.id))).toBe(true);
+	});
+
+	it('runs the two lead traces in first and powers the socket when they arrive', async () => {
+		buildPage({ hero: true });
+		const socketEl = document.querySelector<HTMLElement>('[data-port]')!.parentElement!;
+		const clock = manualClock();
+		const { runtime } = launch({ now: clock.now });
+		await runtime.start();
+		expect(tracesOf(runtime, 'socket')).toHaveLength(2);
+		expect(socketEl.dataset.power).toBeUndefined();
+		clock.advance(LEAD_MS / 2);
+		await frames(2);
+		expect(socketEl.dataset.power).toBeUndefined();
+		clock.advance(LEAD_MS / 2);
+		await until(() => socketEl.dataset.power === 'on', 1000);
+		expect(tracesOf(runtime, 'socket').every((t) => runtime.growth!.isFull(t.id))).toBe(true);
+	});
+
+	it('powers the socket at once under reduced motion', async () => {
+		buildPage({ hero: true });
+		const socketEl = document.querySelector<HTMLElement>('[data-port]')!.parentElement!;
+		const { runtime } = launch({ reducedMotion: fakeMotionQuery(true) });
+		await runtime.start();
+		expect(socketEl.dataset.power).toBe('on');
+	});
+
+	it('powers the socket when the board cannot draw', async () => {
+		buildPage({ hero: true });
+		const socketEl = document.querySelector<HTMLElement>('[data-port]')!.parentElement!;
+		const canvas = makeCanvas();
+		vi.spyOn(canvas, 'getContext').mockReturnValue(null);
+		const runtime = new BoardRuntime(canvas, { reducedMotion: fakeMotionQuery(false) });
+		cleanups.push(() => runtime.destroy());
+		await runtime.start();
+		expect(socketEl.dataset.power).toBe('on');
+	});
+
+	it('builds no field without a registered hero', async () => {
+		buildPage();
+		const { canvas, runtime } = launch();
+		await runtime.start();
+		expect(tracesOf(runtime, 'hero')).toHaveLength(0);
+		expect(canvas.dataset.heroEllipse).toBeUndefined();
+	});
+});
+
 describe('reduced motion', () => {
 	it('draws once, static, fully grown, with every chip on', async () => {
 		const { handles } = buildPage();
@@ -567,6 +727,62 @@ describe('test-run attributes', () => {
 		await runtime.start();
 		expect(navigator.webdriver).toBe(true);
 		expect(canvas.dataset.spineFront).toBeDefined();
+	});
+});
+
+describe('seed', () => {
+	it('lays the board out from a fresh random seed on every visit', async () => {
+		buildPage();
+		const values = [0x1234_5678, 0x0bad_cafe];
+		vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+			(array as Uint32Array)[0] = values.shift()!;
+			return array;
+		});
+		const first = launch({ debug: false }).runtime;
+		const second = launch({ debug: false }).runtime;
+		await first.start();
+		await second.start();
+		expect(first.board!.seed).toBe(0x1234_5678);
+		expect(second.board!.seed).toBe(0x0bad_cafe);
+	});
+
+	it('keeps that seed for the whole visit, through every relayout', async () => {
+		const { sections } = buildPage();
+		vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+			(array as Uint32Array)[0] = 4242;
+			return array;
+		});
+		const { runtime } = launch({ debug: false });
+		await runtime.start();
+		vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+			(array as Uint32Array)[0] = 9999;
+			return array;
+		});
+		await page.viewport(WIDTH - 200, HEIGHT);
+		sections[1].style.height = '800px';
+		await until(() => runtime.layouts >= 2, RELAYOUT_DEBOUNCE_MS + 1500);
+		expect(runtime.board!.seed).toBe(4242);
+	});
+
+	it('stays the same in test runs, and takes ?seed= there', async () => {
+		buildPage();
+		const first = launch({ debug: true }).runtime;
+		await first.start();
+		expect(first.board!.seed).toBe(boardSeed(window.innerWidth));
+
+		const url = location.href;
+		history.replaceState(null, '', `${location.pathname}?seed=1234`);
+		cleanups.push(() => history.replaceState(null, '', url));
+		const second = launch({ debug: true }).runtime;
+		await second.start();
+		expect(second.board!.seed).toBe(1234);
+	});
+
+	it('takes a seed from its options', async () => {
+		buildPage();
+		const { runtime } = launch({ debug: false, seed: 77 });
+		await runtime.start();
+		expect(runtime.board!.seed).toBe(77);
 	});
 });
 

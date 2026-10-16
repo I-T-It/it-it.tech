@@ -11,6 +11,7 @@ import { getContent } from '#lib/content/index.js';
 import { profiles, visibleProfiles } from '#lib/content/profiles.js';
 import { EMAIL_FALLBACK_TEXT } from '#lib/email.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
+import { SOCKET_DRAW_MS } from '#lib/pcb/growth.js';
 import { chips, obstacles, socket } from '#lib/pcb/registry.svelte.js';
 import Availability from './Availability.svelte';
 import Contact from './Contact.svelte';
@@ -283,17 +284,126 @@ describe('Hero power-up', () => {
 		}
 	});
 
-	it('is static under reduced motion: the ports are lit from the first frame', async () => {
-		document.documentElement.classList.add('reduced');
+	it('is static under reduced motion: the ports are lit and the photo shown from the first frame', async () => {
+		document.documentElement.classList.add('reduced', 'js');
 		try {
 			await mount(Hero);
 			expect(heroAnimations()).toEqual([]);
+			expect(getComputedStyle(hero().querySelector('.die')!).maskImage).toBe('none');
 			for (const port of socket()!.ports()) {
 				expect(getComputedStyle(port).boxShadow).not.toBe('none');
 			}
+			for (const pad of hero().querySelectorAll('.pads .pad')) {
+				expect(getComputedStyle(pad).opacity).toBe('1');
+			}
 		} finally {
-			document.documentElement.classList.remove('reduced');
+			document.documentElement.classList.remove('reduced', 'js');
 		}
+	});
+
+	it('shows the whole frame from the first frame without scripts', async () => {
+		await mount(Hero);
+		for (const pad of hero().querySelectorAll('.pads .pad')) {
+			expect(getComputedStyle(pad).opacity).toBe('1');
+		}
+		const courtyard = hero().querySelector<SVGElement>('.courtyard')!;
+		expect(courtyard.getAnimations({ subtree: true })).toHaveLength(0);
+		expect(getComputedStyle(courtyard).maskImage).toBe('none');
+	});
+
+	it('marks two ports, one on each side, for the lead traces of the board', async () => {
+		await mount(Hero);
+		const leads = socket()!
+			.ports()
+			.filter((port) => port.hasAttribute('data-lead'));
+		expect(leads.map((port) => port.style.gridColumn).sort()).toEqual(['1', '11']);
+	});
+
+	it('draws the outline in two halves, each from where a lead touches it', async () => {
+		await mount(Hero);
+		const halves = [...hero().querySelectorAll<SVGPolylineElement>('.courtyard .outline')];
+		expect(halves).toHaveLength(2);
+		const leads = socket()!
+			.ports()
+			.filter((port) => port.hasAttribute('data-lead'));
+		const rowOf = (port: HTMLElement) => ((Number(port.style.gridRow) - 0.5) / 11) * 100;
+		const left = leads.find((port) => port.style.gridColumn === '1')!;
+		const right = leads.find((port) => port.style.gridColumn === '11')!;
+		const first = (half: SVGPolylineElement) => half.points.getItem(0);
+		expect(first(halves[0]).x).toBeCloseTo(0.5);
+		expect(first(halves[0]).y).toBeCloseTo(rowOf(left), 1);
+		expect(first(halves[1]).x).toBeCloseTo(99.5);
+		expect(first(halves[1]).y).toBeCloseTo(rowOf(right), 1);
+		// Each half ends where the other starts: together they are the whole outline.
+		const last = (half: SVGPolylineElement) => half.points.getItem(half.points.numberOfItems - 1);
+		expect(last(halves[0])).toMatchObject({ x: first(halves[1]).x, y: first(halves[1]).y });
+		expect(last(halves[1])).toMatchObject({ x: first(halves[0]).x, y: first(halves[0]).y });
+	});
+
+	describe('with scripts', () => {
+		afterEach(() => document.documentElement.classList.remove('js'));
+
+		it('waits for the board to power the socket, then draws the outline and lights the ports', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			const courtyard = hero().querySelector<SVGElement>('.courtyard')!;
+			// Waiting: the outline is masked out entirely, from both contact points.
+			expect(getComputedStyle(courtyard).animationDelay).toBe('6s');
+			expect(getComputedStyle(courtyard).getPropertyValue('--reveal').trim()).toBe('-10%');
+			socket()!.el.setAttribute('data-power', 'on');
+			expect(getComputedStyle(courtyard).animationName).toMatch(/outline-reveal-powered/);
+			expect(getComputedStyle(courtyard).animationDelay).toBe('0s');
+			const port = socket()!.ports()[0];
+			expect(getComputedStyle(port).animationName).toMatch(/port-on-powered/);
+		});
+
+		it('keeps the pad ring dark until the leads connect, then lights it in from where they touch', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			const pads = [...hero().querySelectorAll<HTMLElement>('.pads .pad')];
+			// Waiting: every pad, the pin-1 mark too, is out of sight.
+			for (const pad of pads) expect(getComputedStyle(pad).opacity).toBe('0');
+			socket()!.el.setAttribute('data-power', 'on');
+			const start = (pad: HTMLElement) =>
+				(pad.getAnimations() as CSSAnimation[])
+					.filter((a) => /pad-in-powered/.test(a.animationName))
+					.map((a) => Number(a.effect!.getComputedTiming().delay))[0];
+			for (const pad of pads) expect(start(pad), pad.style.gridArea).toBeGreaterThanOrEqual(0);
+			// The pads at the contact points light first, the ones furthest round the ring last.
+			const lead = pads.find((pad) => pad.hasAttribute('data-lead'))!;
+			const far = pads.find((pad) => pad.style.gridRow === '11' && pad.style.gridColumn === '11')!;
+			expect(start(lead)).toBeLessThan(start(far));
+			for (const pad of pads) for (const a of pad.getAnimations()) a.finish();
+			for (const pad of pads) expect(getComputedStyle(pad).opacity).toBe('1');
+		});
+
+		it('keeps the photo dark until the leads connect, then etches it in from where they touch', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			const die = hero().querySelector<HTMLElement>('.die')!;
+			// Waiting: the etch has not begun, nothing of the photo shows.
+			expect(getComputedStyle(die).animationDelay).toBe('6s');
+			expect(getComputedStyle(die).getPropertyValue('--etch').trim()).toBe('-14%');
+			expect(getComputedStyle(die).maskImage).toContain('radial-gradient');
+			socket()!.el.setAttribute('data-power', 'on');
+			expect(getComputedStyle(die).animationName).toMatch(/etch-powered/);
+			const etch = die
+				.getAnimations()
+				.find((a) => /etch-powered/.test((a as CSSAnimation).animationName))!;
+			etch.finish();
+			expect(getComputedStyle(die).getPropertyValue('--etch').trim()).toBe('150%');
+		});
+
+		it('is done drawing when the board is: within the time the board gives it', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			socket()!.el.setAttribute('data-power', 'on');
+			const ends = socket()!
+				.el.getAnimations({ subtree: true })
+				.map((animation) => Number(animation.effect!.getComputedTiming().endTime));
+			expect(ends.length).toBeGreaterThan(0);
+			expect(Math.max(...ends)).toBeLessThanOrEqual(SOCKET_DRAW_MS);
+		});
 	});
 });
 

@@ -7,7 +7,8 @@
  *   width: root.clientWidth, height: root.scrollHeight, viewportWidth: innerWidth,
  *   chips: chips().map((c) => ({ id: c.id, side: c.side, rect: docRect(c.el), pins: c.pins().map(docCentre) })),
  *   obstacles: obstacles().map(docRect),
- *   socket: port ? { rect: docRect(port.el), ports: port.ports().map(docCentre) } : undefined
+ *   socket: port ? { rect: docRect(port.el), ports: port.ports().map(docCentre) } : undefined,
+ *   hero: { rect: heroArea, ellipse: heroEllipse([docRect(port.el), docRect(text)], heroArea) }
  * });
  * ```
  *
@@ -27,19 +28,22 @@
  *   degrees at its junction (`points[0]`, on the spine; `parent` is the spine trace) and comes in
  *   horizontally to end exactly on its pin. A chip whose branch can't be built gets
  *   `fallback: true`, and so does a chip with no branch at all; those boot on the timer.
- * - Socket traces (`socket`, only with `socket`): from all four edges of the hero (left, top,
- *   right, and the hero bottom) into the socket, each ending exactly on a port. A port takes up to
- *   three traces, coming in straight or at 45 degrees through the side of the socket it is
- *   nearest to; only that last run lies inside the socket. Every edge gets 2 to 3 traces as far as
- *   the ports allow (two ports give 6 traces), and ports are shared out evenly.
+ * - Hero field (`hero`, only with `hero`): a field of traces filling the hero across the whole
+ *   board, from the window edges (and some vias on the board) to the rim of the clear ellipse
+ *   round the hero content, plus buses from the edges that end in vias. See `hero.ts`.
+ * - Socket traces (`socket`, only with `socket` and without `hero`): from all four edges of the
+ *   hero (left, top, right, and the hero bottom) into the socket, each ending exactly on a port. A
+ *   port takes up to three traces, coming in straight or at 45 degrees through the side of the
+ *   socket it is nearest to; only that last run lies inside the socket. Every edge gets 2 to 3
+ *   traces as far as the ports allow (two ports give 6 traces), and ports are shared out evenly.
  * - Decoration (`decor`): short buses from the edge into the gutter outside the spine, ending in
- *   vias. Their number grows with the gutter area. With a socket, the hero has none.
+ *   vias. Their number grows with the gutter area. With a socket or a hero, the hero has none.
  * - Narrow screens (a gutter under 24 px) and gutters too tight for a bus: a spine of one trace per
  *   side at the screen edge, with short horizontal branches into the pins, and no decoration.
  *
- * Traces never enter chips, obstacles or the content column (with a socket, the hero rows are
- * open so the socket traces can reach it; register hero text as an obstacle to keep them out from
- * under it). They keep 24 px apart, except a branch at its junction and the socket traces that
+ * Traces never enter chips, obstacles or the content column (with a socket or a hero, the hero
+ * rows are open so the socket traces or the field can reach in; register hero text as an obstacle
+ * to keep them out from under it). They keep 24 px apart, except a branch at its junction and the socket traces that
  * share a port on their last run, and bend at 45 degrees only. Left traces are `side: 'left'`
  * (cyan), right ones `side: 'right'` (green); a socket trace from the top or bottom takes the side
  * of its port. The same input and seed always give the same board.
@@ -59,6 +63,7 @@ import {
 	type Rect
 } from './geometry.js';
 import { BLOCKED, CLEARANCE, FREE, Grid, walkCells, type Cell } from './grid.js';
+import { heroField, type Ellipse } from './hero.js';
 import type { ChipSide } from './registry.svelte.js';
 import { boardSeed, createRng, deriveSeed, type Rng } from './rng.js';
 import { route, type SearchWindow } from './router.js';
@@ -117,6 +122,15 @@ export interface SocketInput {
 	rect: Rect;
 	/** Port centres in document px, in DOM order. */
 	ports: readonly Point[];
+	/** With a hero: the indexes of the ports the two lead traces run into. */
+	leads?: readonly number[];
+}
+
+export interface HeroInput {
+	/** The hero in document px, as wide as the board: the field fills it. */
+	rect: Rect;
+	/** The clear ellipse round the hero content (see `heroEllipse`). No trace enters it. */
+	ellipse: Ellipse;
 }
 
 export interface LayoutInput {
@@ -129,17 +143,23 @@ export interface LayoutInput {
 	chips: readonly ChipInput[];
 	/** Rects traces route around, such as hero text. */
 	obstacles?: readonly Rect[];
-	/** The hero socket the socket traces plug into. Without it there are no socket traces. */
+	/**
+	 * The hero socket the socket traces plug into. Without it there are no socket traces, and with
+	 * a `hero` neither: the ellipse round the hero content stays clear.
+	 */
 	socket?: SocketInput;
+	/** The hero the field of `hero` traces fills. Without it there is no field. */
+	hero?: HeroInput;
 	/** Overrides the seed. Default: `boardSeed(viewportWidth)`. */
 	seed?: number;
 }
 
 /**
  * `spine`: a gutter bus, drawn by scroll position. `branch`: from the spine to a chip pin.
- * `socket`: from a hero edge to a socket port. `decor`: decoration, ends in a via.
+ * `socket`: from a hero edge to a socket port. `hero`: the field round the hero content, from a
+ * window edge (or a via) to the rim of the ellipse. `decor`: decoration, ends in a via.
  */
-export type TraceKind = 'spine' | 'branch' | 'socket' | 'decor';
+export type TraceKind = 'spine' | 'branch' | 'socket' | 'hero' | 'decor';
 
 export type TraceEnd =
 	{ kind: 'pin'; chipId: string; pin: number } | { kind: 'port'; port: number } | { kind: 'via' };
@@ -170,6 +190,8 @@ export interface Trace {
 	triggerY: number;
 	/** For a branch: the id of the spine trace it starts on. */
 	parent?: string;
+	/** True when the trace starts at a via on the board (a hero trace that starts part of the way in). */
+	startVia?: boolean;
 }
 
 export interface ChipWiring {
@@ -189,6 +211,8 @@ export interface Board {
 	narrow: boolean;
 	/** Document y of the hero's bottom edge, where the spine starts and the bottom socket traces too. */
 	heroBottom: number;
+	/** The hero input the field was built for; null without one. */
+	hero: HeroInput | null;
 	traces: Trace[];
 	/** One entry per input chip, top to bottom. */
 	chips: ChipWiring[];
@@ -245,6 +269,9 @@ export function layoutBoard(input: LayoutInput): Board {
 	const chips = [...input.chips].sort(byTopThenId);
 	const obstacles = input.obstacles ?? [];
 	const socket = input.socket;
+	const hero = input.hero;
+	// The hero rows stay open for the socket traces or the hero field.
+	const openHero = socket !== undefined || hero !== undefined;
 
 	// The content column spans the chips. Without chips, the obstacles and the socket define it.
 	let contentLeft = Infinity;
@@ -271,7 +298,7 @@ export function layoutBoard(input: LayoutInput): Board {
 	for (const rect of obstacles) grid.blockRect(rect, 1);
 	if (socket) grid.blockRect(socket.rect, 1);
 	for (const chip of chips) grid.blockRect(chip.rect, narrow ? 0 : 1, 1);
-	if (hasContent) blockContent(grid, contentLeft, contentRight, socket ? heroRow : 0);
+	if (hasContent) blockContent(grid, contentLeft, contentRight, openHero ? heroRow : 0);
 
 	// Decide which pins have room before any trace takes it.
 	const pinsBySide = {
@@ -306,14 +333,58 @@ export function layoutBoard(input: LayoutInput): Board {
 	);
 	for (const chip of wiring) if (chip.feeders.length === 0) chip.fallback = true;
 
-	if (socket && socket.ports.length > 0) socketTraces(ctx, socket);
+	if (hero) {
+		// The two leads first: they are the only traces that cross the ellipse.
+		if (socket) leadTraces(ctx, socket);
+		heroTraces(ctx, hero);
+	} else if (socket && socket.ports.length > 0) {
+		socketTraces(ctx, socket);
+	}
 	if (!narrow) {
 		setups.forEach((setup, i) => {
-			gutterDecor(ctx, setup, decorLimit[i], socket ? heroRow : 0, height);
+			gutterDecor(ctx, setup, decorLimit[i], openHero ? heroRow : 0, height);
 		});
 	}
 
-	return { seed, width, height, narrow, heroBottom, traces: ctx.traces, chips: wiring };
+	return {
+		seed,
+		width,
+		height,
+		narrow,
+		heroBottom,
+		hero: hero ?? null,
+		traces: ctx.traces,
+		chips: wiring
+	};
+}
+
+/** The hero field (see `hero.ts`), as `hero` traces. */
+function heroTraces(ctx: Context, hero: HeroInput): void {
+	const routes = heroField({
+		grid: ctx.grid,
+		area: hero.rect,
+		ellipse: hero.ellipse,
+		rowLimit: ctx.heroRow,
+		width: ctx.width,
+		seed: ctx.seed,
+		nextBus: () => ++ctx.busCount,
+		spineTops: ctx.traces.filter((t) => t.kind === 'spine').map((t) => t.points[0])
+	});
+	for (const r of routes) {
+		ctx.traces.push(
+			makeTrace({
+				id: r.id,
+				kind: 'hero',
+				side: r.points[0].x < ctx.width / 2 ? 'left' : 'right',
+				bus: r.bus,
+				points: r.points,
+				end: { kind: 'via' },
+				chipId: null,
+				triggerY: boundsOf(r.points).y,
+				startVia: r.startVia || undefined
+			})
+		);
+	}
 }
 
 /** Blocks the content column from `fromRow` down. */
@@ -692,6 +763,7 @@ export function makeTrace(spec: Omit<Trace, 'lengths' | 'length' | 'bbox'>): Tra
 		bbox: boundsOf(spec.points)
 	};
 	if (trace.parent === undefined) delete trace.parent;
+	if (!trace.startVia) delete trace.startVia;
 	return trace;
 }
 
@@ -767,6 +839,58 @@ function facing(out: Dir, edge: Edge): number {
 }
 
 /** Traces from all four hero edges into the socket's ports. See the file header. */
+/**
+ * With a hero: the two lead traces, one into each lead port (`socket.leads`), cyan into the port
+ * left of the socket's centre, green into the other. Each comes in through the side of the socket
+ * its port is nearest to, like a socket trace, from the window edge that side faces (the top, the
+ * left or the right; a port on the bottom side takes the left or right edge).
+ */
+function leadTraces(ctx: Context, socket: SocketInput): void {
+	const { grid } = ctx;
+	if (ctx.heroRow < 2) return;
+	const centre = socket.rect.x + socket.rect.width / 2;
+	const leads = (socket.leads ?? []).filter((i) => socket.ports[i] !== undefined).slice(0, 2);
+	const slots: { slot: Slot; edge: Edge; side: Side }[] = [];
+	for (const port of leads) {
+		const point = socket.ports[port];
+		const normal = outwardNormal(socket.rect, point);
+		for (const turn of [0, -1, 1]) {
+			const out = ((normal + turn + 8) & 7) as Dir;
+			const approach = approachCell(ctx, point, out);
+			if (!approach) continue;
+			const side: Side = point.x < centre ? 'left' : 'right';
+			const slot = { order: port, port, point, out, inward: ((out + 4) & 7) as Dir, ...approach };
+			// Straight in from the edge the port faces, so the lead cuts across the field's band
+			// instead of running along it; from below the text is in the way, so from the side.
+			const edge: Edge =
+				out === NORTH ? 'top' : out === EAST ? 'right' : out === WEST ? 'left' : side;
+			slots.push({ slot, edge, side });
+			break;
+		}
+	}
+	// Reserve both last runs first, so neither route squeezes in next to the other.
+	for (const { slot } of slots) grid.markPath([slot.leg[0], slot.leg[slot.leg.length - 1]]);
+	slots.forEach(({ slot, edge, side }, k) => {
+		const bus = ++ctx.busCount;
+		const rng = () => createRng(deriveSeed(ctx.seed, `lead:${k}`));
+		const trace = routeSocket(ctx, edge, slot, rng()) ?? routeSocket(ctx, edge, slot, rng(), true);
+		if (!trace) return;
+		grid.markPath(trace.path, bus);
+		ctx.traces.push(
+			makeTrace({
+				id: `socket:${EDGE_LETTER[edge]}${k}`,
+				kind: 'socket',
+				side,
+				bus: `socket:lead`,
+				points: trace.points,
+				end: { kind: 'port', port: slot.port },
+				chipId: null,
+				triggerY: boundsOf(trace.points).y
+			})
+		);
+	});
+}
+
 function socketTraces(ctx: Context, socket: SocketInput): void {
 	const { grid } = ctx;
 	if (ctx.heroRow < 2) return;
@@ -871,7 +995,9 @@ function routeSocket(
 	ctx: Context,
 	edge: Edge,
 	slot: Slot,
-	rng: Rng
+	rng: Rng,
+	/** Let the last run come in at 45 degrees too: for a lead that has to squeeze in. */
+	slanted = false
 ): { path: Cell[]; points: Point[] } | null {
 	const { grid } = ctx;
 	const goal = slot.cell;
@@ -900,7 +1026,10 @@ function routeSocket(
 		if (along < 0 || along > span) continue;
 		const start = vertical ? { col: fixed, row: along } : { col: along, row: fixed };
 		if (!grid.isFree(start.col, start.row)) continue;
-		const path = route(grid, start, goal, { startDir: leave, endDir: slot.inward, window });
+		const endDir = slanted
+			? [slot.inward, ((slot.inward + 1) & 7) as Dir, ((slot.inward + 7) & 7) as Dir]
+			: slot.inward;
+		const path = route(grid, start, goal, { startDir: leave, endDir, window });
 		if (!path) continue;
 		const centres = path.map((c) => grid.centre(c.col, c.row));
 		const first = centres[0];

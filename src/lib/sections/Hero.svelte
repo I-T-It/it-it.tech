@@ -4,14 +4,53 @@
 	import { visibleProfiles } from '#lib/content/profiles.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
-	import { registerObstacle, registerSocket } from '#lib/pcb/registry.svelte.js';
+	import { registerHero, registerObstacle, registerSocket } from '#lib/pcb/registry.svelte.js';
 	import { site } from '#lib/site.js';
 	import Icon from '#lib/components/Icon.svelte';
 	import Logo from '#lib/components/Logo.svelte';
 	import { profileIcons } from '#lib/components/profile-icons.js';
 	import ScrollIndicator from '#lib/components/ScrollIndicator.svelte';
+	import type { Attachment } from 'svelte/attachments';
 
 	const content = getContent(getLocale());
+
+	/**
+	 * The line under the name spans the name: as wide as its widest line, so its pads sit on the
+	 * first and last glyph (the grid centres it, like the text). Measured from the glyphs, again
+	 * once the fonts are in and whenever the name reflows. Without scripts it is as wide as the
+	 * text block.
+	 */
+	const spanName: Attachment<HTMLElement> = (rule) => {
+		const name = rule.parentElement?.querySelector('h1');
+		if (!name) return;
+		const measure = () => {
+			const range = document.createRange();
+			range.selectNodeContents(name);
+			const lines: { top: number; bottom: number; left: number; right: number }[] = [];
+			for (const box of range.getClientRects()) {
+				if (box.width === 0) continue;
+				const middle = (box.top + box.bottom) / 2;
+				const line = lines.find((l) => middle > l.top && middle < l.bottom);
+				if (line) {
+					line.left = Math.min(line.left, box.left);
+					line.right = Math.max(line.right, box.right);
+				} else {
+					lines.push({ top: box.top, bottom: box.bottom, left: box.left, right: box.right });
+				}
+			}
+			const widest = Math.max(0, ...lines.map((l) => l.right - l.left));
+			const block = rule.parentElement!.getBoundingClientRect().width;
+			// A share of the text block, not pixels: the line never widens the block it sits in.
+			if (widest > 0 && block > 0) {
+				rule.style.setProperty('--name-width', `${Math.min(100, (widest / block) * 100)}%`);
+			}
+		};
+		measure();
+		void document.fonts?.ready.then(measure);
+		const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+		observer?.observe(name);
+		return () => observer?.disconnect();
+	};
 
 	/**
 	 * The photo's footprint: an 11 by 11 grid with pads round the outside and the photo in the
@@ -31,6 +70,40 @@
 		'11,8': 'green'
 	};
 
+	/**
+	 * The two ports the board's lead traces run into, one on each side. When they arrive, the
+	 * footprint's outline draws itself from those two points (see the frame halves below).
+	 */
+	const LEADS = new Set(['8,1', '4,11']);
+
+	/** A pad's place on the ring, clockwise from the top left corner: 0 to 39. */
+	const around = (row: number, col: number) =>
+		row === 1
+			? col - 1
+			: col === GRID
+				? GRID - 1 + row - 1
+				: row === GRID
+					? 2 * (GRID - 1) + GRID - col
+					: 3 * (GRID - 1) + GRID - row;
+	const RING = 4 * (GRID - 1);
+	const leadPlaces = [...LEADS].map((key) =>
+		around(...(key.split(',').map(Number) as [number, number]))
+	);
+	/**
+	 * When a pad lights once the leads connect: the ones at the contact points first, round the
+	 * ring from there, the ones furthest from both last.
+	 */
+	const lightDelay = (row: number, col: number) => {
+		const place = around(row, col);
+		const steps = Math.min(
+			...leadPlaces.map((lead) => {
+				const gap = Math.abs(place - lead);
+				return Math.min(gap, RING - gap);
+			})
+		);
+		return `${(0.1 + (steps / (RING / 2)) * 1.1).toFixed(2)}s`;
+	};
+
 	const ring = Array.from({ length: GRID * GRID }, (_, i) => ({
 		row: Math.floor(i / GRID) + 1,
 		col: (i % GRID) + 1
@@ -41,8 +114,18 @@
 			col,
 			pin1: row === 1 && col === 1,
 			side: col <= (GRID + 1) / 2 ? 'left' : 'right',
-			port: PORTS[`${row},${col}`]
+			port: PORTS[`${row},${col}`],
+			lead: LEADS.has(`${row},${col}`),
+			delay: lightDelay(row, col)
 		}));
+
+	/** Where a lead port's row meets the outline, in the outline's 0 to 100 box. */
+	const contact = (row: number) => (((row - 0.5) / GRID) * 100).toFixed(2);
+	/** The outline in two halves, each from one lead's contact point round to the other's. */
+	const FRAME = [
+		`0.5,${contact(8)} 0.5,11 11,0.5 99.5,0.5 99.5,${contact(4)}`,
+		`99.5,${contact(4)} 99.5,99.5 0.5,99.5 0.5,${contact(8)}`
+	];
 </script>
 
 <!--
@@ -51,7 +134,13 @@
 	says where the socket is and which block of text the traces must stay out from under.
 	No CTAs here: they live in the availability chips.
 -->
-<section id="hero" class="hero" data-designator="U0" aria-labelledby="hero-title">
+<section
+	id="hero"
+	class="hero"
+	data-designator="U0"
+	aria-labelledby="hero-title"
+	{@attach registerHero}
+>
 	<div class="stage">
 		{#if site === 'company'}
 			<div class="socket logo-socket" {@attach registerSocket}>
@@ -66,7 +155,9 @@
 					aria-hidden="true"
 					focusable="false"
 				>
-					<polygon points="11,0.5 99.5,0.5 99.5,99.5 0.5,99.5 0.5,11" />
+					{#each FRAME as points (points)}
+						<polyline class="outline" pathLength="1" {points} />
+					{/each}
 				</svg>
 				<div class="pads" aria-hidden="true">
 					{#each ring as pad (`${pad.row},${pad.col}`)}
@@ -75,6 +166,8 @@
 							class:pin1={pad.pin1}
 							data-side={pad.side}
 							data-port={pad.port}
+							data-lead={pad.lead ? '' : undefined}
+							style:--light-delay={pad.delay}
 							style:grid-row={pad.row}
 							style:grid-column={pad.col}
 						></span>
@@ -98,7 +191,7 @@
 				<span class="q">"</span><span class="nick">{company.nickname}</span><span class="q">"</span>
 				{company.familyName}
 			</h1>
-			<span class="rule" aria-hidden="true"></span>
+			<span class="rule" aria-hidden="true" {@attach spanName}></span>
 			<p class="tagline" lang="en">{content.profile.tagline}</p>
 			<!-- The same name everywhere he is online, as in his talks. Text, not a link. -->
 			<p class="follow">{m.hero_follow()} <span class="handle">{company.githubHandle}</span></p>
@@ -210,7 +303,7 @@
 		overflow: visible;
 	}
 
-	.courtyard polygon {
+	.courtyard .outline {
 		fill: none;
 		stroke: var(--silk);
 		stroke-width: 1px;
@@ -263,6 +356,20 @@
 		clip-path: polygon(14% 0, 100% 0, 100% 100%, 0 100%, 0 14%);
 	}
 
+	/* Scan lines over the photo while it is etched in; unseen otherwise. */
+	.die::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		opacity: 0;
+		background: repeating-linear-gradient(
+			to bottom,
+			color-mix(in srgb, var(--trace-cyan) 45%, transparent) 0 1px,
+			transparent 1px 4px
+		);
+		pointer-events: none;
+	}
+
 	/* enhanced:img puts the class on the <img> inside a <picture>. */
 	.photo {
 		display: block;
@@ -307,8 +414,12 @@
 	.rule {
 		position: relative;
 		display: block;
-		/* The end pads hang 4px outside the line: stay that far inside the hero, which clips sideways. */
-		width: min(calc(100% - 10px), 24rem);
+		/*
+		 * As wide as the name's widest line (--name-width, measured), so the end pads sit on its
+		 * first and last glyph. Without it: the text block, less room for the pads, which hang 4px
+		 * outside the line and must stay inside the hero, which clips sideways.
+		 */
+		width: var(--name-width, calc(100% - 10px));
 		height: 2px;
 		margin-block: 0.875rem 1rem;
 		background: linear-gradient(90deg, var(--trace-cyan), var(--ink) 50%, var(--trace-green));
@@ -409,10 +520,10 @@
 	}
 
 	/*
-	 * The board powering up, once, about 2.5 s from the load: the traces arrive (the board draws
-	 * them, and the logo draws itself), the glow rises behind the socket, the ports light as the
-	 * traces reach them and the line under the name runs out from the middle. The text takes no
-	 * part: it is there from the first frame. Reduced motion gets the finished picture.
+	 * The board powering up, once: the lead traces arrive (the board draws them, and the logo or
+	 * the photo's outline draws itself from where they touch), the glow rises behind the socket,
+	 * the ports light and the line under the name runs out from the middle. The text takes no part:
+	 * it is there from the first frame. Reduced motion gets the finished picture.
 	 */
 	@media (prefers-reduced-motion: no-preference) {
 		:global(html:not(.reduced)) .socket::before {
@@ -426,9 +537,266 @@
 		:global(html:not(.reduced)) .rule {
 			animation: rule-draw 0.9s cubic-bezier(0.45, 0, 0.2, 1) 1.7s backwards;
 		}
+
+		/*
+		 * With scripts the board powers the socket: its two lead traces run into the lead ports with
+		 * the rest of the field, and when they arrive (about 4 s in) it sets data-power="on" on the
+		 * socket. Until then the glow, the ports and the photo's outline wait; then the outline
+		 * draws from the two contact points, the glow rises and the ports light, all within 2.2 s,
+		 * so they end with the field (SOCKET_DRAW_MS in growth.ts). Should the board never come,
+		 * all that runs after 6 s.
+		 */
+		:global(html.js:not(.reduced)) .socket::before {
+			animation-delay: 6s;
+		}
+
+		/*
+		 * The pad ring waits out of sight too, then lights from the contact points round the ring
+		 * (--light-delay, set per pad); a port then lights up as well.
+		 */
+		:global(html.js:not(.reduced)) .pad {
+			animation: pad-in 0.4s ease-out calc(6s + var(--light-delay, 0s)) backwards;
+		}
+
+		:global(html.js:not(.reduced)) .pad[data-port] {
+			animation:
+				pad-in 0.4s ease-out calc(6s + var(--light-delay, 0s)) backwards,
+				port-on 0.5s ease-out calc(6.3s + var(--light-delay, 0s)) backwards;
+		}
+
+		/*
+		 * The outline shows from the two contact points outward, along the frame both ways: a mask
+		 * of two circles on those points that grow. (A dash animation won't do: the stroke does not
+		 * scale, and its dashes would not line up with the path's length.)
+		 */
+		:global(html.js:not(.reduced)) .courtyard {
+			--reveal: 150%;
+			mask-image:
+				radial-gradient(
+					circle at 0.5% 68%,
+					#000 var(--reveal),
+					transparent calc(var(--reveal) + 10%)
+				),
+				radial-gradient(
+					circle at 99.5% 32%,
+					#000 var(--reveal),
+					transparent calc(var(--reveal) + 10%)
+				);
+			animation: outline-reveal 1.2s cubic-bezier(0.45, 0, 0.2, 1) 6s backwards;
+		}
+
+		/*
+		 * The photo is etched in by the traces: it shows from the two contact points outward, under
+		 * scan lines that fade, bright at first and settling to its own colours. The mask's two
+		 * circles sit on the contact points (outside the die, which is inset a pad from the frame).
+		 */
+		:global(html.js:not(.reduced)) .die {
+			--etch: 150%;
+			mask-image:
+				radial-gradient(circle at -11% 72%, #000 var(--etch), transparent calc(var(--etch) + 14%)),
+				radial-gradient(circle at 111% 28%, #000 var(--etch), transparent calc(var(--etch) + 14%));
+			animation: etch 1.6s cubic-bezier(0.3, 0, 0.2, 1) 6s backwards;
+		}
+
+		/*
+		 * A new name starts each animation over, from the moment the power comes on. The board
+		 * sets the attribute, so it is :global: the template never has it.
+		 */
+		:global(html.js:not(.reduced)) .socket:global([data-power='on'])::before {
+			animation-name: glow-up-powered;
+			animation-delay: 0.3s;
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .pad {
+			animation-name: pad-in-powered;
+			animation-delay: var(--light-delay, 0s);
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .pad[data-port] {
+			animation-name: pad-in-powered, port-on-powered;
+			animation-delay: var(--light-delay, 0s), calc(0.3s + var(--light-delay, 0s));
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .courtyard {
+			animation-name: outline-reveal-powered;
+			animation-delay: 0s;
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .die {
+			animation-name: etch-powered;
+			animation-delay: 0.3s;
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .die::after {
+			animation: scan 1.2s ease-in 1s backwards;
+		}
+
+		:global(html.js:not(.reduced) [data-power='on']) .photo {
+			animation: settle 1.9s ease-out 0.3s backwards;
+		}
+
+		/*
+		 * The text under the logo or photo comes in when the build is done: 2.2 s after the power
+		 * (SOCKET_DRAW_MS in growth.ts), the line under the name drawing as it does. The scroll
+		 * link follows 2 s later, and its pulse starts then. Only the look waits: the text is in
+		 * the page, the accessibility tree and the layout from the start. Should the board never
+		 * come, it all shows after 8 s. Keyboard focus anywhere in the hero shows it at once.
+		 */
+		:global(html.js:not(.reduced)) .copy {
+			animation: text-in 0.6s ease-out 8s backwards;
+		}
+
+		:global(html.js:not(.reduced)) .rule {
+			animation-delay: 8.4s;
+		}
+
+		:global(html.js:not(.reduced)) .hero > :global(.scroll-indicator) {
+			animation: text-in 0.6s ease-out 10s backwards;
+		}
+
+		:global(html.js:not(.reduced)) .hero :global(.scroll-indicator:not([data-done]) .pulse) {
+			animation: hero-pulse 1.3s ease-in 10.6s 3 both;
+		}
+
+		:global(html.js:not(.reduced)) .socket:global([data-power='on']) ~ .copy {
+			animation-name: text-in-powered;
+			animation-delay: 2.2s;
+		}
+
+		:global(html.js:not(.reduced)) .socket:global([data-power='on']) ~ .copy .rule {
+			animation-name: rule-draw-powered;
+			animation-delay: 2.5s;
+		}
+
+		:global(html.js:not(.reduced))
+			.hero:has(.socket:global([data-power='on']))
+			> :global(.scroll-indicator) {
+			animation-name: text-in-powered;
+			animation-delay: 4.2s;
+		}
+
+		:global(html.js:not(.reduced))
+			.hero:has(.socket:global([data-power='on']))
+			:global(.scroll-indicator:not([data-done]) .pulse) {
+			animation-name: hero-pulse-powered;
+			animation-delay: 4.8s;
+		}
+
+		/* !important: this must beat the powered rules above, whatever their weight. */
+		:global(html.js:not(.reduced)) .hero:focus-within .copy,
+		:global(html.js:not(.reduced)) .hero:focus-within > :global(.scroll-indicator) {
+			animation: none !important;
+		}
+	}
+
+	/* The text and the scroll link come in: from out of sight, a touch bright, to their own look. */
+	@keyframes text-in {
+		from {
+			opacity: 0;
+			filter: brightness(1.8);
+		}
+	}
+
+	@keyframes text-in-powered {
+		from {
+			opacity: 0;
+			filter: brightness(1.8);
+		}
+	}
+
+	@keyframes rule-draw-powered {
+		from {
+			clip-path: inset(-6px 50% -6px 50%);
+		}
+		to {
+			clip-path: inset(-6px);
+		}
+	}
+
+	/* The scroll link's pulse (as in ScrollIndicator), restarted when the link comes in. */
+	@keyframes hero-pulse {
+		from {
+			opacity: 0;
+			transform: translateY(-100%);
+		}
+		20% {
+			opacity: 1;
+		}
+		80% {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+			transform: translateY(2.5rem);
+		}
+	}
+
+	@keyframes hero-pulse-powered {
+		from {
+			opacity: 0;
+			transform: translateY(-100%);
+		}
+		20% {
+			opacity: 1;
+		}
+		80% {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+			transform: translateY(2.5rem);
+		}
+	}
+
+	/* The etch's reach: a registered property, so it animates smoothly. */
+	@property --etch {
+		syntax: '<percentage>';
+		inherits: false;
+		initial-value: 150%;
+	}
+
+	/* From -14%: the soft edge of the mask starts outside the die too, so nothing shows yet. */
+	@keyframes etch {
+		from {
+			--etch: -14%;
+		}
+		to {
+			--etch: 150%;
+		}
+	}
+
+	@keyframes etch-powered {
+		from {
+			--etch: -14%;
+		}
+		to {
+			--etch: 150%;
+		}
+	}
+
+	@keyframes scan {
+		from {
+			opacity: 0.9;
+		}
+		to {
+			opacity: 0;
+		}
+	}
+
+	/* Bright and pale where the traces have just etched it, then its own colours. */
+	@keyframes settle {
+		from {
+			filter: brightness(1.9) saturate(0.1) contrast(1.15);
+		}
 	}
 
 	@keyframes glow-up {
+		from {
+			opacity: 0;
+		}
+	}
+
+	@keyframes glow-up-powered {
 		from {
 			opacity: 0;
 		}
@@ -439,6 +807,53 @@
 		from {
 			background: color-mix(in srgb, var(--pad-color) 32%, transparent);
 			box-shadow: 0 0 0 transparent;
+		}
+	}
+
+	/* A pad of the frame lights up: from nothing to its own look, a little bright on the way. */
+	@keyframes pad-in {
+		from {
+			opacity: 0;
+			transform: scale(0.4);
+		}
+	}
+
+	@keyframes pad-in-powered {
+		from {
+			opacity: 0;
+			transform: scale(0.4);
+		}
+	}
+
+	@keyframes port-on-powered {
+		from {
+			background: color-mix(in srgb, var(--pad-color) 32%, transparent);
+			box-shadow: 0 0 0 transparent;
+		}
+	}
+
+	/* The outline's reach from the contact points: from -10%, so no soft edge shows yet. */
+	@property --reveal {
+		syntax: '<percentage>';
+		inherits: false;
+		initial-value: 150%;
+	}
+
+	@keyframes outline-reveal {
+		from {
+			--reveal: -10%;
+		}
+		to {
+			--reveal: 150%;
+		}
+	}
+
+	@keyframes outline-reveal-powered {
+		from {
+			--reveal: -10%;
+		}
+		to {
+			--reveal: 150%;
 		}
 	}
 
