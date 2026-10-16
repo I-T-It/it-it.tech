@@ -336,6 +336,25 @@ describe('scroll', () => {
 		expect(runtime.frames).toBe(before);
 	});
 
+	it('requests no frame for a scroll that ends where it started', async () => {
+		buildPage();
+		const clock = manualClock();
+		const { runtime } = launch({ now: clock.now });
+		await runtime.start();
+		clock.advance(10_000);
+		await until(() => runtime.state === 'idle', 1000);
+		let scrolls = 0;
+		const onScroll = () => scrolls++;
+		window.addEventListener('scroll', onScroll);
+		cleanups.push(() => window.removeEventListener('scroll', onScroll));
+		const before = runtime.frames;
+		window.scrollTo(0, 400);
+		window.scrollTo(0, 0);
+		await frames(4);
+		expect(scrolls).toBeGreaterThan(0);
+		expect(runtime.frames).toBe(before);
+	});
+
 	it('snaps the chips above the front on a deep link', async () => {
 		const { sections, handles } = buildPage();
 		window.scrollTo(0, sections[3].offsetTop);
@@ -653,6 +672,22 @@ describe('reduced motion', () => {
 		expect(runtime.frames).toBe(1);
 		expect(handles.every((h) => h.state === 'on')).toBe(true);
 		expect(runtime.board!.traces.every((t) => runtime.growth!.isFull(t.id))).toBe(true);
+	});
+
+	it('draws once when the event of a scroll from before the start comes after it', async () => {
+		buildPage();
+		// The event fires at the next frame, after the first draw, with the view where that draw
+		// left it. A scroll that the test before resets in afterEach can do the same.
+		window.scrollTo(0, 300);
+		const { runtime } = launch({ reducedMotion: fakeMotionQuery(true) });
+		const framesAtScroll: number[] = [];
+		const onScroll = () => framesAtScroll.push(runtime.frames);
+		window.addEventListener('scroll', onScroll);
+		cleanups.push(() => window.removeEventListener('scroll', onScroll));
+		await runtime.start();
+		await frames(10);
+		expect(framesAtScroll).toContain(1);
+		expect(runtime.frames).toBe(1);
 	});
 
 	it('spawns no pulses', async () => {
