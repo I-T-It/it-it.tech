@@ -25,6 +25,8 @@
  *   between the rim buses, bend once or not at all, and end in vias.
  * - Filler buses: buses of 2 to 4 parallel traces from a via to a via, of every length, running
  *   the way the field round them runs, some with a mirrored twin, fill what open board is left.
+ * Every route runs inward: its points start at the end farthest from the ellipse's centre, so the
+ * growth draws it toward the content, never out toward the window edge.
  * Nothing enters the ellipse (it is blocked on the grid, 6 px wider than it is, so the glow stays
  * out too), no trace turns back on itself, and the field keeps to the hero's rows above the first
  * chip and out of anything blocked already (the hero's controls, the spine). The same input and
@@ -203,7 +205,10 @@ export interface HeroRoute {
 	/** Unique in the field, e.g. "hero:4.2" (rim bus 4, trace 2) or "hero:f3.0" (fill bus 3). */
 	id: string;
 	bus: string;
-	/** From the window edge (or the via it starts at) to its end on the rim or in a via. */
+	/**
+	 * From the window edge (or the via it starts at) to its end on the rim or in a via, the end
+	 * nearer the centre of the ellipse last.
+	 */
 	points: Point[];
 	startVia: boolean;
 }
@@ -227,6 +232,8 @@ const NORTH: Dir = 6;
 /** Everything a pass needs. */
 interface Field {
 	grid: Grid;
+	/** The clear ellipse itself, not the keep-out round it: the centre the traces grow toward. */
+	ellipse: Ellipse;
 	window: SearchWindow;
 	/** The first row below the hero: rows from here down lie on the page under it. */
 	below: number;
@@ -301,6 +308,7 @@ export function heroField(options: HeroFieldOptions): HeroRoute[] {
 
 	const field: Field = {
 		grid,
+		ellipse: e,
 		window: { col0: 0, col1, row0, row1 },
 		below,
 		edges: { top: area.y, bottom: (row1 + 1) * p, left: 0, right: options.width },
@@ -649,7 +657,10 @@ function busShape(
  * 2 to 4 traces, two cells apart, running the way the field round it runs (out from the ellipse,
  * now and then across), short, middling or long, straight or with one 45-degree bend. A bent bus
  * sometimes gets a mirrored twin beside it that bends the other way. No search: a bus that does
- * not fit where it lands is dropped, a twin that does not fit is left out.
+ * not fit where it lands is dropped, a twin that does not fit is left out. A bus has no window
+ * edge it comes in from, so it is laid either way round and drawn the way that heads in: all its
+ * traces from the end farther from the ellipse's centre (a twin on its own, it may head the
+ * other way).
  */
 function fillerBuses(field: Field, keep: Ellipse, rng: Rng): void {
 	const { grid, window: w } = field;
@@ -709,14 +720,31 @@ function fillerBuses(field: Field, keep: Ellipse, rng: Rng): void {
 		return true;
 	};
 	let made = 0;
-	const add = (shape: BusShape, bus: string) => {
+	/**
+	 * True when the traces of a bus, taken together, would be drawn out from the ellipse's centre
+	 * as laid: the whole bus goes the same way, the way most of it points.
+	 */
+	const outward = (shape: BusShape): boolean => {
+		let balance = 0;
+		for (const corners of shape) {
+			const a = corners[0];
+			const b = corners[corners.length - 1];
+			balance +=
+				ellipseDistance(field.ellipse, grid.centre(a.col, a.row)) -
+				ellipseDistance(field.ellipse, grid.centre(b.col, b.row));
+		}
+		return balance < 0;
+	};
+	/** Lays a bus, its traces drawn toward the ellipse (`reverse`: from the end they were laid at). */
+	const add = (shape: BusShape, bus: string, reverse: boolean) => {
 		const lane = field.nextBus();
 		shape.forEach((corners, i) => {
 			grid.markPath(corners, lane);
+			const ordered = reverse ? [...corners].reverse() : corners;
 			field.out.push({
 				id: `${bus}.${i}`,
 				bus,
-				points: simplify(corners.map((c) => grid.centre(c.col, c.row))),
+				points: simplify(ordered.map((c) => grid.centre(c.col, c.row))),
 				startVia: true
 			});
 		});
@@ -787,15 +815,15 @@ function fillerBuses(field: Field, keep: Ellipse, rng: Rng): void {
 				const mirrored = busShape(from, dir, n, first + shift, -turn, second - shift);
 				if (fits([...shape, ...mirrored])) {
 					made++;
-					add(shape, bus);
-					add(mirrored, `${bus}m`);
+					add(shape, bus, outward(shape));
+					add(mirrored, `${bus}m`, outward(mirrored));
 					return;
 				}
 			}
 			if (pairOnly) continue;
 			if (fits(shape)) {
 				made++;
-				add(shape, bus);
+				add(shape, bus, outward(shape));
 				return;
 			}
 		}

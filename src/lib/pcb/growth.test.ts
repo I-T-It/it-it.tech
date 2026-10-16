@@ -7,8 +7,11 @@ import {
 	Growth,
 	GROWTH_SPEED,
 	HERO_END_SPREAD_MS,
+	HERO_JITTER_MS,
 	HERO_MS,
 	HERO_VIA_DELAY_MS,
+	LEAD_MAX_SPEED,
+	LEAD_MIN_DELAY_MS,
 	LEAD_MS,
 	SOCKET_DRAW_MS,
 	MAX_STAGGER_MS,
@@ -167,17 +170,25 @@ describe('Growth hero field', () => {
 		});
 	}
 
-	it('grows the two leads along with the field and powers the socket when both are in', () => {
+	it('grows the two leads steadily like the field and powers the socket when both are in', () => {
 		const leads = [lead('socket:L0', 300), lead('socket:R1', 900)];
 		const g = new Growth({ ...board([...leads, corner]), hero: HERO });
 		expect(g.powered).toBe(false);
 		g.update(T, 0, VH);
 		expect(g.powered).toBe(false);
-		g.update(T + LEAD_MS / 2, 0, VH);
-		for (const l of leads) {
-			// Steadily, like the field: half way in half the time.
-			expect(g.drawn(l.id)).toBeCloseTo(l.length / 2, 0);
-		}
+		// Not at the load: the leads start inside the field's own window, not before it.
+		g.update(T + LEAD_MIN_DELAY_MS - 1, 0, VH);
+		for (const l of leads) expect(g.drawn(l.id), l.id).toBe(0);
+		const at = (ms: number) => {
+			g.update(T + ms, 0, VH);
+			return leads.map((l) => g.drawn(l.id));
+		};
+		const [a, b, c] = [at(2200), at(2800), at(3400)];
+		leads.forEach((l, i) => {
+			// Steadily: the same px in each 600 ms.
+			expect(a[i], l.id).toBeGreaterThan(0);
+			expect(b[i] - a[i], l.id).toBeCloseTo(c[i] - b[i], 3);
+		});
 		expect(g.drawn(corner.id)).toBeGreaterThan(0);
 		expect(g.powered).toBe(false);
 		g.update(T + LEAD_MS - 1, 0, VH);
@@ -185,6 +196,47 @@ describe('Growth hero field', () => {
 		g.update(T + LEAD_MS, 0, VH);
 		for (const l of leads) expect(g.isFull(l.id)).toBe(true);
 		expect(g.powered).toBe(true);
+	});
+
+	it('starts a lead in the window of the field and keeps it from racing the field', () => {
+		const short = lead('socket:L0', 300);
+		const long = lead('socket:R1', 900);
+		const field = [corner, middle, dot];
+		const g = new Growth({ ...board([short, long, ...field]), hero: HERO });
+		const start: Record<string, number> = {};
+		const finish: Record<string, number> = {};
+		for (let t = 0; t <= HERO_MS; t += 20) {
+			g.update(T + t, 0, VH);
+			for (const { id } of [short, long, ...field]) {
+				if (start[id] === undefined && g.drawn(id) > 0) start[id] = t;
+				if (finish[id] === undefined && g.isFull(id)) finish[id] = t;
+			}
+		}
+		const speed = (t: Trace) => (t.length / (finish[t.id] - start[t.id])) * 1000;
+		const fastest = Math.max(...field.map(speed));
+		const starts = field.map((t) => start[t.id]);
+		// Inside the window the field starts in, give or take a jitter.
+		for (const l of [short, long]) {
+			expect(start[l.id], l.id).toBeGreaterThanOrEqual(Math.min(...starts) - HERO_JITTER_MS);
+			expect(start[l.id], l.id).toBeLessThanOrEqual(Math.max(...starts) + HERO_JITTER_MS);
+		}
+		// A short lead has time to wait for its turn and grow no faster than the field's fastest.
+		expect(start[short.id]).toBeGreaterThan(LEAD_MIN_DELAY_MS + 20);
+		expect(speed(short)).toBeLessThanOrEqual(fastest * 1.05);
+		// A long one cannot be in at LEAD_MS slowly: it starts as early as a lead may, not earlier.
+		expect(start[long.id]).toBeGreaterThanOrEqual(LEAD_MIN_DELAY_MS);
+		expect(start[long.id]).toBeLessThanOrEqual(LEAD_MIN_DELAY_MS + 20);
+		expect(speed(long)).toBeGreaterThan(fastest);
+	});
+
+	it('keeps a lead to LEAD_MAX_SPEED when there is no field to compare it with', () => {
+		const only = lead('socket:L0', 300);
+		const g = new Growth({ ...board([only]), hero: HERO });
+		const seen = firstDrawn(g, [only.id]);
+		expect(seen[only.id]).toBeGreaterThan(LEAD_MIN_DELAY_MS + 20);
+		expect((only.length / (LEAD_MS - seen[only.id])) * 1000).toBeLessThanOrEqual(
+			LEAD_MAX_SPEED * 1.02
+		);
 	});
 
 	it('brings every trace of the field in at the end, as the logo finishes', () => {
@@ -197,6 +249,34 @@ describe('Growth hero field', () => {
 		}
 		g.update(T + HERO_MS, 0, VH);
 		for (const t of [corner, middle, dot, long]) expect(g.isFull(t.id), t.id).toBe(true);
+	});
+
+	it('spreads the arrival of the field over the last HERO_END_SPREAD_MS, the last as the logo ends', () => {
+		const many = Array.from({ length: 60 }, (_, i) =>
+			heroTrace(`hero:m${i}.0`, { x: 0, y: 20 + i * 12 }, 200 + (i % 7) * 40)
+		);
+		const g = new Growth({ ...board(many), hero: HERO });
+		const arrived: number[] = [];
+		const seen = new Set<string>();
+		for (let t = 0; t <= HERO_MS; t += 20) {
+			g.update(T + t, 0, VH);
+			for (const m of many) {
+				if (!seen.has(m.id) && g.isFull(m.id)) {
+					seen.add(m.id);
+					arrived.push(t);
+				}
+			}
+		}
+		expect(arrived).toHaveLength(many.length);
+		// Not before the stretch they arrive in, not after the build.
+		expect(arrived[0]).toBeGreaterThanOrEqual(HERO_MS - HERO_END_SPREAD_MS - 40);
+		expect(arrived.at(-1)).toBeLessThanOrEqual(HERO_MS);
+		// And over all of it, not in one moment: the middle 80% take a good part of the stretch.
+		const [p10, p90] = [
+			arrived[Math.floor(0.1 * arrived.length)],
+			arrived[Math.floor(0.9 * arrived.length)]
+		];
+		expect(p90 - p10).toBeGreaterThan(HERO_END_SPREAD_MS / 2);
 	});
 
 	it('is still building the field while the logo draws, and done when it is', () => {

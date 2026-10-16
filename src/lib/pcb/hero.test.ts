@@ -11,6 +11,7 @@ import {
 	type Rect
 } from './geometry.js';
 import { PITCH } from './grid.js';
+import { Growth, HERO_JITTER_MS, HERO_MS, LEAD_MS, SOCKET_DRAW_MS } from './growth.js';
 import { ellipseDistance, HERO_CLEARANCE, heroEllipse, HERO_WIDTH, type Ellipse } from './hero.js';
 import { layoutBoard, type Board, type LayoutInput, type Trace } from './layout.js';
 
@@ -309,12 +310,20 @@ describe('layoutBoard hero field', () => {
 		for (const twin of twins) {
 			const a = dots.find((t) => t.bus === twin.slice(0, -1))!;
 			const b = dots.find((t) => t.bus === twin)!;
-			const [ha, hb] = [headings(a), headings(b)];
-			expect(hb[0], twin).toBe(ha[0]);
-			if (ha.length > 1) {
-				// One turns clockwise, the other as far the other way.
-				expect((ha[1] - ha[0] + 8) % 8, twin).toBe((hb[0] - hb[1] + 8) % 8);
-			}
+			// Each bus is drawn toward the ellipse, so either may run the way it was laid or back.
+			const ways = (t: Trace) => {
+				const h = headings(t);
+				return [h, [...h].reverse().map((d) => (d + 4) % 8)];
+			};
+			const mirrored = ways(a).some((ha) =>
+				ways(b).some(
+					(hb) =>
+						hb[0] === ha[0] &&
+						// One turns clockwise, the other as far the other way.
+						(ha.length < 2 || (ha[1] - ha[0] + 8) % 8 === (hb[0] - hb[1] + 8) % 8)
+				)
+			);
+			expect(mirrored, twin).toBe(true);
 		}
 	});
 
@@ -560,6 +569,169 @@ describe('layoutBoard hero field', () => {
 		layoutBoard(page);
 		expect(performance.now() - start).toBeLessThan(200);
 	});
+});
+
+describe('layoutBoard hero field draw direction', () => {
+	// A trace is drawn from its first point to its last, so the first point has to be the one
+	// farthest out: every trace grows toward the hero's centre, never out toward the page edge.
+	const windows = ['1440x900', '1920x1080', '1280x720', '768x1024', '375x667'];
+	const seeds = Array.from({ length: 20 }, (_, i) => 1 + i * 7919);
+	/**
+	 * A filler bus is drawn all one way, so the odd trace of a bus running along the ellipse may end
+	 * a hair farther out than it starts (a few px; the ellipse's own radius is 1). A bus drawn out
+	 * toward the page edge is off by much more.
+	 */
+	const TANGENT = 0.05;
+
+	/**
+	 * A fill bus starts on the edge of the field (a window edge, or the row where the field ends
+	 * below the hero) and is drawn away from that edge by construction: one that bends along the
+	 * edge on its way in may end a hair farther out by the ellipse's measure. Every other trace,
+	 * the leads and the floating filler buses included, is held to the measure.
+	 */
+	function onFieldEdge(board: Board, trace: Trace): boolean {
+		if (!trace.id.startsWith('hero:f')) return false;
+		const { x, y } = trace.points[0];
+		return (
+			x <= 0 || x >= board.width || y <= board.hero!.rect.y || y >= board.heroBottom - PITCH * 2
+		);
+	}
+
+	function awayFromCentre(board: Board): string[] {
+		const ellipse = board.hero!.ellipse;
+		const wrong: string[] = [];
+		for (const trace of board.traces) {
+			if (trace.kind !== 'hero' && trace.kind !== 'socket') continue;
+			if (onFieldEdge(board, trace)) continue;
+			const start = ellipseDistance(ellipse, trace.points[0]);
+			const end = ellipseDistance(ellipse, trace.points[trace.points.length - 1]);
+			if (start + TANGENT < end) wrong.push(`${trace.id} ${(end - start).toFixed(4)}`);
+		}
+		return wrong;
+	}
+
+	it('starts every hero and lead trace farther from the centre than it ends', () => {
+		for (const name of windows) {
+			for (const seed of seeds) {
+				const board = layoutBoard(heroPage(name, { seed }));
+				expect(awayFromCentre(board), `${name} seed ${seed}`).toEqual([]);
+			}
+		}
+	}, 60_000);
+
+	it('grows the tip of every part-drawn hero and lead trace in toward the centre', () => {
+		const board = layoutBoard(heroPage('1440x900', { seed: 4242 }));
+		const { ellipse } = board.hero!;
+		const growth = new Growth(board);
+		growth.update(0, 0, 900);
+		growth.update(HERO_MS / 2, 0, 900);
+		let partial = 0;
+		for (const trace of board.traces) {
+			if (trace.kind !== 'hero' && trace.kind !== 'socket') continue;
+			if (onFieldEdge(board, trace)) continue;
+			const drawn = growth.drawn(trace.id);
+			if (!(drawn > 0 && drawn < trace.length)) continue;
+			partial++;
+			const tip = pointAt(trace.points, trace.lengths, drawn);
+			expect(ellipseDistance(ellipse, tip), trace.id).toBeLessThanOrEqual(
+				ellipseDistance(ellipse, trace.points[0]) + TANGENT
+			);
+		}
+		expect(partial).toBeGreaterThan(20);
+	});
+});
+
+describe('layoutBoard hero field timing', () => {
+	const windows = ['1440x900', '1920x1080', '768x1024', '375x667'];
+	const seeds = [3, 4242, 99991];
+	const STEP = 20;
+
+	/** When each trace of the field first shows and first is full, and when the socket has power. */
+	function timeline(board: Board) {
+		const growth = new Growth(board);
+		const traces = board.traces.filter((t) => t.kind === 'hero' || t.kind === 'socket');
+		const start = new Map<string, number>();
+		const finish = new Map<string, number>();
+		let power = -1;
+		growth.update(0, 0, 900);
+		for (let ms = 0; ms <= HERO_MS + 500; ms += STEP) {
+			growth.update(ms, 0, 900);
+			if (power < 0 && growth.powered) power = ms;
+			for (const t of traces) {
+				if (!start.has(t.id) && growth.drawn(t.id) > 0) start.set(t.id, ms);
+				if (!finish.has(t.id) && growth.isFull(t.id)) finish.set(t.id, ms);
+			}
+		}
+		const hero = board.traces.filter((t) => t.kind === 'hero');
+		const leads = board.traces.filter((t) => t.kind === 'socket');
+		const speed = (t: Trace) => (t.length / (finish.get(t.id)! - start.get(t.id)!)) * 1000;
+		return {
+			power,
+			starts: hero.map((t) => start.get(t.id)!),
+			finishes: hero.map((t) => finish.get(t.id)!),
+			speeds: hero.map(speed),
+			leads: leads.map((t) => ({
+				start: start.get(t.id)!,
+				finish: finish.get(t.id)!,
+				speed: speed(t)
+			}))
+		};
+	}
+
+	const quantile = (xs: number[], q: number) => {
+		const sorted = [...xs].sort((a, b) => a - b);
+		return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+	};
+
+	it('starts the leads in the window the rest of the field starts in, no faster than it grows', () => {
+		for (const name of windows) {
+			for (const seed of seeds) {
+				const label = `${name} seed ${seed}`;
+				const { starts, speeds, leads } = timeline(layoutBoard(heroPage(name, { seed })));
+				expect(leads.length, label).toBeGreaterThan(0);
+				for (const lead of leads) {
+					// Not before the field has begun, not after it has all begun, give or take a jitter.
+					expect(lead.start, label).toBeGreaterThanOrEqual(Math.min(...starts) - HERO_JITTER_MS);
+					expect(lead.start, label).toBeLessThanOrEqual(Math.max(...starts) + HERO_JITTER_MS);
+					// Not a streak: no faster than the fastest of the field, give or take a quarter.
+					expect(lead.speed, label).toBeLessThanOrEqual(Math.max(...speeds) * 1.25);
+				}
+			}
+		}
+	}, 60_000);
+
+	it('powers the socket when the leads arrive, whatever the seed', () => {
+		for (const name of windows) {
+			for (const seed of seeds) {
+				const label = `${name} seed ${seed}`;
+				const { power, leads } = timeline(layoutBoard(heroPage(name, { seed })));
+				expect(power, label).toBeGreaterThanOrEqual(LEAD_MS);
+				expect(power, label).toBeLessThanOrEqual(LEAD_MS + STEP);
+				for (const lead of leads) expect(lead.finish, label).toBeLessThanOrEqual(LEAD_MS + STEP);
+			}
+		}
+	}, 60_000);
+
+	it('spreads the arrival of the field over the end of the build, none long after power', () => {
+		for (const name of windows) {
+			for (const seed of seeds) {
+				const label = `${name} seed ${seed}`;
+				const { power, finishes } = timeline(layoutBoard(heroPage(name, { seed })));
+				// A real spread, not one moment: the middle 80% arrive over at least 1.2 s.
+				const spread = quantile(finishes, 0.9) - quantile(finishes, 0.1);
+				expect(spread, label).toBeGreaterThanOrEqual(1200);
+				// And no clump: no 300 ms holds more than a third of the field.
+				const bins = new Map<number, number>();
+				for (const f of finishes)
+					bins.set(Math.floor(f / 300), (bins.get(Math.floor(f / 300)) ?? 0) + 1);
+				expect(Math.max(...bins.values()) / finishes.length, label).toBeLessThan(1 / 3);
+				// Some come in after the socket has power, while the logo draws; the time the logo
+				// takes is the latest any may be.
+				expect(finishes.filter((f) => f > power).length, label).toBeGreaterThan(0);
+				expect(Math.max(...finishes), label).toBeLessThanOrEqual(power + SOCKET_DRAW_MS + STEP);
+			}
+		}
+	}, 60_000);
 });
 
 describe('layoutBoard without a hero', () => {
