@@ -5,6 +5,8 @@ import {
 	DEFAULT_PALETTE,
 	HALO_ALPHA,
 	HALO_WIDTH,
+	HERO_CORE_ALPHA,
+	HERO_HALO_ALPHA,
 	MAX_DPR,
 	Renderer,
 	capDpr,
@@ -126,6 +128,7 @@ function board(traces: Trace[]): Board {
 		height: 6000,
 		narrow: false,
 		heroBottom: 900,
+		hero: null,
 		traces,
 		chips: []
 	};
@@ -381,6 +384,70 @@ describe('drawing', () => {
 		expect(ctx.named('arc').some((call) => call.args[0] === 400 && call.args[1] === 400)).toBe(
 			false
 		);
+	});
+
+	describe('hero traces', () => {
+		const fromEdge = trace(
+			'hero:0.0',
+			[
+				{ x: 0, y: 200 },
+				{ x: 160, y: 200 },
+				{ x: 200, y: 240 }
+			],
+			'hero'
+		);
+		const fromVia = makeTrace({
+			id: 'hero:1.0',
+			kind: 'hero',
+			side: 'right',
+			bus: 'hero:1',
+			points: [
+				{ x: 900, y: 300 },
+				{ x: 1000, y: 300 }
+			],
+			end: { kind: 'via' },
+			chipId: null,
+			triggerY: 300,
+			startVia: true
+		});
+		const viaAt = (ctx: RecordingContext, x: number, y: number) =>
+			ctx.named('arc').filter((call) => call.args[0] === x && call.args[1] === y);
+
+		it('draws them a little quieter than the spine and branches', () => {
+			const { ctx, renderer } = setup([fromEdge]);
+			renderer.draw(frame(VIEW));
+			const strokes = ctx.named('stroke');
+			const halo = strokes.find((s) => s.state.lineWidth === HALO_WIDTH);
+			const core = strokes.find((s) => s.state.lineWidth === CORE_WIDTH);
+			expect(halo?.state.globalAlpha).toBeCloseTo(HERO_HALO_ALPHA);
+			expect(core?.state.globalAlpha).toBeCloseTo(HERO_CORE_ALPHA);
+			expect(HERO_HALO_ALPHA).toBeLessThan(HALO_ALPHA);
+		});
+
+		it('gives a growing hero trace a bright head and its via on the rim once it arrives', () => {
+			const { ctx, renderer } = setup([fromEdge]);
+			renderer.draw(frame(VIEW, () => 100));
+			expect(viaAt(ctx, 100, 200).length).toBeGreaterThan(0);
+			expect(viaAt(ctx, 200, 240)).toHaveLength(0);
+			ctx.reset();
+			renderer.draw(frame(VIEW));
+			expect(viaAt(ctx, 200, 240).length).toBeGreaterThan(0);
+		});
+
+		it('puts a via where a trace starts on the board, from its first px on', () => {
+			const { ctx, renderer } = setup([fromVia]);
+			renderer.draw(frame(VIEW, () => 0));
+			expect(viaAt(ctx, 900, 300)).toHaveLength(0);
+			ctx.reset();
+			renderer.draw(frame(VIEW, () => 10));
+			expect(viaAt(ctx, 900, 300).length).toBeGreaterThan(0);
+		});
+
+		it('puts no via at the start of a trace that comes in from the edge', () => {
+			const { ctx, renderer } = setup([fromEdge]);
+			renderer.draw(frame(VIEW));
+			expect(viaAt(ctx, 0, 200)).toHaveLength(0);
+		});
 	});
 
 	it('draws pulses with lighter compositing and resets it after', () => {

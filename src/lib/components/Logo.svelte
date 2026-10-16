@@ -81,12 +81,14 @@
 		<!--
 			Ports: the two open trace ends (the last point of each polyline above), where the board
 			joins its socket traces to the logo. Real elements, so the board reads their rendered
-			position, whatever the size. They draw nothing.
+			position, whatever the size. They draw nothing. Both take a lead trace of the hero
+			(data-lead): when the leads arrive, the logo's traces draw from here.
 		-->
-		<circle class="port" data-port="cyan" cx="161.480995" cy="287.093736" r="1" />
+		<circle class="port" data-port="cyan" data-lead cx="161.480995" cy="287.093736" r="1" />
 		<circle
 			class="port"
 			data-port="green"
+			data-lead
 			transform="translate(221.929229 0)"
 			cx="285.680579"
 			cy="0"
@@ -119,7 +121,10 @@
 		pointer-events: none;
 	}
 
-	/* The draw: about two seconds in all, and nothing flashes. */
+	/*
+	 * The draw: about two seconds in all, and nothing flashes. The traces draw from their open ends
+	 * (the ports) back to the pads, the pads pop, the letters fade in.
+	 */
 	.animate .trace {
 		animation: draw 1.4s cubic-bezier(0.45, 0, 0.2, 1) backwards;
 	}
@@ -138,14 +143,86 @@
 		animation: fade 0.6s ease-out 1.6s backwards;
 	}
 
+	/*
+	 * In the hero the board powers the logo: the board's two lead traces run into the ports, and
+	 * when they arrive (about 4 s in) the board sets data-power="on" on the socket round the logo.
+	 * The logo waits, dark, until then and draws from there in 2.2 s, ending with the board's
+	 * field (SOCKET_DRAW_MS in growth.ts). Should the board never come, it draws after 6 s.
+	 */
+	:global(html.js:not(.reduced)) .animate .trace {
+		animation-delay: 6s;
+	}
+
+	:global(html.js:not(.reduced)) .animate .trace-green {
+		animation-delay: 6.12s;
+	}
+
+	:global(html.js:not(.reduced)) .animate .pad {
+		animation-delay: 7.45s;
+	}
+
+	:global(html.js:not(.reduced)) .animate .letters {
+		animation-delay: 7.6s;
+	}
+
+	/* A new name starts the animation over, from the moment the power comes on. */
+	:global(html.js:not(.reduced) [data-power='on']) .animate .trace {
+		animation-name: draw-powered;
+		animation-delay: 0s;
+	}
+
+	:global(html.js:not(.reduced) [data-power='on']) .animate .trace-green {
+		animation-delay: 0.12s;
+	}
+
+	:global(html.js:not(.reduced) [data-power='on']) .animate .pad {
+		animation-name: pop-powered;
+		animation-delay: 1.45s;
+	}
+
+	:global(html.js:not(.reduced) [data-power='on']) .animate .letters {
+		animation-name: fade-powered;
+		animation-delay: 1.6s;
+	}
+
+	/* From the end of the line (offset -1: nothing shows yet) back to its start. */
 	@keyframes draw {
 		from {
 			stroke-dasharray: 1;
-			stroke-dashoffset: 1;
+			stroke-dashoffset: -1;
 		}
 		to {
 			stroke-dasharray: 1;
 			stroke-dashoffset: 0;
+		}
+	}
+
+	@keyframes draw-powered {
+		from {
+			stroke-dasharray: 1;
+			stroke-dashoffset: -1;
+		}
+		to {
+			stroke-dasharray: 1;
+			stroke-dashoffset: 0;
+		}
+	}
+
+	@keyframes pop-powered {
+		from {
+			transform: scale(0);
+		}
+		to {
+			transform: scale(1);
+		}
+	}
+
+	@keyframes fade-powered {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
 		}
 	}
 

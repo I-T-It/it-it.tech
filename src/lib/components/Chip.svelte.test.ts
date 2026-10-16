@@ -1,6 +1,7 @@
 import '../../app.css';
 import { createRawSnippet } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { chips } from '#lib/pcb/registry.svelte.js';
 import Chip from './Chip.svelte';
@@ -338,6 +339,16 @@ describe('outline', () => {
 		const durations = getComputedStyle(section).transitionDuration.split(',');
 		expect(durations.every((d) => d.trim() === '0s')).toBe(true);
 	});
+
+	it('draws the outline slowly enough to watch when the state changes: 1.5 s or more', async () => {
+		noMotion.remove();
+		root.classList.add('js');
+		const { section } = await mount();
+		const style = getComputedStyle(section);
+		const names = style.transitionProperty.split(',').map((n) => n.trim());
+		const durations = style.transitionDuration.split(',').map((d) => parseFloat(d));
+		expect(durations[names.indexOf('--draw')]).toBeGreaterThanOrEqual(1.5);
+	});
 });
 
 describe.skipIf(!CSS.supports('animation-timeline', 'view()'))('scroll-driven outline', () => {
@@ -347,9 +358,11 @@ describe.skipIf(!CSS.supports('animation-timeline', 'view()'))('scroll-driven ou
 	const draw = (section: HTMLElement) =>
 		parseFloat(getComputedStyle(chrome(section)).getPropertyValue('--draw'));
 
-	beforeEach(() => {
-		// The real thing: animations on.
+	beforeEach(async () => {
+		// The real thing: animations on, and scripts on (the draw is scripted away without them).
 		noMotion.remove();
+		root.classList.add('js');
+		await page.viewport(1280, 900);
 		// Room above the chip, so it starts below the window and can scroll in.
 		room = document.createElement('div');
 		room.style.height = '2500px';
@@ -357,19 +370,26 @@ describe.skipIf(!CSS.supports('animation-timeline', 'view()'))('scroll-driven ou
 		window.scrollTo(0, 0);
 	});
 
-	afterEach(() => {
+	afterEach(async () => {
 		room.remove();
 		tail?.remove();
 		window.scrollTo(0, 0);
+		await page.viewport(414, 896);
 	});
 
 	/** Mounts the chip and adds room below it, so the page can scroll the chip well into view. */
-	async function mountInRoom(props: Props = {}) {
+	async function mountInRoom(props: Props = {}, tailHeight = 2000) {
 		const mounted = await mount(props);
 		tail = document.createElement('div');
-		tail.style.height = '2000px';
+		tail.style.height = `${tailHeight}px`;
 		document.body.append(tail);
 		return mounted;
+	}
+
+	/** Scrolls until the top edge of the chip is `fraction` of the window height from the top. */
+	function placeTop(section: HTMLElement, fraction: number) {
+		const top = section.getBoundingClientRect().top + window.scrollY;
+		window.scrollTo(0, top - window.innerHeight * fraction);
 	}
 
 	it('draws with a view() timeline on the chip', async () => {
@@ -378,33 +398,70 @@ describe.skipIf(!CSS.supports('animation-timeline', 'view()'))('scroll-driven ou
 		expect(chrome(section).getAnimations().length).toBeGreaterThanOrEqual(1);
 	});
 
-	it('is undrawn below the window, draws as the chip scrolls in and is whole once it has', async () => {
+	it('waits until the chip is clearly in view: nothing is drawn above 80% of the window', async () => {
 		const { section } = await mountInRoom({ bodyHeight: 400 });
-		const top = () => section.getBoundingClientRect().top + window.scrollY;
-		const height = window.innerHeight;
 		await expect.poll(() => draw(section)).toBe(0);
 
-		// A little of the chip is in.
-		window.scrollTo(0, top() - height + 120);
-		await expect.poll(() => draw(section)).toBeGreaterThan(0);
-		expect(draw(section)).toBeLessThan(1);
+		// Only the top edge of the chip is in the window.
+		placeTop(section, 0.95);
+		await expect.poll(() => window.scrollY).toBeGreaterThan(0);
+		expect(draw(section)).toBe(0);
 
-		// Well in.
-		window.scrollTo(0, top() - height + 900);
+		// The chip top sits at 85% of the window.
+		placeTop(section, 0.85);
+		await expect.poll(() => Math.round(section.getBoundingClientRect().top)).toBe(765);
+		expect(draw(section)).toBe(0);
+	});
+
+	it('draws while the chip crosses the middle of the window, in steps you can watch', async () => {
+		const { section } = await mountInRoom({ bodyHeight: 400 });
+		const seen: number[] = [];
+		for (const fraction of [0.7, 0.55, 0.4]) {
+			placeTop(section, fraction);
+			await expect
+				.poll(() => Math.round(section.getBoundingClientRect().top))
+				.toBe(Math.round(window.innerHeight * fraction));
+			seen.push(draw(section));
+		}
+		// Each step is further along, and none is finished before the chip top passes 40%.
+		expect(seen[0]).toBeGreaterThan(0);
+		expect(seen[1]).toBeGreaterThan(seen[0]);
+		expect(seen[2]).toBeGreaterThan(seen[1]);
+		expect(seen[2]).toBeLessThan(1);
+	});
+
+	it('is whole once the chip top is above 30% of the window, and follows the scroll back out', async () => {
+		const { section } = await mountInRoom({ bodyHeight: 400 });
+		placeTop(section, 0.25);
 		await expect.poll(() => draw(section)).toBe(1);
 		expect(offsets(section, 'base')).toEqual([0, 0, 0, 0, 0]);
 
-		// And back out through the bottom edge: the drawing follows the scroll both ways.
 		window.scrollTo(0, 0);
 		await expect.poll(() => draw(section)).toBe(0);
 	});
 
+	it('still ends whole for a chip at the foot of the page that cannot scroll that far', async () => {
+		// Only 100px under the chip: at the end of the page its top sits near 40% of the window.
+		const { section } = await mountInRoom({ bodyHeight: 300 }, 100);
+		const maxScroll = () => document.documentElement.scrollHeight - window.innerHeight;
+		window.scrollTo(0, maxScroll());
+		await expect.poll(() => window.scrollY).toBe(Math.round(maxScroll()));
+		expect(section.getBoundingClientRect().top).toBeGreaterThan(window.innerHeight * 0.3);
+		await expect.poll(() => draw(section)).toBe(1);
+	});
+
 	it('ignores data-state for the outline: a chip that is off is drawn once it has scrolled in', async () => {
-		root.classList.add('js');
 		const { section } = await mountInRoom({ bodyHeight: 400 });
 		await expect.poll(() => section.dataset.state).toBe('off');
-		window.scrollTo(0, section.getBoundingClientRect().top + window.scrollY - 200);
+		placeTop(section, 0.2);
 		await expect.poll(() => draw(section)).toBe(1);
+	});
+
+	it('does not run without scripts: the outline is whole, like the board', async () => {
+		root.classList.remove('js');
+		const { section } = await mount({ bodyHeight: 400 });
+		expect(chrome(section).getAnimations()).toHaveLength(0);
+		expect(draw(section)).toBe(1);
 	});
 
 	it('does not animate under reduced motion: whole from the first paint', async () => {

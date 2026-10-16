@@ -9,35 +9,30 @@ export const en: SiteContent = {
 
 	meta: {
 		company: {
-			title: 'I.T. It: web applications and apps by Robbin Schepers',
+			title: 'I.T. It - For everything with a plug',
 			description:
-				'I.T. It builds web applications and apps with Laravel, Svelte, Vue and Flutter. Robbin Schepers works on them on weekday evenings from 18:00 and at weekends.'
+				'I.T. It builds web applications and apps and helps with computer problems. Together we find the best solution. Weekday evenings from 18:00 and weekends.'
 		},
 		personal: {
-			title: 'Robbin Schepers, developer and founder of I.T. It',
+			title: 'Robbin "Roboroads" Schepers - Professional Computer Nerd',
 			description:
-				'Robbin Schepers is a developer with a day job. In the evenings and at weekends he builds web applications and apps with his company I.T. It.'
+				'Robbin "Roboroads" Schepers is a developer with a day job. In the evenings and at weekends he builds web applications and apps with his company I.T. It.'
 		}
 	},
 
 	profile: {
-		name: 'Robbin Schepers',
+		name: 'Robbin "Roboroads" Schepers',
 		tagline: 'Professional Computer Nerd'
 	},
 
 	hero: {
-		lead: {
-			company:
-				'As I.T. It I build web applications and apps with Laravel, Svelte, Vue and Flutter, in the evenings and at weekends.',
-			personal:
-				'I work as a developer by day, and in the evenings and at weekends I build projects with my own company, I.T. It.'
-		},
 		cta: {
 			job: 'Looking for a developer for your team?',
 			freelance: 'Project for I.T. It'
 		},
 		logoAlt: 'I.T. It logo',
-		photoAlt: 'Portrait of Robbin Schepers'
+		photoAlt: 'Portrait of Robbin Schepers',
+		avatarAlt: 'Roboroads avatar: a low-poly portrait in green with a glowing cowboy hat'
 	},
 
 	availability: {
@@ -53,14 +48,15 @@ export const en: SiteContent = {
 		freelance: {
 			title: 'Evenings and weekends: I.T. It',
 			body: [
-				'Alongside my job I have my own company, I.T. It. I take on projects for web applications and apps, from the first design to a running application.'
+				'Alongside my job I have my own company, I.T. It. Do you have a problem or an idea that involves technology? Then we work out the best solution together. I am not tied to one language or framework and I pick what fits your situation.',
+				'I do computer help mostly for older people and for others who are not used to technology. I explain it calmly, in plain language.'
 			],
 			hours: 'Weekday evenings from 18:00 and weekends',
 			takesOn: [
-				'Laravel applications and APIs',
-				'Front-ends in Svelte or Vue',
-				'Mobile apps in Flutter',
-				'Technical leadership and application architecture'
+				'Web applications and apps, from first idea to a running application',
+				'Improving or rescuing existing software',
+				'Technical advice and application architecture',
+				'Computer help, such as connecting a printer or setting up email'
 			],
 			cta: 'Project for I.T. It',
 			emailSubject: 'Project for I.T. It'
@@ -70,7 +66,7 @@ export const en: SiteContent = {
 	about: {
 		title: 'About me',
 		paragraphs: [
-			'I am a developer with most of my expertise in the backend. I also enjoy the frontend and devops.',
+			'I am a developer with most of my expertise in the backend. I also have experience with frontend and devops and can take on that work myself.',
 			'I have been programming since I was eleven. I use that experience to take your project and my teammates a step further.',
 			'I think in challenges and creative solutions, not in problems, so there is little I would not want to build.'
 		]
@@ -686,7 +682,7 @@ export const en: SiteContent = {
 		languages: [
 			{ id: 'nl', title: 'Dutch', level: 5 },
 			{ id: 'en', title: 'English', level: 5 },
-			{ id: 'ngt', title: 'Dutch Sign Language (NGT)', level: 2, note: 'basic' }
+			{ id: 'ngt', title: 'Dutch Sign Language (NGT)', level: 2 }
 		]
 	},
 

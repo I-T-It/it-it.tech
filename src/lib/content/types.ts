@@ -23,19 +23,20 @@ export interface SectionHead {
 }
 
 export interface Profile {
-	/** "Robbin Schepers", the h1 on both builds. */
+	/** The display name, Robbin "Roboroads" Schepers: the h1 on both builds (`company.displayName`). */
 	name: string;
 	/** "Professional Computer Nerd", English in both locales. */
 	tagline: string;
 }
 
+/** The hero has no lead line: the name and the tagline say who he is, the chips below say the rest. */
 export interface Hero {
-	/** One lead line per variant, shown under the tagline. */
-	lead: { company: string; personal: string };
 	/** CTA labels. The variant decides which one is filled. */
 	cta: { job: string; freelance: string };
 	logoAlt: string;
 	photoAlt: string;
+	/** The Roboroads avatar the personal hero shows now and then instead of the photo. */
+	avatarAlt: string;
 }
 
 /** The U1 chip (job path). */
