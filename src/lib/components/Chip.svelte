@@ -73,8 +73,24 @@
 		const observer = new ResizeObserver(measure);
 		observer.observe(el);
 
+		/*
+		 * How far the page can still scroll this chip: from its top edge at the bottom of the
+		 * window to the end of the page. The outline draw must finish within that, or a chip at
+		 * the foot of the page (Contact) would stay half drawn. See --draw-end in the style block.
+		 */
+		const measureReach = () => {
+			const top = el.getBoundingClientRect().top + window.scrollY;
+			const reach = document.documentElement.scrollHeight - top;
+			el.style.setProperty('--reach', `${Math.max(0, Math.floor(reach))}px`);
+		};
+		measureReach();
+		// The page grows and shrinks (details open, fonts load, the window resizes): measure again.
+		const pageObserver = new ResizeObserver(measureReach);
+		pageObserver.observe(document.body);
+
 		return () => {
 			observer.disconnect();
+			pageObserver.disconnect();
 			chip.destroy();
 			handle = undefined;
 		};
@@ -182,8 +198,19 @@
 		isolation: isolate;
 		padding: 2.75rem clamp(1.25rem, 3vw, 2rem) clamp(1.25rem, 3vw, 2rem);
 		text-align: left;
-		/* Without scroll-driven animation the outline draws over a second when the state changes. */
-		transition: --draw 1s linear;
+		/* Without scroll-driven animation the outline draws over 1.8 s when the state changes, slowly enough to watch. */
+		transition: --draw 1.8s linear;
+
+		/*
+		 * The scroll range of the outline draw, in scroll distance from the moment the top edge of
+		 * the chip enters at the bottom of the window. The draw starts when the chip top reaches
+		 * 80% of the window height (20vh in) and ends at 30% (70vh in), so it plays while the chip
+		 * is clearly in view. --reach is how far the page can scroll the chip at all (the script
+		 * writes it); the end never goes past it, and the start keeps at least 30vh of room before.
+		 */
+		--reach: 100000px;
+		--draw-end: min(70vh, calc(var(--reach) - 2px));
+		--draw-start: max(0px, min(20vh, calc(var(--draw-end) - 30vh)));
 	}
 
 	.chip[data-accent='cyan'] {
@@ -284,17 +311,18 @@
 
 	/*
 	 * Where the browser has animation-timeline, the outline draws as the chip scrolls in: --draw
-	 * runs from 0 to 1 over the first 520px of scrolling after the top edge of the chip enters at
-	 * the bottom of the window. A view timeline follows the scroll both ways and takes no JS. It
+	 * runs from 0 to 1 while the top edge of the chip goes from 80% to 30% of the window height
+	 * (the range is in the variables above). A view timeline follows the scroll both ways. It
 	 * replaces the state-driven draw above, which every other browser keeps. Reduced motion gets
-	 * neither: the outline is whole from the first paint.
+	 * neither: the outline is whole from the first paint. Without scripts it is whole too, as
+	 * the board is: the end of the range needs --reach, which the script measures.
 	 */
 	@supports (animation-timeline: view()) {
 		@media (prefers-reduced-motion: no-preference) {
-			:global(html:not(.reduced)) .chrome {
+			:global(html.js:not(.reduced)) .chrome {
 				animation: draw-outline linear both;
 				animation-timeline: view();
-				animation-range: cover 0px cover 520px;
+				animation-range: cover var(--draw-start) cover var(--draw-end);
 			}
 		}
 	}

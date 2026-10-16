@@ -50,6 +50,8 @@ pnpm exec sirv e2e-out/personal --port 4174   # http://localhost:4174/deschepers
 
 `BASE_PATH` and `PUBLIC_SITE_URL` default to the github.io values. `scripts/build-variant.mjs` sets them per variant.
 
+Each build has its own icons: `static/icons/company` (the I.T. It logo) and `static/icons/personal` (a pixel-art green cowboy hat, 16 by 16 pixels, drawn as `favicon.svg`; the ico and the touch icon are scaled from it in whole steps with ImageMagick `-filter point`). `src/routes/+layout.svelte` links the set of its `site`, and `scripts/variant-icons.mjs` removes the other set from the output after a build and copies the ico to `/favicon.ico`.
+
 ## Layout
 
 ```
@@ -74,3 +76,7 @@ The repository variables `COMPANY_DOMAIN` and `PERSONAL_DOMAIN` switch a build t
 ## Accessibility
 
 The target is WCAG 2.2 level AA. The e2e suite runs axe with the `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` and `wcag22aa` tags and expects no violations.
+
+## Third-party material
+
+The brand icons in the hero are the path data of [Font Awesome Free](https://fontawesome.com/license/free) (`@fortawesome/free-brands-svg-icons`), licensed CC BY 4.0, drawn as inline SVG by `src/lib/components/Icon.svelte`. No font and no stylesheet is loaded from Font Awesome.

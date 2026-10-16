@@ -593,18 +593,26 @@ describe('Skills (U6)', () => {
 
 		it('says the level and the years in words, for screen readers', async () => {
 			await render(Skills, {});
-			expect(skill('php').querySelector('.sr-only')?.textContent).toBe('niveau 5 van 5, 15 jaar');
-			expect(skill('typescript').querySelector('.sr-only')?.textContent).toBe(
+			expect(skill('php').querySelector('.meter .sr-only')?.textContent).toBe(
+				'niveau 5 van 5, 15 jaar'
+			);
+			expect(skill('typescript').querySelector('.meter .sr-only')?.textContent).toBe(
 				'niveau 4 van 5, 2 jaar'
 			);
-			expect(skill('cobol').querySelector('.sr-only')?.textContent).toBe('niveau 1 van 5, 1 jaar');
+			expect(skill('cobol').querySelector('.meter .sr-only')?.textContent).toBe(
+				'niveau 1 van 5, 1 jaar'
+			);
 		});
 
 		it('uses the singular for one year in English', async () => {
 			setLocale('en');
 			await render(Skills, {});
-			expect(skill('dart').querySelector('.sr-only')?.textContent).toBe('level 4 of 5, 1 year');
-			expect(skill('php').querySelector('.sr-only')?.textContent).toBe('level 5 of 5, 15 years');
+			expect(skill('dart').querySelector('.meter .sr-only')?.textContent).toBe(
+				'level 4 of 5, 1 year'
+			);
+			expect(skill('php').querySelector('.meter .sr-only')?.textContent).toBe(
+				'level 5 of 5, 15 years'
+			);
 			expect(document.querySelector('section#skills h2')?.textContent).toBe(skills('en').title);
 		});
 
@@ -616,12 +624,17 @@ describe('Skills (U6)', () => {
 			expect(skill('php').querySelector('.leds-visual')?.getAttribute('aria-hidden')).toBe('true');
 		});
 
-		it('has the level text of every skill and nothing to focus', async () => {
+		it('has the level text of every skill and no button; only the links to roles can be focused', async () => {
 			await render(Skills, {});
-			expect(document.querySelectorAll('section#skills .sr-only')).toHaveLength(
+			expect(document.querySelectorAll('section#skills .meter .sr-only')).toHaveLength(
 				skills().groups.reduce((n, g) => n + g.skills.length, 0)
 			);
-			expect(document.querySelectorAll('section#skills a, section#skills button')).toHaveLength(0);
+			expect(
+				document.querySelectorAll('section#skills button, section#skills [tabindex]')
+			).toHaveLength(0);
+			for (const link of document.querySelectorAll('section#skills a')) {
+				expect(link.closest('.name'), link.textContent ?? '').not.toBeNull();
+			}
 		});
 	});
 
@@ -1179,13 +1192,12 @@ describe('EducationLanguages (U8)', () => {
 		expect(language('en').querySelector('.sr-only')?.textContent).toBe('niveau 5 van 5');
 	});
 
-	it('shows the note next to the level of NGT and reads it with the level, once', async () => {
+	it('shows no note next to the level of NGT: the two lit LEDs and the level text say it', async () => {
 		await render(EducationLanguages, {});
 		const ngt = language('ngt');
-		expect(ngt.querySelector('.sr-only')?.textContent).toBe('niveau 2 van 5, basis');
-		const note = ngt.querySelector<HTMLElement>('.note')!;
-		expect(note.textContent).toBe('basis');
-		expect(note.getAttribute('aria-hidden')).toBe('true');
+		expect(ngt.querySelector('.sr-only')?.textContent).toBe('niveau 2 van 5');
+		expect(ngt.querySelectorAll('.led[data-lit="true"]')).toHaveLength(2);
+		expect(ngt.querySelector('.note')).toBeNull();
 		expect(language('nl').querySelector('.note')).toBeNull();
 	});
 
@@ -1193,7 +1205,7 @@ describe('EducationLanguages (U8)', () => {
 		setLocale('en');
 		await render(EducationLanguages, {});
 		expect(document.querySelector('section#education h2')?.textContent).toBe(section('en').title);
-		expect(language('ngt').querySelector('.sr-only')?.textContent).toBe('level 2 of 5, basic');
+		expect(language('ngt').querySelector('.sr-only')?.textContent).toBe('level 2 of 5');
 		expect(
 			Array.from(document.querySelectorAll('section#education h3')).map((h) => h.textContent)
 		).toEqual(['Education', 'Languages']);

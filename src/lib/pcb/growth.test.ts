@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
 	BOOT_FALLBACK_MS,
+	BRANCH_SPEED,
 	FRONT_RATIO,
+	frontAt,
 	Growth,
 	GROWTH_SPEED,
+	HERO_END_SPREAD_MS,
+	HERO_MS,
+	HERO_VIA_DELAY_MS,
+	LEAD_MS,
+	SOCKET_DRAW_MS,
 	MAX_STAGGER_MS,
 	SOCKET_MS
 } from './growth.js';
-import { makeTrace, type Board, type ChipWiring, type Trace } from './layout.js';
+import { makeTrace, type Board, type ChipWiring, type HeroInput, type Trace } from './layout.js';
 
 const VH = 1000;
 const T = 10_000;
@@ -68,13 +75,14 @@ function socketTrace(id: string, length: number): Trace {
 	});
 }
 
-function board(traces: Trace[], chips: ChipWiring[] = []): Board {
+function board(traces: Trace[], chips: ChipWiring[] = [], height = 20_000): Board {
 	return {
 		seed: 7,
 		width: 1000,
-		height: 20_000,
+		height,
 		narrow: false,
 		heroBottom: 900,
+		hero: null,
 		traces,
 		chips
 	};
@@ -92,26 +100,246 @@ function run(g: Growth, from: number, to: number, scrollY = 0, chipId?: string, 
 
 describe('constants', () => {
 	it('match the design', () => {
-		expect(FRONT_RATIO).toBe(0.6);
+		expect(FRONT_RATIO).toBe(0.9);
+		expect(BRANCH_SPEED).toBe(600);
 		expect(GROWTH_SPEED).toBe(140);
 		expect(MAX_STAGGER_MS).toBe(600);
 		expect(BOOT_FALLBACK_MS).toBe(2500);
 		expect(SOCKET_MS).toBe(2000);
+		expect(HERO_MS).toBe(6000);
+		expect(SOCKET_DRAW_MS).toBe(2200);
+		// The leads arrive just in time for the logo to finish with the field.
+		expect(LEAD_MS + SOCKET_DRAW_MS).toBe(HERO_MS);
+	});
+});
+
+describe('Growth hero field', () => {
+	const HERO: HeroInput = {
+		rect: { x: 0, y: 0, width: 1000, height: 900 },
+		ellipse: { cx: 500, cy: 450, rx: 300, ry: 250 }
+	};
+
+	/** A hero trace from `from`, `length` px to the right. */
+	function heroTrace(id: string, from: { x: number; y: number }, length: number, via = false) {
+		return makeTrace({
+			id,
+			kind: 'hero',
+			side: 'left',
+			bus: id,
+			points: [from, { x: from.x + length, y: from.y }],
+			end: { kind: 'via' },
+			chipId: null,
+			triggerY: from.y,
+			startVia: via || undefined
+		});
+	}
+
+	const corner = heroTrace('hero:0.0', { x: 0, y: 12 }, 400);
+	const middle = heroTrace('hero:1.0', { x: 0, y: 450 }, 150);
+	const dot = heroTrace('hero:2.0', { x: 120, y: 300 }, 100, true);
+	const long = heroTrace('hero:3.0', { x: 0, y: 30 }, 3000);
+	const heroBoard = () => ({ ...board([corner, middle, dot, long]), hero: HERO });
+
+	/** When each trace first shows, in ms after the load. */
+	function firstDrawn(g: Growth, ids: string[]): Record<string, number> {
+		const seen: Record<string, number> = {};
+		for (let t = 0; t <= HERO_MS; t += 20) {
+			g.update(T + t, 0, VH);
+			for (const id of ids) if (seen[id] === undefined && g.drawn(id) > 0) seen[id] = t;
+		}
+		return seen;
+	}
+
+	/** A lead trace of `length` px into a socket port. */
+	function lead(id: string, length: number) {
+		return makeTrace({
+			id,
+			kind: 'socket',
+			side: 'left',
+			bus: 'socket:lead',
+			points: [
+				{ x: 0, y: 500 },
+				{ x: length, y: 500 }
+			],
+			end: { kind: 'port', port: 0 },
+			chipId: null,
+			triggerY: 500
+		});
+	}
+
+	it('grows the two leads along with the field and powers the socket when both are in', () => {
+		const leads = [lead('socket:L0', 300), lead('socket:R1', 900)];
+		const g = new Growth({ ...board([...leads, corner]), hero: HERO });
+		expect(g.powered).toBe(false);
+		g.update(T, 0, VH);
+		expect(g.powered).toBe(false);
+		g.update(T + LEAD_MS / 2, 0, VH);
+		for (const l of leads) {
+			// Steadily, like the field: half way in half the time.
+			expect(g.drawn(l.id)).toBeCloseTo(l.length / 2, 0);
+		}
+		expect(g.drawn(corner.id)).toBeGreaterThan(0);
+		expect(g.powered).toBe(false);
+		g.update(T + LEAD_MS - 1, 0, VH);
+		expect(g.powered).toBe(false);
+		g.update(T + LEAD_MS, 0, VH);
+		for (const l of leads) expect(g.isFull(l.id)).toBe(true);
+		expect(g.powered).toBe(true);
+	});
+
+	it('brings every trace of the field in at the end, as the logo finishes', () => {
+		const g = new Growth(heroBoard());
+		g.update(T, 0, VH);
+		g.update(T + HERO_MS - HERO_END_SPREAD_MS - 100, 0, VH);
+		for (const t of [corner, middle, dot, long]) {
+			expect(g.drawn(t.id), t.id).toBeGreaterThan(0);
+			expect(g.isFull(t.id), t.id).toBe(false);
+		}
+		g.update(T + HERO_MS, 0, VH);
+		for (const t of [corner, middle, dot, long]) expect(g.isFull(t.id), t.id).toBe(true);
+	});
+
+	it('is still building the field while the logo draws, and done when it is', () => {
+		const leads = [lead('socket:L0', 300)];
+		const g = new Growth({ ...board([...leads, corner, middle, dot, long]), hero: HERO });
+		g.update(T, 0, VH);
+		g.update(T + LEAD_MS, 0, VH);
+		expect(g.powered).toBe(true);
+		g.update(T + HERO_MS - HERO_END_SPREAD_MS - 100, 0, VH);
+		expect(g.animating).toBe(true);
+		expect(g.update(T + HERO_MS, 0, VH)).toBe(false);
+	});
+
+	it('powers the socket at the first update when there are no lead traces', () => {
+		const g = new Growth(heroBoard());
+		expect(g.powered).toBe(false);
+		g.update(T, 0, VH);
+		expect(g.powered).toBe(true);
+	});
+
+	it('starts a trace from a via below the hero with the edges, not with the dots', () => {
+		const under = heroTrace('hero:4.0', { x: 30, y: 960 }, 200, true);
+		const g = new Growth({ ...board([under, dot]), hero: HERO });
+		const seen = firstDrawn(g, [under.id, dot.id]);
+		expect(seen[under.id]).toBeLessThan(HERO_VIA_DELAY_MS);
+		expect(seen[dot.id]).toBeGreaterThanOrEqual(HERO_VIA_DELAY_MS);
+	});
+
+	it('starts in the corners at once, then works along the edges, the dots on the board last', () => {
+		const seen = firstDrawn(new Growth(heroBoard()), [corner.id, middle.id, dot.id]);
+		expect(seen[corner.id]).toBeLessThanOrEqual(400);
+		expect(seen[middle.id]).toBeGreaterThan(seen[corner.id] + 500);
+		expect(seen[dot.id]).toBeGreaterThanOrEqual(HERO_VIA_DELAY_MS);
+	});
+
+	it('builds slowly, a few hundred px a second, never shrinking', () => {
+		const g = new Growth(heroBoard());
+		let last = 0;
+		for (let t = 0; t <= 2000; t += 20) {
+			g.update(T + t, 0, VH);
+			expect(g.drawn(corner.id)).toBeGreaterThanOrEqual(last);
+			last = g.drawn(corner.id);
+		}
+		expect(g.isFull(corner.id)).toBe(false);
+		expect(last).toBeGreaterThan(100);
+	});
+
+	it('has every trace in full by HERO_MS after the load, then lets the loop rest', () => {
+		const g = new Growth(heroBoard());
+		expect(g.update(T, 0, VH)).toBe(true);
+		g.update(T + HERO_MS - HERO_END_SPREAD_MS - 100, 0, VH);
+		expect(g.animating).toBe(true);
+		expect(g.update(T + HERO_MS, 0, VH)).toBe(false);
+		for (const t of [corner, middle, dot, long]) expect(g.isFull(t.id), t.id).toBe(true);
+	});
+
+	it('runs on time alone, whatever the scroll position', () => {
+		const a = new Growth(heroBoard());
+		const b = new Growth(heroBoard());
+		a.update(T, 0, VH);
+		b.update(T, 4000, VH);
+		a.update(T + 1500, 0, VH);
+		b.update(T + 1500, 200, VH);
+		for (const t of [corner, middle, dot, long]) expect(b.drawn(t.id)).toBe(a.drawn(t.id));
+		expect(a.drawn(corner.id)).toBeGreaterThan(0);
+	});
+
+	it('is the same every time', () => {
+		const a = firstDrawn(new Growth(heroBoard()), [corner.id, middle.id, dot.id]);
+		const b = firstDrawn(new Growth(heroBoard()), [corner.id, middle.id, dot.id]);
+		expect(b).toEqual(a);
+	});
+
+	it('is drawn in full at once under reduced motion', () => {
+		const g = new Growth(heroBoard());
+		g.snapAll();
+		for (const t of [corner, middle, dot, long]) expect(g.isFull(t.id)).toBe(true);
+	});
+
+	it('keeps its clock across a relayout', () => {
+		const g = new Growth(heroBoard());
+		g.update(T, 0, VH);
+		g.update(T + 1000, 0, VH);
+		const drawn = g.drawn(corner.id);
+		expect(drawn).toBeGreaterThan(0);
+		g.relayout(heroBoard());
+		expect(g.drawn(corner.id)).toBe(drawn);
+		g.update(T + HERO_MS, 0, VH);
+		expect(g.isFull(long.id)).toBe(true);
+	});
+});
+
+describe('frontAt', () => {
+	const HEIGHT = 6000;
+	const MAX = HEIGHT - VH;
+
+	it('sits 90% down the viewport for most of the page', () => {
+		expect(frontAt(0, VH, HEIGHT)).toBe(900);
+		expect(frontAt(2000, VH, HEIGHT)).toBe(2900);
+		expect(frontAt(MAX - VH, VH, HEIGHT)).toBe(MAX - VH + 900);
+	});
+
+	it('reaches the bottom of the document at the bottom of the scroll', () => {
+		expect(frontAt(MAX, VH, HEIGHT)).toBe(HEIGHT);
+	});
+
+	it('closes the gap over the last viewport of scroll, never going back', () => {
+		let last = -Infinity;
+		for (let y = 0; y <= MAX; y += 10) {
+			const front = frontAt(y, VH, HEIGHT);
+			expect(front).toBeGreaterThanOrEqual(last);
+			expect(front).toBeGreaterThanOrEqual(y + 900);
+			expect(front).toBeLessThanOrEqual(y + VH);
+			last = front;
+		}
+		expect(frontAt(MAX - VH / 2, VH, HEIGHT)).toBe(MAX - VH / 2 + 950);
+	});
+
+	it('covers the whole of a page that does not scroll', () => {
+		expect(frontAt(0, VH, 800)).toBe(VH);
 	});
 });
 
 describe('Growth spine', () => {
-	it('draws the spine down to the front at scrollY plus 60% of the viewport', () => {
+	it('draws the spine down to the front at scrollY plus 90% of the viewport', () => {
 		const g = new Growth(board([straightSpine('s', 1000, 5000)]));
 		expect(g.front).toBe(0);
 		g.update(T, 0, VH);
-		expect(g.front).toBe(600);
+		expect(g.front).toBe(900);
 		expect(g.drawn('s')).toBe(0);
 		g.update(T, 1000, VH);
-		expect(g.front).toBe(1600);
-		expect(g.drawn('s')).toBe(600);
+		expect(g.front).toBe(1900);
+		expect(g.drawn('s')).toBe(900);
 		g.update(T, 9000, VH);
 		expect(g.drawn('s')).toBe(4000);
+		expect(g.isFull('s')).toBe(true);
+	});
+
+	it('draws the whole spine at the bottom of the page', () => {
+		const g = new Growth(board([straightSpine('s', 1000, 5950)], [], 6000));
+		g.update(T, 0, VH);
+		g.update(T + 16, 5000, VH);
+		expect(g.front).toBe(6000);
 		expect(g.isFull('s')).toBe(true);
 	});
 
@@ -124,7 +352,7 @@ describe('Growth spine', () => {
 		travelled.update(T + 600, 200, VH);
 		travelled.update(T + 9000, 1500, VH);
 		expect(travelled.drawn('s')).toBe(fresh.drawn('s'));
-		expect(fresh.drawn('s')).toBe(1500 + 600 - 1000);
+		expect(fresh.drawn('s')).toBe(1500 + 900 - 1000);
 	});
 
 	it('rises with scrollY and falls when scrolling back up', () => {
@@ -135,8 +363,8 @@ describe('Growth spine', () => {
 		};
 		const down = [0, 800, 1600, 2400].map((y, i) => at(y, T + i * 16));
 		const up = [1600, 800, 300].map((y, i) => at(y, T + 100 + i * 16));
-		expect(down).toEqual([0, 400, 1200, 2000]);
-		expect(up).toEqual([1200, 400, 0]);
+		expect(down).toEqual([0, 700, 1500, 2300]);
+		expect(up).toEqual([1500, 700, 200]);
 	});
 
 	it('follows a spine that jogs sideways', () => {
@@ -150,7 +378,7 @@ describe('Growth spine', () => {
 				])
 			])
 		);
-		g.update(T, 2050 - 600, VH);
+		g.update(T, 2050 - 900, VH);
 		expect(g.drawn('s')).toBeCloseTo(1000 + 50 * Math.SQRT2);
 	});
 
@@ -180,7 +408,7 @@ describe('Growth spine', () => {
 
 describe('Growth latched traces', () => {
 	it('starts a branch once the front passes its junction and keeps it drawn', () => {
-		const g = new Growth(board([line('b', 140, 1500, 'c'), line('later', 140, 1700, 'c')]));
+		const g = new Growth(board([line('b', 140, 1500, 'c'), line('later', 140, 2100, 'c')]));
 		run(g, T, T + 2000, 0);
 		expect(g.drawn('b')).toBe(0);
 		g.update(T + 2000, 900, VH);
@@ -191,13 +419,50 @@ describe('Growth latched traces', () => {
 		expect(g.isFull('b')).toBe(true);
 	});
 
-	it('grows branches at 140 px/s from the moment the front passes', () => {
+	it('grows branches at 600 px/s from the moment the front passes', () => {
 		const g = new Growth(board([line('a', 5000, 100, 'c'), line('b', 5000, 100, 'c')]));
 		g.update(T, 0, VH);
 		expect(g.drawn('a')).toBe(0);
 		g.update(T + 1000, 0, VH);
-		expect(g.drawn('a')).toBeCloseTo(GROWTH_SPEED);
-		expect(g.drawn('b')).toBeCloseTo(GROWTH_SPEED);
+		expect(g.drawn('a')).toBeCloseTo(BRANCH_SPEED);
+		expect(g.drawn('b')).toBeCloseTo(BRANCH_SPEED);
+	});
+
+	it('keeps a latched trace level with a fast scroll: never shorter than the front is past it', () => {
+		const g = new Growth(board([line('b', 5000, 1000, 'c'), line('d', 5000, 1200)]));
+		g.update(T, 0, VH);
+		// One frame later the front is at 3900, 2900 px past the branch and 2700 past the decoration.
+		g.update(T + 16, 3000, VH);
+		expect(g.drawn('b')).toBeGreaterThanOrEqual(2900);
+		expect(g.drawn('d')).toBeGreaterThanOrEqual(2700);
+		// Scrolling on keeps them level; scrolling back up does not shrink them.
+		g.update(T + 32, 4000, VH);
+		expect(g.drawn('b')).toBeGreaterThanOrEqual(3900);
+		g.update(T + 48, 0, VH);
+		expect(g.drawn('b')).toBeGreaterThanOrEqual(3900);
+	});
+
+	it('lets a trace that is already past the front at load grow in, without a jump', () => {
+		const g = new Growth(board([line('b', 5000, 100, 'c')]));
+		g.update(T, 0, VH);
+		g.update(T + 16, 0, VH);
+		expect(g.drawn('b')).toBeCloseTo(16 * 0.6);
+	});
+
+	it('boots the last chip once the page is scrolled to the bottom', () => {
+		const height = 3000;
+		const g = new Growth(
+			board(
+				[line('f1', 300, height - 60, 'c')],
+				[{ id: 'c', top: height - 200, feeders: ['f1'], fallback: false }],
+				height
+			)
+		);
+		run(g, T, T + 500, 0);
+		expect(g.chipState('c')).toBe('off');
+		run(g, T + 500, T + 2000, height - VH);
+		expect(g.isFull('f1')).toBe(true);
+		expect(g.chipState('c')).toBe('on');
 	});
 
 	it('staggers decoration by up to 600 ms, the same way every time', () => {
@@ -320,7 +585,7 @@ describe('Growth chips', () => {
 
 	it('boots when the first branch arrives and goes on when all have', () => {
 		const g = new Growth(
-			board([line('f1', 140, 500, 'c'), line('f2', 280, 550, 'c')], [chip(['f1', 'f2'])])
+			board([line('f1', 600, 500, 'c'), line('f2', 1200, 550, 'c')], [chip(['f1', 'f2'])])
 		);
 		expect(g.chipState('c')).toBe('off');
 		const seen = run(g, T, T + 4000, 0, 'c');
@@ -355,7 +620,7 @@ describe('Growth chips', () => {
 	});
 
 	it('leaves chips below the front off', () => {
-		const g = new Growth(board([], [chip([], 700)]));
+		const g = new Growth(board([], [chip([], 1000)]));
 		run(g, T, T + 5000);
 		expect(g.chipState('c')).toBe('off');
 	});
@@ -385,7 +650,7 @@ describe('Growth chips', () => {
 			)
 		);
 		g.update(T, 3000, VH);
-		expect(g.drawn('s')).toBe(3600 - 900);
+		expect(g.drawn('s')).toBe(3900 - 900);
 		expect(g.drawn('f1')).toBe(500);
 		expect(g.drawn('d')).toBe(500);
 		expect(g.drawn('below')).toBe(0);
@@ -485,9 +750,9 @@ describe('Growth relayout', () => {
 	it('measures a relaid spine against the last front right away', () => {
 		const g = new Growth(board([straightSpine('s', 1000, 5000)]));
 		g.update(T, 1000, VH);
-		expect(g.drawn('s')).toBe(600);
+		expect(g.drawn('s')).toBe(900);
 		g.relayout(board([straightSpine('s', 1200, 5000)]));
-		expect(g.drawn('s')).toBe(400);
+		expect(g.drawn('s')).toBe(700);
 	});
 
 	it('stays static after a relayout under reduced motion', () => {

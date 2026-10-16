@@ -52,7 +52,7 @@ test.describe('skeleton', () => {
 		const html = page.locator('html');
 		await expect(html).toHaveAttribute('lang', 'nl');
 		await expect(html).toHaveAttribute('data-site', site);
-		await expect(page.getByRole('heading', { level: 1 })).toHaveText('Robbin Schepers');
+		await expect(page.getByRole('heading', { level: 1 })).toHaveText('Robbin "Roboroads" Schepers');
 
 		// The two availability chips sit in the #availability wrapper, so not only direct children.
 		const ids = await page.locator('main section').evaluateAll((els) => els.map((el) => el.id));
@@ -116,6 +116,26 @@ test.describe('skeleton', () => {
 		await expectNoAxeViolations(page);
 		await page.goto('en/');
 		await expectNoAxeViolations(page);
+	});
+
+	test('titles the page the way its variant says, in both languages', async ({
+		page
+	}, testInfo) => {
+		const site = testInfo.project.name as Site;
+		const titles: Record<Site, { nl: string; en: string }> = {
+			company: {
+				nl: 'I.T. It - Voor alles met stekkers',
+				en: 'I.T. It - For everything with a plug'
+			},
+			personal: {
+				nl: 'Robbin "Roboroads" Schepers - Professionele Computer Nerd',
+				en: 'Robbin "Roboroads" Schepers - Professional Computer Nerd'
+			}
+		};
+		await page.goto('./');
+		await expect(page).toHaveTitle(titles[site].nl);
+		await page.goto('en/');
+		await expect(page).toHaveTitle(titles[site].en);
 	});
 
 	test('keeps the variant out of the other build', async ({ page }, testInfo) => {

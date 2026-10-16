@@ -15,6 +15,7 @@ import { cp, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveBuildEnv, SITES, variantDefaults } from './site-env.mjs';
+import { pruneVariantIcons } from './variant-icons.mjs';
 
 const site = process.argv[2];
 if (!SITES.includes(site)) {
@@ -46,6 +47,9 @@ const code = await new Promise((resolve) => {
 	child.on('exit', (exitCode) => resolve(exitCode ?? 1));
 });
 if (code !== 0) process.exit(code);
+
+// Only this variant's icons stay in the output (see scripts/variant-icons.mjs).
+await pruneVariantIcons(path.resolve(root, env.BUILD_DIR), site);
 
 if (copyForE2e) {
 	const from = path.resolve(root, env.BUILD_DIR);

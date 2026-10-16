@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { company } from './company.js';
 import { en } from './en.js';
 import { getContent } from './index.js';
 import { nl } from './nl.js';
@@ -119,16 +120,24 @@ describe('NL and EN parity', () => {
 		expect(en.experience.jobs.map(facts)).toEqual(nl.experience.jobs.map(facts));
 	});
 
-	it('has both lead lines, both CTA labels and both page metas in each locale', () => {
+	it('has both CTA labels and both page metas in each locale, and no hero lead line', () => {
 		for (const [, c] of both) {
-			expect(c.hero.lead.company.length).toBeGreaterThan(20);
-			expect(c.hero.lead.personal.length).toBeGreaterThan(20);
-			expect(c.hero.lead.company).not.toBe(c.hero.lead.personal);
+			// The tagline "Professional Computer Nerd" says what he does; a lead line repeated it.
+			expect('lead' in c.hero).toBe(false);
 			expect(c.hero.cta.job.length).toBeGreaterThan(5);
 			expect(c.hero.cta.freelance.length).toBeGreaterThan(5);
 			expect(c.meta.company.title.length).toBeGreaterThan(10);
 			expect(c.meta.personal.title.length).toBeGreaterThan(10);
 		}
+	});
+
+	it('describes the avatar that replaces the photo now and then, naming the handle', () => {
+		for (const [, c] of both) {
+			expect(c.hero.avatarAlt).toContain('Roboroads');
+			expect(c.hero.avatarAlt).not.toBe(c.hero.photoAlt);
+			expect(c.hero.avatarAlt.length).toBeGreaterThan(30);
+		}
+		expect(nl.hero.avatarAlt).not.toBe(en.hero.avatarAlt);
 	});
 
 	it('differs between EN and NL, except for names, tags, titles and the tagline', () => {
@@ -191,12 +200,12 @@ describe('cleaned up export', () => {
 		}
 	});
 
-	it('moves sign language to the languages block, with a level and a note', () => {
+	it('moves sign language to the languages block, with a level and no note (the LEDs say it)', () => {
 		for (const [, c] of both) {
 			expect(allSkills(c).some((s) => s.id === 'ngt')).toBe(false);
 			const ngt = c.educationLanguages.languages.find((l) => l.id === 'ngt');
 			expect(ngt?.level).toBe(2);
-			expect(ngt?.note?.length).toBeGreaterThan(2);
+			expect(ngt?.note).toBeUndefined();
 			expect(c.educationLanguages.languages.map((l) => l.id)).toEqual(['nl', 'en', 'ngt']);
 			expect(c.educationLanguages.languages.slice(0, 2).map((l) => l.level)).toEqual([5, 5]);
 		}
@@ -660,12 +669,35 @@ describe('variant copy', () => {
 		expect(nl.availability.job.title).toBe('Overdag: in loondienst');
 	});
 
-	it('names what I.T. It takes on', () => {
+	it('names what I.T. It takes on, without tying it to a tech stack', () => {
 		for (const [, c] of both) {
-			const takes = c.availability.freelance.takesOn.join(' ');
-			for (const word of ['Laravel', 'Svelte', 'Vue', 'Flutter']) expect(takes).toContain(word);
 			expect(c.availability.freelance.takesOn.length).toBeGreaterThanOrEqual(4);
+			// Robbin is not tied to Laravel or Svelte: the chip and the company meta say that the
+			// solution is found together, and none of them lists a stack.
+			const copy = [
+				...c.availability.freelance.body,
+				...c.availability.freelance.takesOn,
+				c.meta.company.title,
+				c.meta.company.description
+			].join(' ');
+			expect(copy).not.toMatch(/laravel|svelte|vue|flutter|react|angular/i);
 		}
+		expect(nl.availability.freelance.body.join(' ')).toMatch(/samen/);
+		expect(en.availability.freelance.body.join(' ')).toMatch(/together/);
+	});
+
+	it('offers plain computer help: a printer, email, for people who are not used to technology', () => {
+		const help = (c: typeof nl) =>
+			[...c.availability.freelance.body, ...c.availability.freelance.takesOn].join(' ');
+		expect(help(nl)).toMatch(/printer/);
+		expect(help(nl)).toMatch(/e-mail/);
+		expect(help(nl)).toMatch(/ouderen/);
+		expect(help(en)).toMatch(/printer/);
+		expect(help(en)).toMatch(/email/);
+		expect(help(en)).toMatch(/older people/);
+		// The company meta mentions it too.
+		expect(nl.meta.company.description).toMatch(/computer/);
+		expect(en.meta.company.description).toMatch(/computer/);
 	});
 
 	it('has the freelance mail subject of the plan, without an address in it', () => {
@@ -675,17 +707,25 @@ describe('variant copy', () => {
 
 	it('leads the company page with I.T. It and the personal page with Robbin', () => {
 		for (const [, c] of both) {
-			expect(c.profile.name).toBe('Robbin Schepers');
+			// The h1 is the display name, the same in both languages and on both builds.
+			expect(c.profile.name).toBe(company.displayName);
+			expect(c.meta.personal.title.startsWith(company.displayName)).toBe(true);
+			expect(c.meta.personal.description.startsWith(company.displayName)).toBe(true);
 			expect(c.profile.tagline).toBe('Professional Computer Nerd');
 			expect(c.meta.company.title.startsWith('I.T. It')).toBe(true);
-			expect(c.meta.company.title).toContain('Robbin Schepers');
-			expect(c.meta.personal.title.startsWith('Robbin Schepers')).toBe(true);
-			expect(c.meta.personal.title).toContain('I.T. It');
+			expect(c.meta.personal.title.startsWith('Robbin "Roboroads" Schepers')).toBe(true);
 			expect(c.meta.personal.description).toContain('I.T. It');
 			expect(c.meta.company.description).toContain('I.T. It');
-			expect(c.hero.lead.company).toContain('I.T. It');
-			expect(c.hero.lead.personal).toContain('I.T. It');
 		}
+	});
+
+	it('titles the pages the way the user wrote them: a name or company, a hyphen, a line', () => {
+		expect(nl.meta.company.title).toBe('I.T. It - Voor alles met stekkers');
+		expect(en.meta.company.title).toBe('I.T. It - For everything with a plug');
+		expect(nl.meta.personal.title).toBe(
+			'Robbin "Roboroads" Schepers - Professionele Computer Nerd'
+		);
+		expect(en.meta.personal.title).toBe('Robbin "Roboroads" Schepers - Professional Computer Nerd');
 	});
 
 	it('keeps titles and descriptions within search result lengths', () => {

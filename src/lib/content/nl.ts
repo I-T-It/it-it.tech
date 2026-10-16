@@ -10,35 +10,30 @@ export const nl: SiteContent = {
 
 	meta: {
 		company: {
-			title: 'I.T. It: webapplicaties en apps van Robbin Schepers',
+			title: 'I.T. It - Voor alles met stekkers',
 			description:
-				'I.T. It bouwt webapplicaties en apps met Laravel, Svelte, Vue en Flutter. Robbin Schepers werkt eraan doordeweeks vanaf 18:00 en in het weekend.'
+				'I.T. It bouwt webapplicaties en apps en helpt bij computerproblemen. Samen zoeken we de beste oplossing. Doordeweeks vanaf 18:00 en in het weekend.'
 		},
 		personal: {
-			title: 'Robbin Schepers, developer en oprichter van I.T. It',
+			title: 'Robbin "Roboroads" Schepers - Professionele Computer Nerd',
 			description:
-				'Robbin Schepers is developer en werkt overdag in loondienst. In de avonden en het weekend bouwt hij webapplicaties en apps met zijn bedrijf I.T. It.'
+				'Robbin "Roboroads" Schepers is developer en werkt overdag in loondienst. In de avonden en het weekend bouwt hij webapplicaties en apps met zijn bedrijf I.T. It.'
 		}
 	},
 
 	profile: {
-		name: 'Robbin Schepers',
+		name: 'Robbin "Roboroads" Schepers',
 		tagline: 'Professional Computer Nerd'
 	},
 
 	hero: {
-		lead: {
-			company:
-				'Als I.T. It bouw ik webapplicaties en apps met Laravel, Svelte, Vue en Flutter, in de avonden en het weekend.',
-			personal:
-				'Ik werk overdag als developer en bouw in de avonden en het weekend projecten met mijn eigen bedrijf, I.T. It.'
-		},
 		cta: {
 			job: 'Zoek je een developer voor je team?',
 			freelance: 'Project voor I.T. It'
 		},
 		logoAlt: 'Logo van I.T. It',
-		photoAlt: 'Portret van Robbin Schepers'
+		photoAlt: 'Portret van Robbin Schepers',
+		avatarAlt: 'Avatar van Roboroads: een low-poly portret in groen met een gloeiende cowboyhoed'
 	},
 
 	availability: {
@@ -54,14 +49,15 @@ export const nl: SiteContent = {
 		freelance: {
 			title: 'Avonden en weekenden: I.T. It',
 			body: [
-				'Naast mijn baan heb ik een eigen bedrijf, I.T. It. Ik neem projecten aan voor webapplicaties en apps, van het eerste ontwerp tot een draaiende applicatie.'
+				'Naast mijn baan heb ik een eigen bedrijf, I.T. It. Heb je een probleem of een idee waar techniek bij hoort? Dan zoeken we samen uit wat de beste oplossing is. Ik ben niet gebonden aan één taal of framework en kies wat bij jouw situatie past.',
+				'Computerhulp doe ik meestal voor ouderen en voor anderen die niet gewend zijn aan techniek. Ik leg het rustig uit, in gewone taal.'
 			],
 			hours: 'Doordeweeks vanaf 18:00 en in het weekend',
 			takesOn: [
-				"Laravel-applicaties en API's",
-				'Front-ends in Svelte of Vue',
-				'Mobiele apps in Flutter',
-				'Technisch leiderschap en applicatie-architectuur'
+				'Webapplicaties en apps, van eerste idee tot draaiende applicatie',
+				'Bestaande software verbeteren of redden',
+				'Technisch advies en applicatie-architectuur',
+				'Computerhulp, zoals een printer aansluiten of e-mail instellen'
 			],
 			cta: 'Project voor I.T. It',
 			emailSubject: 'Project voor I.T. It'
@@ -71,7 +67,7 @@ export const nl: SiteContent = {
 	about: {
 		title: 'Over mij',
 		paragraphs: [
-			'Ik ben developer met de meeste expertise in de backend. De frontend en devops vind ik ook leuk.',
+			'Ik ben developer met de meeste expertise in de backend. Ik heb ook ervaring met frontend en devops en kan die taken zelf oppakken.',
 			'Ik programmeer sinds mijn elfde. Die ervaring gebruik ik om je project en mijn teamgenoten een stap verder te brengen.',
 			'Ik denk niet in problemen maar in uitdagingen en creatieve oplossingen, dus er is weinig dat ik niet wil bouwen.'
 		]
@@ -751,7 +747,7 @@ export const nl: SiteContent = {
 		languages: [
 			{ id: 'nl', title: 'Nederlands', level: 5 },
 			{ id: 'en', title: 'Engels', level: 5 },
-			{ id: 'ngt', title: 'Nederlandse Gebarentaal (NGT)', level: 2, note: 'basis' }
+			{ id: 'ngt', title: 'Nederlandse Gebarentaal (NGT)', level: 2 }
 		]
 	},
 
