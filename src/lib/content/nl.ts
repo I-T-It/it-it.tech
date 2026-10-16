@@ -197,6 +197,7 @@ export const nl: SiteContent = {
 				id: 'cfk',
 				title: 'Lead developer',
 				organisation: 'Contractspelersfonds KNVB (CFK)',
+				source: 'sopra-steria',
 				start: '2023-03',
 				end: '2024-01',
 				tech: [

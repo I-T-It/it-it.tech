@@ -470,7 +470,7 @@ describe('experience', () => {
 				vws: 'sopra-steria',
 				ocw: 'sopra-steria',
 				'cz-chatbot': 'sopra-steria',
-				cfk: 'direct',
+				cfk: 'sopra-steria',
 				'cz-flutter': 'sopra-steria',
 				'instore-media': 'itit',
 				'sublime-fm': 'itit',
