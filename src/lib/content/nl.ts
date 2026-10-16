@@ -583,7 +583,8 @@ export const nl: SiteContent = {
 					{ id: 'devops', title: 'DevOps', level: 3, years: 5 },
 					{ id: 'sysadmin', title: 'Systeembeheer', level: 3, years: 5 },
 					{ id: 'technical-design', title: 'Technisch ontwerper', level: 3, years: 3 },
-					{ id: 'open-source', title: 'Open source', level: 3, years: 3 }
+					{ id: 'open-source', title: 'Open source', level: 3, years: 3 },
+					{ id: 'ai-agentic-workflow', title: 'Agentische AI-workflow', level: 3, years: 1 }
 				]
 			}
 		]
