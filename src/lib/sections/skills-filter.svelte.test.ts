@@ -82,6 +82,16 @@ describe('Skills: links to the roles', () => {
 		expect(linkIn('cobol')).toBeNull();
 	});
 
+	it('shows the AI agentic workflow as plain text with its level and years, because no role tags it', async () => {
+		await render(Skills, {});
+		expect(linkIn('ai-agentic-workflow')).toBeNull();
+		const row = skillRow('ai-agentic-workflow');
+		expect(row.querySelector('.name')?.textContent?.trim()).toBe('Agentische AI-workflow');
+		expect(row.querySelector('.leds-visual')?.getAttribute('aria-hidden')).toBe('true');
+		expect(row.querySelector('.meter .sr-only')?.textContent).toBe('niveau 3 van 5, 1 jaar');
+		expect(row.querySelector('.years')?.textContent?.trim()).toBe('1 jaar');
+	});
+
 	it('is a link with an address of its own, so it also works when copied or opened in a tab', async () => {
 		await render(Skills, {});
 		expect(linkIn('laravel')!.getAttribute('href')).toBe('?skill=laravel#experience');
