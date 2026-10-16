@@ -1,13 +1,17 @@
 <script lang="ts">
+	import { company } from '#lib/content/company.js';
 	import { getContent } from '#lib/content/index.js';
+	import { visibleProfiles } from '#lib/content/profiles.js';
+	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { registerObstacle, registerSocket } from '#lib/pcb/registry.svelte.js';
 	import { site } from '#lib/site.js';
+	import Icon from '#lib/components/Icon.svelte';
 	import Logo from '#lib/components/Logo.svelte';
+	import { profileIcons } from '#lib/components/profile-icons.js';
 	import ScrollIndicator from '#lib/components/ScrollIndicator.svelte';
 
 	const content = getContent(getLocale());
-	const lead = site === 'company' ? content.hero.lead.company : content.hero.lead.personal;
 
 	/**
 	 * The photo's footprint: an 11 by 11 grid with pads round the outside and the photo in the
@@ -81,17 +85,36 @@
 						class="photo"
 						src="../assets/robbin-schepers.jpg"
 						alt={content.hero.photoAlt}
-						sizes="(min-width: 30rem) 19rem, 46vw"
+						sizes="(min-width: 40rem) 26rem, 46vw"
 					/>
 				</div>
 			</div>
 		{/if}
 
 		<div class="copy" {@attach registerObstacle}>
-			<h1 id="hero-title">{content.profile.name}</h1>
+			<!-- Robbin "Roboroads" Schepers: the nickname set like the handle, the quotes quietly. -->
+			<h1 id="hero-title">
+				{company.givenName}
+				<span class="q">"</span><span class="nick">{company.nickname}</span><span class="q">"</span>
+				{company.familyName}
+			</h1>
 			<span class="rule" aria-hidden="true"></span>
 			<p class="tagline" lang="en">{content.profile.tagline}</p>
-			<p class="lead">{lead}</p>
+			<!-- The same name everywhere he is online, as in his talks. Text, not a link. -->
+			<p class="follow">{m.hero_follow()} <span class="handle">{company.githubHandle}</span></p>
+			<!-- The profiles under that name. The address of each is in content/profiles.ts; one whose address is still TODO is left out. -->
+			<ul class="profiles" aria-label={m.hero_profiles_label()}>
+				{#each visibleProfiles() as profile (profile.id)}
+					<li>
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- an external address, not a route -->
+						<a href={profile.url} rel="me noopener"
+							><Icon icon={profileIcons[profile.id]} /><span class="sr-only"
+								>{m.profile_on({ service: profile.name }) + ' ' + m.external_site()}</span
+							></a
+						>
+					</li>
+				{/each}
+			</ul>
 		</div>
 	</div>
 
@@ -127,7 +150,7 @@
 		 * Free board between the socket and the text: the traces that arrive from below turn
 		 * into the bottom ports through it. The board keeps a cell clear round both.
 		 */
-		gap: clamp(3.5rem, 8svh, 5rem);
+		gap: clamp(3rem, 7svh, 5rem);
 		width: 100%;
 		padding-block: clamp(0.25rem, 1.5svh, 1rem);
 	}
@@ -156,11 +179,26 @@
 		width: clamp(16rem, min(52vw, 100svh), 42rem);
 	}
 
-	/* The photo in its footprint. A square, as big as the window allows. */
+	/*
+	 * The photo in its footprint, and the focal point of the personal page: a square as big as the
+	 * window allows, up to 26rem. 100svh - 27rem is what the text block, the corridor and the scroll
+	 * indicator leave of the window, so the hero stays one window high; on a phone the width wins.
+	 */
 	.photo-socket {
-		--size: clamp(10rem, min(46vw, 36svh), 19rem);
+		--size: clamp(10rem, min(48vw, calc(100svh - 27rem)), 26rem);
 		width: var(--size);
 		height: var(--size);
+	}
+
+	/* More light round the photo than round the logo: this is what the eye goes to first. */
+	.photo-socket::before {
+		inset: -45%;
+		background: radial-gradient(
+			closest-side,
+			color-mix(in srgb, var(--trace-cyan) 24%, transparent),
+			color-mix(in srgb, var(--trace-green) 14%, transparent) 55%,
+			transparent
+		);
 	}
 
 	/* Silkscreen outline of the footprint, cut at the top left like the chips. */
@@ -245,9 +283,24 @@
 		text-align: center;
 	}
 
+	/*
+	 * Robbin "Roboroads" Schepers is 27 characters of Fira Code: 4.6vw keeps it on one line from
+	 * about 600px up to 3.75rem, and on a phone it wraps to two lines at 1.75rem, which the
+	 * hero's height budget (photo, handle line, icon row, one phone window) allows.
+	 */
 	h1 {
 		margin: 0;
+		font-size: clamp(1.75rem, 4.6vw, 3.75rem);
 		letter-spacing: -0.02em;
+	}
+
+	/* The nickname like the handle below it: Fira Code (the whole heading is) in the accent colour. */
+	.nick {
+		color: var(--trace-cyan);
+	}
+
+	.q {
+		color: var(--ink-muted);
 	}
 
 	/* A trace under the name: cyan from the left, green from the right, a pad at each end. */
@@ -257,7 +310,7 @@
 		/* The end pads hang 4px outside the line: stay that far inside the hero, which clips sideways. */
 		width: min(calc(100% - 10px), 24rem);
 		height: 2px;
-		margin-block: 1rem 1.25rem;
+		margin-block: 0.875rem 1rem;
 		background: linear-gradient(90deg, var(--trace-cyan), var(--ink) 50%, var(--trace-green));
 	}
 
@@ -305,12 +358,54 @@
 		background: var(--silk);
 	}
 
-	.lead {
-		margin: 1.25rem 0 0;
-		max-width: 36rem;
+	/* One line under the tagline, like a note on a drawing: small, muted, the handle in the display face. */
+	.follow {
+		margin: 1rem 0 0;
 		color: var(--ink-muted);
-		font-size: 1.125rem;
-		text-wrap: pretty;
+		font-size: var(--text-small);
+	}
+
+	/*
+	 * The profile icons, one compact row of 24px targets (the WCAG minimum) with a few pixels
+	 * between them: ten fit across a 320 CSS px window. Muted until hovered or focused; nothing
+	 * depends on the hover.
+	 */
+	.profiles {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.1875rem;
+		margin: 0.5rem 0 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.profiles a {
+		display: grid;
+		place-items: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		border-radius: 50%;
+		color: var(--ink-muted);
+		font-size: 1rem;
+	}
+
+	@media (hover: hover) {
+		.profiles a:hover {
+			color: var(--ink);
+			background: color-mix(in srgb, var(--ink) 12%, transparent);
+		}
+	}
+
+	/* The handle: Fira Code, white, with a short cyan to green trace under it like the line under the name. */
+	.handle {
+		padding-bottom: 2px;
+		background: linear-gradient(90deg, var(--trace-cyan), var(--trace-green)) bottom / 100% 2px
+			no-repeat;
+		color: var(--ink);
+		font-family: var(--font-display);
+		font-weight: 500;
+		letter-spacing: 0.02em;
 	}
 
 	/*

@@ -9,6 +9,7 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { company, emailEncoded } from '#lib/content/company.js';
 import { getContent } from '#lib/content/index.js';
+import { profiles, visibleProfiles } from '#lib/content/profiles.js';
 import { decodeEmail, EMAIL_FALLBACK_TEXT } from '#lib/email.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
 import { chips, obstacles, socket } from '#lib/pcb/registry.svelte.js';
@@ -76,13 +77,42 @@ afterEach(async () => {
 const hero = () => document.querySelector<HTMLElement>('section#hero')!;
 
 describe('Hero', () => {
-	it('is the page heading: one h1 with the name', async () => {
+	it('is the page heading: one h1 with the display name, Robbin "Roboroads" Schepers', async () => {
 		const screen = await mount(Hero);
 		await expect
-			.element(screen.getByRole('heading', { level: 1 }))
-			.toHaveTextContent('Robbin Schepers');
+			.element(screen.getByRole('heading', { level: 1, name: 'Robbin "Roboroads" Schepers' }))
+			.toBeVisible();
 		expect(hero().querySelectorAll('h1')).toHaveLength(1);
 		expect(hero().getAttribute('aria-labelledby')).toBe(hero().querySelector('h1')!.id);
+		expect(hero().querySelector('h1')!.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+			company.displayName
+		);
+	});
+
+	it('sets the nickname in the heading like the handle: Fira Code, in the accent colour', async () => {
+		await mount(Hero);
+		const nick = hero().querySelector<HTMLElement>('h1 .nick')!;
+		expect(nick.textContent).toBe('Roboroads');
+		const style = getComputedStyle(nick);
+		expect(style.fontFamily).toContain('Fira Code');
+		// --trace-cyan, #00e7ff.
+		expect(style.color).toBe('rgb(0, 231, 255)');
+		// The quotes are part of the heading text and set quietly beside the nickname.
+		const quotes = hero().querySelectorAll<HTMLElement>('h1 .q');
+		expect(Array.from(quotes).map((q) => q.textContent)).toEqual(['"', '"']);
+		expect(getComputedStyle(quotes[0]).color).not.toBe(style.color);
+	});
+
+	it('keeps the name on one line on a desktop window and on at most two lines on a phone', async () => {
+		await page.viewport(1440, 900);
+		await mount(Hero, true);
+		const h1 = hero().querySelector('h1')!;
+		const size = parseFloat(getComputedStyle(h1).fontSize);
+		expect(h1.getBoundingClientRect().height).toBeLessThan(size * 1.6);
+		await page.viewport(375, 667);
+		expect(h1.getBoundingClientRect().height).toBeLessThan(
+			parseFloat(getComputedStyle(h1).fontSize) * 2.8
+		);
 	});
 
 	it('sets the tagline in English, marked as English on a Dutch page', async () => {
@@ -99,23 +129,141 @@ describe('Hero', () => {
 		await expect.element(screen.getByText('Professional Computer Nerd')).toBeVisible();
 	});
 
+	it('has no lead line: the name, the tagline and the handle say who he is', async () => {
+		await mount(Hero);
+		expect(hero().querySelector('.lead')).toBeNull();
+		// What is left of the text block, top to bottom.
+		const block = obstacles()[0];
+		const parts = Array.from(block.children).map((el) =>
+			el.tagName === 'H1'
+				? 'h1'
+				: ['rule', 'tagline', 'follow', 'profiles'].find((name) => el.classList.contains(name))
+		);
+		expect(parts).toEqual(['h1', 'rule', 'tagline', 'follow', 'profiles']);
+	});
+
 	for (const locale of ['nl', 'en'] as const) {
-		it(`shows the company lead line in ${locale}`, async () => {
+		it(`says where to follow him online, with the handle set apart, in ${locale}`, async () => {
 			setLocale(locale);
-			const screen = await mount(Hero);
-			await expect
-				.element(screen.getByText(content[locale].hero.lead.company, { exact: true }))
-				.toBeVisible();
-			expect(hero().textContent).not.toContain(content[locale].hero.lead.personal);
+			await mount(Hero);
+			const follow = hero().querySelector<HTMLElement>('.follow')!;
+			expect(follow.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+				locale === 'nl'
+					? 'Volg me online, overal: @Roboroads'
+					: 'Follow me online, everywhere: @Roboroads'
+			);
+			const handle = follow.querySelector<HTMLElement>('.handle')!;
+			expect(handle.textContent).toBe(company.githubHandle);
+			expect(getComputedStyle(handle).fontFamily).toContain('Fira Code');
+			// Text, not a link: the hero stays free of anything to click but the indicator.
+			expect(follow.querySelector('a')).toBeNull();
+			// It sits in the block the traces keep out of, under the tagline.
+			expect(obstacles()[0].contains(follow)).toBe(true);
+			const tagline = hero().querySelector('.tagline')!.getBoundingClientRect();
+			expect(follow.getBoundingClientRect().top).toBeGreaterThanOrEqual(tagline.bottom);
 		});
 	}
 
 	it('has no CTAs: no button, no filled or outline button-link, no mail link', async () => {
 		await mount(Hero);
 		expect(hero().querySelectorAll('button, .cta, .email, [href^="mailto"]')).toHaveLength(0);
-		// The only link is the scroll indicator.
+		// The links are the profile icons and the scroll indicator.
 		const links = Array.from(hero().querySelectorAll('a'));
-		expect(links.map((a) => a.getAttribute('href'))).toEqual(['#availability']);
+		expect(links.map((a) => a.getAttribute('href'))).toEqual([
+			...visibleProfiles().map((p) => p.url),
+			'#availability'
+		]);
+	});
+
+	describe('profile row', () => {
+		const row = () => hero().querySelector<HTMLElement>('ul.profiles')!;
+		const links = () => Array.from(row().querySelectorAll<HTMLAnchorElement>('a'));
+
+		it('shows one icon link for each of the ten profiles, in order', async () => {
+			await mount(Hero);
+			expect(links().map((a) => a.getAttribute('href'))).toEqual(profiles.map((p) => p.url));
+			expect(links()).toHaveLength(10);
+		});
+
+		it('sits under the handle line, inside the block the traces keep out of', async () => {
+			await mount(Hero);
+			const follow = hero().querySelector('.follow')!.getBoundingClientRect();
+			expect(row().getBoundingClientRect().top).toBeGreaterThanOrEqual(follow.bottom);
+			expect(obstacles()[0].contains(row())).toBe(true);
+		});
+
+		for (const locale of ['nl', 'en'] as const) {
+			it(`names every link for screen readers and says it leaves the site, in ${locale}`, async () => {
+				setLocale(locale);
+				const screen = await mount(Hero);
+				const on = locale === 'nl' ? 'Robbin op' : 'Robbin on';
+				const notice = locale === 'nl' ? '(externe site)' : '(external site)';
+				for (const profile of profiles) {
+					const link = screen.getByRole('link', { name: `${on} ${profile.name} ${notice}` });
+					await expect.element(link).toHaveAttribute('href', profile.url);
+				}
+			});
+		}
+
+		it('opens as an identity link: rel me, and noopener', async () => {
+			await mount(Hero);
+			for (const link of links()) {
+				const rel = (link.getAttribute('rel') ?? '').split(/\s+/);
+				expect(rel, link.href).toContain('me');
+				expect(rel, link.href).toContain('noopener');
+			}
+		});
+
+		it('draws the icons as decoration: SVG paths, hidden from screen readers, no text of their own', async () => {
+			await mount(Hero);
+			for (const link of links()) {
+				const svg = link.querySelector('svg')!;
+				expect(svg.getAttribute('aria-hidden'), link.href).toBe('true');
+				expect(svg.querySelector('path')).not.toBeNull();
+			}
+			// No icon font, no external image: nothing but inline SVG.
+			expect(row().querySelector('img, i, use')).toBeNull();
+		});
+
+		it('gives every link a target of at least 24 by 24 CSS px', async () => {
+			await mount(Hero);
+			for (const link of links()) {
+				const box = link.getBoundingClientRect();
+				expect(box.width, link.href).toBeGreaterThanOrEqual(24);
+				expect(box.height, link.href).toBeGreaterThanOrEqual(24);
+			}
+		});
+
+		it('shows a focus ring of 2px or more on the focused icon', async () => {
+			await mount(Hero);
+			links()[2].focus();
+			expect(document.activeElement).toBe(links()[2]);
+			const style = getComputedStyle(links()[2]);
+			expect(style.outlineStyle).toBe('solid');
+			expect(parseFloat(style.outlineWidth)).toBeGreaterThanOrEqual(2);
+		});
+
+		it('is one compact row on a desktop window and on a 320 CSS px phone', async () => {
+			for (const width of [1280, 320]) {
+				await page.viewport(width, 800);
+				await mount(Hero, true);
+				const tops = new Set(links().map((a) => Math.round(a.getBoundingClientRect().top)));
+				expect(tops.size, `${width}px`).toBe(1);
+				const right = Math.max(...links().map((a) => a.getBoundingClientRect().right));
+				expect(right).toBeLessThanOrEqual(width);
+			}
+		});
+
+		it('has a name for the list itself', async () => {
+			await mount(Hero);
+			expect(row().getAttribute('aria-label')).toBe('Online profielen');
+		});
+
+		it('names the list in English on the English page', async () => {
+			setLocale('en');
+			await mount(Hero);
+			expect(row().getAttribute('aria-label')).toBe('Online profiles');
+		});
 	});
 
 	it('ends with the scroll indicator', async () => {
@@ -169,7 +317,7 @@ describe('Hero socket and obstacle', () => {
 		expect(list).toHaveLength(1);
 		const block = list[0];
 		expect(block.contains(hero().querySelector('h1'))).toBe(true);
-		expect(block.querySelector('.lead')).not.toBeNull();
+		expect(block.querySelector('.tagline')).not.toBeNull();
 		// The socket and the text are different elements: the socket keeps its own clearance.
 		expect(block.contains(socket()!.el)).toBe(false);
 	});
@@ -221,9 +369,9 @@ describe('Hero power-up', () => {
 		}
 	});
 
-	it('never animates the text: the name, tagline and lead are there from the first frame', async () => {
+	it('never animates the text: the name, tagline and handle line are there from the first frame', async () => {
 		await mount(Hero);
-		for (const selector of ['h1', '.tagline', '.lead']) {
+		for (const selector of ['h1', '.tagline', '.follow']) {
 			const el = hero().querySelector<HTMLElement>(selector)!;
 			expect(el.getAnimations(), selector).toHaveLength(0);
 			expect(getComputedStyle(el).opacity, selector).toBe('1');
@@ -278,7 +426,7 @@ describe('Hero size', () => {
 		const box = hero().getBoundingClientRect();
 		expect(box.height).toBeGreaterThan(256);
 		expect(hero().scrollHeight).toBeLessThanOrEqual(hero().clientHeight);
-		for (const part of hero().querySelectorAll('h1, .tagline, .lead, a.scroll-indicator, svg')) {
+		for (const part of hero().querySelectorAll('h1, .tagline, .follow, a.scroll-indicator, svg')) {
 			expect(part.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom + 0.5);
 		}
 		const root = document.documentElement;
@@ -302,6 +450,11 @@ describe('Availability', () => {
 		await mount(Availability);
 		const ids = Array.from(document.querySelectorAll('#availability > section')).map((s) => s.id);
 		expect(ids).toEqual(['freelance', 'job']);
+	});
+
+	it('has no logo of its own on the company build: the hero logo is the one', async () => {
+		await mount(Availability);
+		expect(document.querySelector('#availability svg.logo, #availability img')).toBeNull();
 	});
 
 	it('is the target of the scroll indicator: focusable, with room under the header', async () => {

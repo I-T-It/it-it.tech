@@ -8,6 +8,7 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { company } from '#lib/content/company.js';
 import { getContent } from '#lib/content/index.js';
+import { profiles, visibleProfiles } from '#lib/content/profiles.js';
 import { EMAIL_FALLBACK_TEXT } from '#lib/email.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
 import { chips, obstacles, socket } from '#lib/pcb/registry.svelte.js';
@@ -71,36 +72,65 @@ afterEach(async () => {
 const hero = () => document.querySelector<HTMLElement>('section#hero')!;
 
 describe('Hero', () => {
-	it('is the page heading with the name, then the English tagline and the personal lead', async () => {
+	it('is the page heading with the display name, then the English tagline, and no lead line', async () => {
 		const screen = await mount(Hero);
 		await expect
-			.element(screen.getByRole('heading', { level: 1 }))
-			.toHaveTextContent('Robbin Schepers');
+			.element(screen.getByRole('heading', { level: 1, name: 'Robbin "Roboroads" Schepers' }))
+			.toBeVisible();
+		expect(hero().querySelector('h1 .nick')!.textContent).toBe('Roboroads');
+		expect(getComputedStyle(hero().querySelector('h1 .nick')!).fontFamily).toContain('Fira Code');
 		const tagline = Array.from(hero().querySelectorAll<HTMLElement>('[lang]')).find(
 			(el) => el.textContent?.trim() === 'Professional Computer Nerd'
 		);
 		expect(tagline?.getAttribute('lang')).toBe('en');
-		await expect
-			.element(screen.getByText(content.nl.hero.lead.personal, { exact: true }))
-			.toBeVisible();
-		expect(hero().textContent).not.toContain(content.nl.hero.lead.company);
+		// The tagline says what he does; the personal page has no lead line either.
+		expect(hero().querySelector('.lead')).toBeNull();
 	});
 
-	it('has the English lead on the English page', async () => {
-		setLocale('en');
-		const screen = await mount(Hero);
-		await expect
-			.element(screen.getByText(content.en.hero.lead.personal, { exact: true }))
-			.toBeVisible();
-	});
+	for (const locale of ['nl', 'en'] as const) {
+		it(`says where to follow him online, with the handle set apart, in ${locale}`, async () => {
+			setLocale(locale);
+			await mount(Hero);
+			const follow = hero().querySelector<HTMLElement>('.follow')!;
+			expect(follow.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+				locale === 'nl'
+					? 'Volg me online, overal: @Roboroads'
+					: 'Follow me online, everywhere: @Roboroads'
+			);
+			expect(follow.querySelector('.handle')!.textContent).toBe(company.githubHandle);
+			expect(follow.querySelector('a')).toBeNull();
+			expect(obstacles()[0].contains(follow)).toBe(true);
+		});
+	}
 
-	it('has no CTAs: only the scroll indicator is a link', async () => {
+	it('has no CTAs: the links are the profile icons and the scroll indicator, no email', async () => {
 		await mount(Hero);
 		expect(hero().querySelectorAll('button, .cta, .email, [href^="mailto"]')).toHaveLength(0);
 		const links = Array.from(hero().querySelectorAll('a'));
-		expect(links.map((a) => a.getAttribute('href'))).toEqual(['#availability']);
+		expect(links.map((a) => a.getAttribute('href'))).toEqual([
+			...visibleProfiles().map((p) => p.url),
+			'#availability'
+		]);
 		expect(hero().lastElementChild).toBe(hero().querySelector('a.scroll-indicator'));
 	});
+
+	for (const locale of ['nl', 'en'] as const) {
+		it(`shows the ten profile icons with names and rel me in ${locale}`, async () => {
+			setLocale(locale);
+			const screen = await mount(Hero);
+			const on = locale === 'nl' ? 'Robbin op' : 'Robbin on';
+			const notice = locale === 'nl' ? '(externe site)' : '(external site)';
+			const row = hero().querySelector<HTMLElement>('ul.profiles')!;
+			expect(row.querySelectorAll('a')).toHaveLength(10);
+			for (const profile of profiles) {
+				const link = screen.getByRole('link', { name: `${on} ${profile.name} ${notice}` });
+				await expect.element(link).toHaveAttribute('href', profile.url);
+				expect(link.element().getAttribute('rel')).toBe('me noopener');
+				expect(link.element().getBoundingClientRect().width).toBeGreaterThanOrEqual(24);
+			}
+			expect(obstacles()[0].contains(row)).toBe(true);
+		});
+	}
 
 	it('shows the photo with its alt text, and no logo', async () => {
 		const screen = await mount(Hero);
@@ -267,6 +297,37 @@ describe('Hero power-up', () => {
 	});
 });
 
+describe('Hero focal point', () => {
+	it('makes the photo the biggest thing in the hero on a desktop window', async () => {
+		await page.viewport(1440, 900);
+		await mount(Hero, true);
+		const frame = socket()!.el.getBoundingClientRect();
+		const copy = obstacles()[0].getBoundingClientRect();
+		// A big frame, at least 400px a side, and taller than the whole text block under it.
+		expect(frame.width).toBeGreaterThanOrEqual(400);
+		expect(frame.height).toBeGreaterThan(copy.height);
+		// The photo itself is more than 320px a side, inside its pad ring.
+		const photo = hero().querySelector('img')!.getBoundingClientRect();
+		expect(photo.width).toBeGreaterThanOrEqual(320);
+	});
+
+	it('keeps the photo big on a short laptop window and the hero one window high', async () => {
+		await page.viewport(1280, 720);
+		await mount(Hero, true);
+		const frame = socket()!.el.getBoundingClientRect();
+		expect(frame.width).toBeGreaterThanOrEqual(280);
+		const box = hero().getBoundingClientRect();
+		expect(box.height).toBeCloseTo(720, 0);
+	});
+
+	it('is the only visual in the hero: no logo next to the photo', async () => {
+		await mount(Hero);
+		expect(hero().querySelector('svg')).not.toBeNull(); // the footprint outline
+		expect(hero().querySelector('svg.logo')).toBeNull();
+		expect(hero().querySelectorAll('img')).toHaveLength(1);
+	});
+});
+
 describe('Hero size', () => {
 	it('is at least the viewport high and starts at the top of the page', async () => {
 		await page.viewport(1440, 900);
@@ -295,7 +356,7 @@ describe('Hero size', () => {
 		expect(box.height).toBeGreaterThan(256);
 		expect(hero().scrollHeight).toBeLessThanOrEqual(hero().clientHeight);
 		for (const part of hero().querySelectorAll(
-			'h1, .tagline, .lead, a.scroll-indicator, .socket'
+			'h1, .tagline, .follow, a.scroll-indicator, .socket'
 		)) {
 			expect(part.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom + 0.5);
 		}
@@ -362,6 +423,34 @@ describe('Availability', () => {
 		expect(root.textContent).not.toContain(EMAIL_FALLBACK_TEXT);
 		expect(root.innerHTML).not.toContain(address);
 		expect(root.innerHTML).not.toContain(scheme);
+	});
+
+	it('shows I.T. It as a small logo in the freelance chip only, and names it', async () => {
+		await page.viewport(1280, 900);
+		const screen = await mount(Availability, true);
+		const logos = document.querySelectorAll<SVGElement>('#availability svg.logo');
+		expect(logos).toHaveLength(1);
+		expect(section('freelance').contains(logos[0])).toBe(true);
+		expect(section('job').querySelector('svg.logo')).toBeNull();
+		// Small and still: a mark next to the title, not a picture.
+		const box = logos[0].getBoundingClientRect();
+		expect(box.width).toBeGreaterThanOrEqual(80);
+		expect(box.width).toBeLessThanOrEqual(130);
+		expect(logos[0].classList.contains('animate')).toBe(false);
+		await expect.element(screen.getByRole('img', { name: content.nl.hero.logoAlt })).toBeVisible();
+		// The chip is still named by its h2.
+		expect(section('freelance').getAttribute('aria-labelledby')).toBe(
+			section('freelance').querySelector('h2')!.id
+		);
+	});
+
+	it('keeps the logo beside the title on a phone, without sideways scroll', async () => {
+		await page.viewport(320, 640);
+		await mount(Availability, true);
+		const logo = document.querySelector('#availability svg.logo')!.getBoundingClientRect();
+		expect(logo.right).toBeLessThanOrEqual(320);
+		const root = document.documentElement;
+		expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
 	});
 
 	it('still shows the freelance hours and what I.T. It takes on', async () => {
@@ -441,7 +530,7 @@ describe('the page together', () => {
 			const root = document.documentElement;
 			expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
 			const box = hero().getBoundingClientRect();
-			for (const part of hero().querySelectorAll('h1, .tagline, .lead, a.scroll-indicator')) {
+			for (const part of hero().querySelectorAll('h1, .tagline, .follow, a.scroll-indicator')) {
 				expect(part.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom + 0.5);
 			}
 		} finally {
@@ -457,6 +546,12 @@ describe('the page together', () => {
 			await render(component, { target });
 		}
 		expect(chips().map((c) => c.designator)).toEqual(['U1', 'U2', 'U3', 'U4', 'U9']);
+		// The photo leads the page; the only logo is the small one by the I.T. It chip.
+		const logos = Array.from(target.querySelectorAll<SVGElement>('svg.logo'));
+		expect(logos).toHaveLength(1);
+		expect(logos[0].getBoundingClientRect().width).toBeLessThan(
+			socket()!.el.getBoundingClientRect().width / 2
+		);
 		const html = target.innerHTML;
 		expect(html).not.toContain(address);
 		expect(html).not.toContain(scheme);
