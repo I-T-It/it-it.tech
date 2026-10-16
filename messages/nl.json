@@ -48,5 +48,8 @@
 	"skills_show_roles": "(toon rollen met deze vaardigheid)",
 	"talks_title": "Talks en workshops",
 	"education_title": "Opleiding en talen",
-	"contact_title": "Contact"
+	"contact_title": "Contact",
+	"not_found_title": "Pagina niet gevonden",
+	"not_found_text": "Dit adres bestaat niet op deze site, of de pagina is verplaatst.",
+	"not_found_home": "Naar de startpagina in het Nederlands"
 }

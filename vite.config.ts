@@ -54,10 +54,13 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
-			adapter: adapter({ pages: buildDir, assets: buildDir, fallback: '404.html', strict: true }),
-			// Absolute links: Paraglide's localizeHref needs the base path in the href it gets.
+			// No fallback: 404.html is the prerendered /not-found/ page (scripts/not-found.mjs), not
+			// the empty app shell of a single-page app.
+			adapter: adapter({ pages: buildDir, assets: buildDir, strict: true }),
+			// Absolute links: Paraglide's localizeHref needs the base path in the href it gets, and
+			// 404.html is served at every depth of the site, so its asset links cannot be relative.
 			paths: { base, relative: false },
-			prerender: { entries: ['/', '/en/'] }
+			prerender: { entries: ['/', '/en/', '/robots.txt', '/sitemap.xml', '/not-found/'] }
 		}),
 
 		paraglideVitePlugin(paraglideOptions(base))
