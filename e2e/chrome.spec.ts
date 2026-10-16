@@ -18,8 +18,8 @@ test.describe('header', () => {
 			await expect(brand.locator('svg.logo')).toBeVisible();
 			await expect(brand.locator('.wordmark')).toHaveCount(0);
 		} else {
-			await expect(brand).toHaveAccessibleName('Robbin Schepers, naar boven');
-			await expect(brand.locator('.wordmark')).toHaveText('Robbin Schepers');
+			await expect(brand).toHaveAccessibleName('Robbin "Roboroads" Schepers, naar boven');
+			await expect(brand.locator('.wordmark')).toHaveText('Robbin "Roboroads" Schepers');
 			await expect(brand.locator('svg')).toHaveCount(0);
 		}
 	});
@@ -296,24 +296,50 @@ test.describe('footer', () => {
 });
 
 test.describe('icons', () => {
-	test('links an ico, an svg and an apple touch icon that all load', async ({ page, request }) => {
-		await page.goto('./');
-		const hrefs = await page.evaluate(() =>
-			Array.from(
-				document.querySelectorAll<HTMLLinkElement>(
-					'link[rel~="icon"], link[rel="apple-touch-icon"]'
-				)
-			).map((link) => link.href)
-		);
-		expect(hrefs.map((href) => href.split('/').pop()).sort()).toEqual([
-			'apple-touch-icon.png',
-			'favicon.ico',
-			'favicon.svg'
-		]);
-		for (const href of hrefs) {
-			const response = await request.get(href);
-			expect(response.status(), href).toBe(200);
+	const files = ['apple-touch-icon.png', 'favicon.ico', 'favicon.svg'];
+
+	for (const path of ['./', 'en/']) {
+		test(`links an ico, an svg and an apple touch icon of its own variant, which load: ${path}`, async ({
+			page,
+			request
+		}, testInfo) => {
+			const site = testInfo.project.name;
+			await page.goto(path);
+			const hrefs = await page.evaluate(() =>
+				Array.from(
+					document.querySelectorAll<HTMLLinkElement>(
+						'link[rel~="icon"], link[rel="apple-touch-icon"]'
+					)
+				).map((link) => link.href)
+			);
+			expect(hrefs.map((href) => href.split('/icons/')[1]).sort()).toEqual(
+				files.map((file) => `${site}/${file}`)
+			);
+			for (const href of hrefs) {
+				const response = await request.get(href);
+				expect(response.status(), href).toBe(200);
+				// A real file, not an error page (the test server sends no type for an ico).
+				expect((await response.body()).length, href).toBeGreaterThan(100);
+			}
+		});
+	}
+
+	test('has only the icons of its own variant in the build, and answers /favicon.ico with them', async ({
+		page,
+		request,
+		baseURL
+	}, testInfo) => {
+		const site = testInfo.project.name;
+		const other = site === 'company' ? 'personal' : 'company';
+		for (const file of files) {
+			const response = await request.get(new URL(`icons/${other}/${file}`, baseURL).href);
+			expect(response.status(), `icons/${other}/${file}`).toBe(404);
 		}
+		const own = await request.get(new URL(`icons/${site}/favicon.ico`, baseURL).href);
+		const root = await request.get(new URL('favicon.ico', baseURL).href);
+		expect(root.status()).toBe(200);
+		expect((await root.body()).equals(await own.body())).toBe(true);
+		await page.goto('./');
 	});
 });
 

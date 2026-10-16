@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { company } from './company.js';
 import { en } from './en.js';
 import { getContent } from './index.js';
 import { nl } from './nl.js';
-import type { Job, Project, SiteContent } from './types.js';
+import type { Job, Project, SiteContent, TalkGiven, TalkOffer } from './types.js';
 
 const both: [string, SiteContent][] = [
 	['nl', nl],
@@ -89,11 +90,30 @@ describe('NL and EN parity', () => {
 	});
 
 	it('has the same talks, competences, education and languages', () => {
-		expect(nl.talks.talks).toHaveLength(9);
+		expect(nl.talks.offers).toHaveLength(4);
+		expect(nl.talks.given).toHaveLength(9);
 		expect(nl.competences.items).toHaveLength(4);
-		expect(en.talks.talks.map((t) => [t.id, t.date, t.url])).toEqual(
-			nl.talks.talks.map((t) => [t.id, t.date, t.url])
-		);
+		const offer = (o: TalkOffer) => [
+			o.id,
+			o.kind,
+			o.langs,
+			o.titleLang,
+			o.duration === undefined,
+			o.audience === undefined
+		];
+		expect(en.talks.offers.map(offer)).toEqual(nl.talks.offers.map(offer));
+		const given = (g: TalkGiven) => [
+			g.id,
+			g.offerId,
+			g.date,
+			g.url,
+			g.lang,
+			g.event === undefined,
+			g.title === undefined,
+			g.talk?.title,
+			g.talk?.lang
+		];
+		expect(en.talks.given.map(given)).toEqual(nl.talks.given.map(given));
 		expect(en.competences.items.map((c) => c.id)).toEqual(nl.competences.items.map((c) => c.id));
 		expect(en.educationLanguages.education.map((e) => [e.id, e.year])).toEqual(
 			nl.educationLanguages.education.map((e) => [e.id, e.year])
@@ -108,11 +128,10 @@ describe('NL and EN parity', () => {
 		expect(en.experience.jobs.map(facts)).toEqual(nl.experience.jobs.map(facts));
 	});
 
-	it('has both lead lines, both CTA labels and both page metas in each locale', () => {
+	it('has both CTA labels and both page metas in each locale, and no hero lead line', () => {
 		for (const [, c] of both) {
-			expect(c.hero.lead.company.length).toBeGreaterThan(20);
-			expect(c.hero.lead.personal.length).toBeGreaterThan(20);
-			expect(c.hero.lead.company).not.toBe(c.hero.lead.personal);
+			// The tagline "Professional Computer Nerd" says what he does; a lead line repeated it.
+			expect('lead' in c.hero).toBe(false);
 			expect(c.hero.cta.job.length).toBeGreaterThan(5);
 			expect(c.hero.cta.freelance.length).toBeGreaterThan(5);
 			expect(c.meta.company.title.length).toBeGreaterThan(10);
@@ -120,17 +139,29 @@ describe('NL and EN parity', () => {
 		}
 	});
 
+	it('describes the avatar that replaces the photo now and then, naming the handle', () => {
+		for (const [, c] of both) {
+			expect(c.hero.avatarAlt).toContain('Roboroads');
+			expect(c.hero.avatarAlt).not.toBe(c.hero.photoAlt);
+			expect(c.hero.avatarAlt.length).toBeGreaterThan(30);
+		}
+		expect(nl.hero.avatarAlt).not.toBe(en.hero.avatarAlt);
+	});
+
 	it('differs between EN and NL, except for names, tags, titles and the tagline', () => {
 		const enByPath = new Map(copy(en));
 		const sameAllowed = (path: string, value: string) =>
 			path.startsWith('profile.') ||
-			/\.id$/.test(path) ||
+			/\.(id|kind|lang|titleLang|offerId)$/.test(path) ||
+			/\.langs\[\d+\]$/.test(path) ||
 			/jobs\[\d+\]\.(organisation|title|source)$/.test(path) ||
 			/^experience\.labels\.sources\./.test(path) ||
 			/(jobs|projects)\[\d+\]\.tech\[\d+\]$/.test(path) ||
 			/projects\[\d+\]\.(title|status)$/.test(path) ||
 			/groups\[\d+\]\.(title|skills\[\d+\]\.title)$/.test(path) ||
-			/talks\[\d+\]\.title$/.test(path) ||
+			/^talks\.offers\[\d+\]\.title$/.test(path) ||
+			/^talks\.given\[\d+\]\.(event|talk\.title)$/.test(path) ||
+			/^talks\.labels\.kind\.(talk|workshop)$/.test(path) ||
 			/education\[\d+\]\.institution$/.test(path) ||
 			/^contact\.(title|labels\.(linkedin|github))$/.test(path) ||
 			path === 'experience.labels.via' ||
@@ -179,12 +210,12 @@ describe('cleaned up export', () => {
 		}
 	});
 
-	it('moves sign language to the languages block, with a level and a note', () => {
+	it('moves sign language to the languages block, with a level and no note (the LEDs say it)', () => {
 		for (const [, c] of both) {
 			expect(allSkills(c).some((s) => s.id === 'ngt')).toBe(false);
 			const ngt = c.educationLanguages.languages.find((l) => l.id === 'ngt');
 			expect(ngt?.level).toBe(2);
-			expect(ngt?.note?.length).toBeGreaterThan(2);
+			expect(ngt?.note).toBeUndefined();
 			expect(c.educationLanguages.languages.map((l) => l.id)).toEqual(['nl', 'en', 'ngt']);
 			expect(c.educationLanguages.languages.slice(0, 2).map((l) => l.level)).toEqual([5, 5]);
 		}
@@ -513,23 +544,242 @@ describe('projects', () => {
 	});
 });
 
-describe('talks and education', () => {
-	it('has valid dates, newest first, and links only as valid https', () => {
+describe('talks', () => {
+	it('has valid dates in the history, newest first, and links only as valid https', () => {
 		for (const [, c] of both) {
-			const dates = c.talks.talks.map((t) => t.date);
+			const dates = c.talks.given.map((t) => t.date);
 			for (const d of dates) {
 				expect(d).toMatch(DATE);
 				expect(Number.isNaN(new Date(d).getTime())).toBe(false);
 				expect(d.slice(0, 7) <= EXPORT_MONTH).toBe(true);
 			}
 			expect(dates).toEqual([...dates].sort().reverse());
-			const urls = c.talks.talks.flatMap((t) => (t.url ? [t.url] : []));
+			const urls = c.talks.given.flatMap((t) => (t.url ? [t.url] : []));
 			expect(urls).toHaveLength(4);
 			for (const u of urls) expect(new URL(u).protocol).toBe('https:');
 			expect(new Set(urls).size).toBe(urls.length);
 		}
 	});
 
+	it('has the catalogue of three talks and one workshop, with the titles as given', () => {
+		for (const [, c] of both) {
+			// Per offer: the kind, the languages it is given in, and the language of its title.
+			expect(c.talks.offers.map((o) => [o.id, o.kind, o.langs, o.titleLang])).toEqual([
+				['php-2005-called', 'talk', ['nl', 'en'], 'en'],
+				['frontend-love', 'talk', ['nl', 'en'], 'en'],
+				['flutter-talk', 'talk', ['nl', 'en'], 'en'],
+				['flutter-workshop', 'workshop', ['nl', 'en'], 'nl']
+			]);
+		}
+		const titles = (c: SiteContent) => c.talks.offers.map((o) => o.title);
+		expect(titles(nl)).toEqual([
+			'2005 Called! They Want Your Opinion About PHP Back!',
+			'Falling in Love with Front-end all over again',
+			'Writing multi-platform apps with native performance',
+			'Workshop Flutter'
+		]);
+		// The workshop has a Dutch name, so the English page gets it in English.
+		expect(titles(en)).toEqual([
+			'2005 Called! They Want Your Opinion About PHP Back!',
+			'Falling in Love with Front-end all over again',
+			'Writing multi-platform apps with native performance',
+			'Flutter workshop'
+		]);
+	});
+
+	it('has what each offer is about, from the descriptions of the talks', () => {
+		const summary = (c: SiteContent, id: string) =>
+			c.talks.offers.find((o) => o.id === id)!.summary;
+		expect(summary(nl, 'php-2005-called')).toMatch(/PHP.*slecht.*nog steeds/);
+		expect(summary(en, 'php-2005-called')).toMatch(/PHP.*bad.*still/);
+		for (const c of [nl, en]) {
+			for (const framework of ['Svelte', 'Angular', 'React', 'Vue.js']) {
+				expect(summary(c, 'frontend-love')).toContain(framework);
+			}
+			expect(summary(c, 'flutter-talk')).toContain('Flutter');
+			expect(summary(c, 'flutter-workshop')).toContain('Flutter');
+		}
+		expect(summary(nl, 'flutter-workshop')).toMatch(/eerste/);
+		expect(summary(en, 'flutter-workshop')).toMatch(/first/);
+	});
+
+	it('links every occurrence to the offer it was, so that "last given" is right', () => {
+		for (const [, c] of both) {
+			expect(c.talks.given.map((g) => [g.id, g.offerId])).toEqual([
+				['php-2005-called', 'php-2005-called'],
+				['frontend-js-eindhoven', 'frontend-love'],
+				['frontend-festival', 'frontend-love'],
+				['flutter-ordina-noord', 'flutter-workshop'],
+				['flutter-frontmania', 'flutter-talk'],
+				// The demo in the talk of Remi Appels is not a talk of his own.
+				['services-join-belgie', undefined],
+				// The training at Ordina Belgium counts as a time the workshop was given.
+				['flutter-ordina-belgie', 'flutter-workshop'],
+				['flutter-code-comedy', 'flutter-workshop'],
+				['svelte-nieuwegein', 'frontend-love']
+			]);
+		}
+	});
+
+	it('has unique ids, a summary on every offer and no empty optional field', () => {
+		for (const [, c] of both) {
+			const offerIds = c.talks.offers.map((o) => o.id);
+			expect(new Set(offerIds).size).toBe(offerIds.length);
+			const givenIds = c.talks.given.map((g) => g.id);
+			expect(new Set(givenIds).size).toBe(givenIds.length);
+			for (const o of c.talks.offers) {
+				expect(['talk', 'workshop']).toContain(o.kind);
+				// At least one language, each of the two at most once.
+				expect(o.langs.length, o.id).toBeGreaterThan(0);
+				expect(new Set(o.langs).size, o.id).toBe(o.langs.length);
+				for (const lang of o.langs) expect(['nl', 'en'], o.id).toContain(lang);
+				expect(['nl', 'en']).toContain(o.titleLang);
+				expect(o.title.length).toBeGreaterThan(3);
+				expect(o.summary.length).toBeGreaterThan(20);
+				// An optional field is left out until it is known, never filled with a guess.
+				for (const field of [o.duration, o.audience]) expect(field?.length ?? 1).toBeGreaterThan(0);
+			}
+		}
+	});
+
+	it('points every occurrence at an offer, or gives it a title of its own', () => {
+		for (const [, c] of both) {
+			const offerIds = new Set(c.talks.offers.map((o) => o.id));
+			for (const g of c.talks.given) {
+				if (g.offerId !== undefined) expect(offerIds.has(g.offerId), g.id).toBe(true);
+				else expect(g.title?.length, g.id).toBeGreaterThan(3);
+			}
+			// Every offer of the seed was given at least once; the history is where it comes from.
+			const used = new Set(c.talks.given.map((g) => g.offerId));
+			for (const id of offerIds) expect(used.has(id), id).toBe(true);
+		}
+	});
+
+	it('shows the Services talk as the talk of someone else, with a Flutter demo in it', () => {
+		for (const [, c] of both) {
+			// It is not an offer: Remi Appels gives the talk, the demo in it is taken from the workshop.
+			expect(c.talks.offers.map((o) => o.id)).not.toContain('services-pocket');
+			const given = c.talks.given.find((g) => g.id === 'services-join-belgie')!;
+			expect(given.offerId).toBeUndefined();
+			expect(given.date).toBe('2022-10-04');
+			expect(given.talk).toEqual({ title: 'Services down to your pocket', lang: 'en' });
+			expect(given.title).toContain('{talk}');
+			expect(given.title).toMatch(/Flutter/);
+			expect(given.title).toContain('Remi Appels');
+		}
+	});
+
+	it('has a talk of someone else exactly where the title has a place for it', () => {
+		for (const [, c] of both) {
+			for (const g of c.talks.given) {
+				expect(g.title?.includes('{talk}') ?? false, g.id).toBe(g.talk !== undefined);
+				if (g.talk) {
+					expect(g.talk.title.length, g.id).toBeGreaterThan(3);
+					expect(['nl', 'en'], g.id).toContain(g.talk.lang);
+					expect(g.title!.split('{talk}'), g.id).toHaveLength(2);
+				}
+			}
+		}
+	});
+
+	it('keeps an English title as it is and translates the others', () => {
+		for (const o of nl.talks.offers) {
+			const english = en.talks.offers.find((x) => x.id === o.id)!;
+			if (o.titleLang === 'en') expect(english.title, o.id).toBe(o.title);
+			else expect(english.title, o.id).not.toBe(o.title);
+		}
+	});
+
+	it('has the Flutter talk given in Dutch at FrontMania, under its English title', () => {
+		for (const [, c] of both) {
+			const talk = c.talks.offers.find((o) => o.id === 'flutter-talk')!;
+			expect(talk.title).toBe('Writing multi-platform apps with native performance');
+			expect(talk.titleLang).toBe('en');
+			const given = c.talks.given.find((g) => g.id === 'flutter-frontmania')!;
+			expect(given.offerId).toBe('flutter-talk');
+			expect(given.lang).toBe('nl');
+			// The other occurrences have no language of their own yet.
+			expect(c.talks.given.filter((g) => g.lang !== undefined).map((g) => g.id)).toEqual([
+				'php-2005-called',
+				'flutter-frontmania'
+			]);
+		}
+	});
+
+	it('has every talk and workshop in Dutch or English, in that order', () => {
+		for (const [, c] of both) {
+			for (const o of c.talks.offers) expect(o.langs, o.id).toEqual(['nl', 'en']);
+		}
+	});
+
+	it('has one shared note on the languages and the slides, for the catalogue', () => {
+		expect(nl.talks.labels.offersNote).toBe(
+			'Alle talks en workshops geef ik in het Nederlands of Engels. De slides zijn in het Engels. Vertalen kan als dat nodig is.'
+		);
+		expect(en.talks.labels.offersNote).toBe(
+			'I give every talk and workshop in Dutch or English. The slides are in English and can be translated if needed.'
+		);
+	});
+
+	it('has the PHP talk given at Sopra Steria in June 2024, in Dutch, under its English title', () => {
+		for (const [, c] of both) {
+			const given = c.talks.given.find((g) => g.id === 'php-2005-called')!;
+			expect(given.offerId).toBe('php-2005-called');
+			// Only the month is known, and there is no page of the event.
+			expect(given.date).toBe('2024-06');
+			expect(given.event).toBe('Sopra Steria');
+			expect(given.url).toBeUndefined();
+			expect(given.lang).toBe('nl');
+			const offer = c.talks.offers.find((o) => o.id === 'php-2005-called')!;
+			expect(offer.titleLang).toBe('en');
+		}
+	});
+
+	it('has a known language only, never a guess, on an occurrence', () => {
+		for (const [, c] of both) {
+			for (const g of c.talks.given) {
+				if (g.lang !== undefined) expect(['nl', 'en'], g.id).toContain(g.lang);
+			}
+		}
+	});
+
+	it('has the labels the section needs, with their placeholders', () => {
+		for (const [, c] of both) {
+			const { labels } = c.talks;
+			expect(labels.offers.length).toBeGreaterThan(3);
+			expect(labels.given.length).toBeGreaterThan(3);
+			expect(labels.times.one).toContain('{last}');
+			expect(labels.times.many).toContain('{last}');
+			expect(labels.times.many).toContain('{count}');
+			expect(Object.keys(labels.language).sort()).toEqual(['en', 'nl']);
+			// A date can be a month ("Jun 2024"), so the line has no "op" or "on" before it.
+			expect(labels.times.one).not.toMatch(/\b(op|on)\b/);
+			expect(labels.times.many).not.toMatch(/\b(op|on)\b/);
+		}
+		expect(nl.talks.labels.offers).toBe('Klaar om te geven');
+		expect(nl.talks.labels.given).toBe('Gegeven');
+		expect(en.talks.labels.offers).toBe('Ready to give');
+		expect(en.talks.labels.given).toBe('Given');
+	});
+
+	it('has no booking label and no mail subject: the offers are information only', () => {
+		for (const [, c] of both) {
+			expect(Object.keys(c.talks.labels).sort()).toEqual([
+				'facts',
+				'given',
+				'kind',
+				'language',
+				'offers',
+				'offersNote',
+				'times'
+			]);
+			// A card names a duration and an audience; the language is in the shared note.
+			expect(Object.keys(c.talks.labels.facts).sort()).toEqual(['audience', 'duration']);
+		}
+	});
+});
+
+describe('education', () => {
 	it('has the course of the export', () => {
 		for (const [, c] of both) {
 			expect(c.educationLanguages.education).toHaveLength(1);
@@ -554,12 +804,35 @@ describe('variant copy', () => {
 		expect(nl.availability.job.title).toBe('Overdag: in loondienst');
 	});
 
-	it('names what I.T. It takes on', () => {
+	it('names what I.T. It takes on, without tying it to a tech stack', () => {
 		for (const [, c] of both) {
-			const takes = c.availability.freelance.takesOn.join(' ');
-			for (const word of ['Laravel', 'Svelte', 'Vue', 'Flutter']) expect(takes).toContain(word);
 			expect(c.availability.freelance.takesOn.length).toBeGreaterThanOrEqual(4);
+			// Robbin is not tied to Laravel or Svelte: the chip and the company meta say that the
+			// solution is found together, and none of them lists a stack.
+			const copy = [
+				...c.availability.freelance.body,
+				...c.availability.freelance.takesOn,
+				c.meta.company.title,
+				c.meta.company.description
+			].join(' ');
+			expect(copy).not.toMatch(/laravel|svelte|vue|flutter|react|angular/i);
 		}
+		expect(nl.availability.freelance.body.join(' ')).toMatch(/samen/);
+		expect(en.availability.freelance.body.join(' ')).toMatch(/together/);
+	});
+
+	it('offers plain computer help: a printer, email, for people who are not used to technology', () => {
+		const help = (c: typeof nl) =>
+			[...c.availability.freelance.body, ...c.availability.freelance.takesOn].join(' ');
+		expect(help(nl)).toMatch(/printer/);
+		expect(help(nl)).toMatch(/e-mail/);
+		expect(help(nl)).toMatch(/ouderen/);
+		expect(help(en)).toMatch(/printer/);
+		expect(help(en)).toMatch(/email/);
+		expect(help(en)).toMatch(/older people/);
+		// The company meta mentions it too.
+		expect(nl.meta.company.description).toMatch(/computer/);
+		expect(en.meta.company.description).toMatch(/computer/);
 	});
 
 	it('has the freelance mail subject of the plan, without an address in it', () => {
@@ -569,17 +842,25 @@ describe('variant copy', () => {
 
 	it('leads the company page with I.T. It and the personal page with Robbin', () => {
 		for (const [, c] of both) {
-			expect(c.profile.name).toBe('Robbin Schepers');
+			// The h1 is the display name, the same in both languages and on both builds.
+			expect(c.profile.name).toBe(company.displayName);
+			expect(c.meta.personal.title.startsWith(company.displayName)).toBe(true);
+			expect(c.meta.personal.description.startsWith(company.displayName)).toBe(true);
 			expect(c.profile.tagline).toBe('Professional Computer Nerd');
 			expect(c.meta.company.title.startsWith('I.T. It')).toBe(true);
-			expect(c.meta.company.title).toContain('Robbin Schepers');
-			expect(c.meta.personal.title.startsWith('Robbin Schepers')).toBe(true);
-			expect(c.meta.personal.title).toContain('I.T. It');
+			expect(c.meta.personal.title.startsWith('Robbin "Roboroads" Schepers')).toBe(true);
 			expect(c.meta.personal.description).toContain('I.T. It');
 			expect(c.meta.company.description).toContain('I.T. It');
-			expect(c.hero.lead.company).toContain('I.T. It');
-			expect(c.hero.lead.personal).toContain('I.T. It');
 		}
+	});
+
+	it('titles the pages the way the user wrote them: a name or company, a hyphen, a line', () => {
+		expect(nl.meta.company.title).toBe('I.T. It - Voor alles met stekkers');
+		expect(en.meta.company.title).toBe('I.T. It - For everything with a plug');
+		expect(nl.meta.personal.title).toBe(
+			'Robbin "Roboroads" Schepers - Professionele Computer Nerd'
+		);
+		expect(en.meta.personal.title).toBe('Robbin "Roboroads" Schepers - Professional Computer Nerd');
 	});
 
 	it('keeps titles and descriptions within search result lengths', () => {

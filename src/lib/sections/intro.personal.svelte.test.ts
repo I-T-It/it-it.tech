@@ -8,8 +8,11 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { company } from '#lib/content/company.js';
 import { getContent } from '#lib/content/index.js';
+import { profiles, visibleProfiles } from '#lib/content/profiles.js';
 import { EMAIL_FALLBACK_TEXT } from '#lib/email.js';
+import { glitch } from '#lib/glitch/state.svelte.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
+import { SOCKET_DRAW_MS } from '#lib/pcb/growth.js';
 import { chips, obstacles, socket } from '#lib/pcb/registry.svelte.js';
 import Availability from './Availability.svelte';
 import Contact from './Contact.svelte';
@@ -71,50 +74,157 @@ afterEach(async () => {
 const hero = () => document.querySelector<HTMLElement>('section#hero')!;
 
 describe('Hero', () => {
-	it('is the page heading with the name, then the English tagline and the personal lead', async () => {
+	it('is the page heading with the display name, then the English tagline, and no lead line', async () => {
 		const screen = await mount(Hero);
 		await expect
-			.element(screen.getByRole('heading', { level: 1 }))
-			.toHaveTextContent('Robbin Schepers');
+			.element(screen.getByRole('heading', { level: 1, name: 'Robbin "Roboroads" Schepers' }))
+			.toBeVisible();
+		expect(hero().querySelector('h1 .nick')!.textContent).toBe('Roboroads');
+		expect(getComputedStyle(hero().querySelector('h1 .nick')!).fontFamily).toContain('Fira Code');
 		const tagline = Array.from(hero().querySelectorAll<HTMLElement>('[lang]')).find(
 			(el) => el.textContent?.trim() === 'Professional Computer Nerd'
 		);
 		expect(tagline?.getAttribute('lang')).toBe('en');
-		await expect
-			.element(screen.getByText(content.nl.hero.lead.personal, { exact: true }))
-			.toBeVisible();
-		expect(hero().textContent).not.toContain(content.nl.hero.lead.company);
+		// The tagline says what he does; the personal page has no lead line either.
+		expect(hero().querySelector('.lead')).toBeNull();
 	});
 
-	it('has the English lead on the English page', async () => {
-		setLocale('en');
-		const screen = await mount(Hero);
-		await expect
-			.element(screen.getByText(content.en.hero.lead.personal, { exact: true }))
-			.toBeVisible();
-	});
+	for (const locale of ['nl', 'en'] as const) {
+		it(`says where to follow him online, with the handle set apart, in ${locale}`, async () => {
+			setLocale(locale);
+			await mount(Hero);
+			const follow = hero().querySelector<HTMLElement>('.follow')!;
+			expect(follow.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+				locale === 'nl'
+					? 'Volg me online, overal: @Roboroads'
+					: 'Follow me online, everywhere: @Roboroads'
+			);
+			expect(follow.querySelector('.handle')!.textContent).toBe(company.githubHandle);
+			expect(follow.querySelector('a')).toBeNull();
+			expect(obstacles()[0].contains(follow)).toBe(true);
+		});
+	}
 
-	it('has no CTAs: only the scroll indicator is a link', async () => {
+	it('has no CTAs: the links are the profile icons and the scroll indicator, no email', async () => {
 		await mount(Hero);
 		expect(hero().querySelectorAll('button, .cta, .email, [href^="mailto"]')).toHaveLength(0);
 		const links = Array.from(hero().querySelectorAll('a'));
-		expect(links.map((a) => a.getAttribute('href'))).toEqual(['#availability']);
+		expect(links.map((a) => a.getAttribute('href'))).toEqual([
+			...visibleProfiles().map((p) => p.url),
+			'#availability'
+		]);
 		expect(hero().lastElementChild).toBe(hero().querySelector('a.scroll-indicator'));
 	});
+
+	for (const locale of ['nl', 'en'] as const) {
+		it(`shows the ten profile icons with names and rel me in ${locale}`, async () => {
+			setLocale(locale);
+			const screen = await mount(Hero);
+			const on = locale === 'nl' ? 'Robbin op' : 'Robbin on';
+			const notice = locale === 'nl' ? '(externe site)' : '(external site)';
+			const row = hero().querySelector<HTMLElement>('ul.profiles')!;
+			expect(row.querySelectorAll('a')).toHaveLength(10);
+			for (const profile of profiles) {
+				const link = screen.getByRole('link', { name: `${on} ${profile.name} ${notice}` });
+				await expect.element(link).toHaveAttribute('href', profile.url);
+				expect(link.element().getAttribute('rel')).toBe('me noopener');
+				expect(link.element().getBoundingClientRect().width).toBeGreaterThanOrEqual(24);
+			}
+			expect(obstacles()[0].contains(row)).toBe(true);
+		});
+	}
 
 	it('shows the photo with its alt text, and no logo', async () => {
 		const screen = await mount(Hero);
 		const photo = screen.getByRole('img', { name: content.nl.hero.photoAlt });
 		await expect.element(photo).toBeVisible();
 		expect(hero().querySelector('svg.logo')).toBeNull();
-		const img = hero().querySelector('img')!;
-		await expect.poll(() => img.complete && img.naturalWidth).toBeGreaterThan(0);
 	});
+
+	// Not a wait for the image to load: how fast the dev server makes the AVIF, WebP and JPEG
+	// versions varies, and the <img> load event with it. Asking for each file proves that it exists
+	// and is served as an image, with no timing in the assertion.
+	it('offers the photo as AVIF and WebP with a JPEG behind them, and every file is served', async () => {
+		await mount(Hero);
+		const picture = hero().querySelector('picture')!;
+		const types = Array.from(picture.querySelectorAll('source')).map((s) => s.type);
+		expect(types).toEqual(expect.arrayContaining(['image/avif', 'image/webp']));
+
+		const img = picture.querySelector('img')!;
+		expect(img.getAttribute('src')).toBeTruthy();
+		expect(img.getAttribute('width')).toBeTruthy();
+		expect(img.getAttribute('height')).toBeTruthy();
+
+		const files = [
+			img.getAttribute('src')!,
+			...Array.from(picture.querySelectorAll('source')).map(
+				(s) => s.getAttribute('srcset')!.split(',')[0].trim().split(' ')[0]
+			)
+		];
+		expect(files.length).toBeGreaterThanOrEqual(3);
+		for (const file of files) {
+			const response = await fetch(new URL(file, document.baseURI));
+			expect(response.ok, file).toBe(true);
+			expect(response.headers.get('content-type'), file).toMatch(/^image\//);
+		}
+	}, 30_000);
 
 	it('says the alt text in English too', async () => {
 		setLocale('en');
 		const screen = await mount(Hero);
 		await expect.element(screen.getByRole('img', { name: content.en.hero.photoAlt })).toBeVisible();
+	});
+
+	it('asks for no avatar until the glitch starts, and shows no switch either', async () => {
+		await mount(Hero);
+		expect(hero().querySelectorAll('picture')).toHaveLength(1);
+		expect(hero().querySelector('img.avatar')).toBeNull();
+		expect(hero().querySelector('button')).toBeNull();
+		expect(hero().querySelector('[data-glitch]')).toBeNull();
+	});
+
+	// Like the photo: the avatar is offered as AVIF and WebP with a PNG behind them, and every file
+	// is served. It is hidden from screen readers until a swap shows it.
+	it('offers the avatar as AVIF and WebP once it is mounted, and every file is served', async () => {
+		const screen = await mount(Hero);
+		glitch.armed = true;
+		await vi.waitFor(() => expect(hero().querySelectorAll('picture')).toHaveLength(2));
+		const picture = hero().querySelector<HTMLElement>('img.avatar')!.closest('picture')!;
+		const types = Array.from(picture.querySelectorAll('source')).map((s) => s.type);
+		expect(types).toEqual(expect.arrayContaining(['image/avif', 'image/webp']));
+
+		const img = picture.querySelector('img')!;
+		expect(img.getAttribute('src')).toBeTruthy();
+		expect(img.getAttribute('width')).toBeTruthy();
+		expect(img.getAttribute('height')).toBeTruthy();
+		expect(img.getAttribute('decoding')).toBe('async');
+		expect(img.getAttribute('fetchpriority')).toBe('low');
+		expect(img.getAttribute('aria-hidden')).toBe('true');
+		expect(img.getAttribute('alt')).toBe(content.nl.hero.avatarAlt);
+
+		const files = [
+			img.getAttribute('src')!,
+			...Array.from(picture.querySelectorAll('source')).map(
+				(s) => s.getAttribute('srcset')!.split(',')[0].trim().split(' ')[0]
+			)
+		];
+		expect(files.length).toBeGreaterThanOrEqual(3);
+		for (const file of files) {
+			const response = await fetch(new URL(file, document.baseURI));
+			expect(response.ok, file).toBe(true);
+			expect(response.headers.get('content-type'), file).toMatch(/^image\//);
+		}
+		// Still the photo alone for a screen reader.
+		await expect.element(screen.getByRole('img', { name: content.nl.hero.photoAlt })).toBeVisible();
+		expect(screen.getByRole('img').elements()).toHaveLength(1);
+	}, 60_000);
+
+	it('says the avatar alt text in English too', async () => {
+		setLocale('en');
+		await mount(Hero);
+		glitch.armed = true;
+		await vi.waitFor(() => expect(hero().querySelector('img.avatar')).not.toBeNull());
+		expect(hero().querySelector('img.avatar')!.getAttribute('alt')).toBe(content.en.hero.avatarAlt);
 	});
 
 	it('does not hide the photo from screen readers, and hides the footprint', async () => {
@@ -183,6 +293,27 @@ describe('Hero socket and obstacle', () => {
 		expect(list[0].contains(socket()!.el)).toBe(false);
 	});
 
+	it('puts the stop switch on the corner pad of the footprint, outside the die, and it is no obstacle', async () => {
+		await mount(Hero);
+		glitch.armed = true;
+		await vi.waitFor(() => expect(hero().querySelector('button.glitch-toggle')).not.toBeNull());
+		const toggle = hero().querySelector<HTMLElement>('button.glitch-toggle')!;
+		const frame = socket()!.el;
+		expect(frame.contains(toggle)).toBe(true);
+		// The die clips its content, so the switch is next to it, not in it.
+		expect(frame.querySelector('.die')!.contains(toggle)).toBe(false);
+		expect(frame.querySelector('.pads')!.contains(toggle)).toBe(false);
+		const box = toggle.getBoundingClientRect();
+		const outer = frame.getBoundingClientRect();
+		const cell = outer.width / 11;
+		expect(box.left + box.width / 2).toBeCloseTo(outer.right - cell / 2, 0);
+		expect(box.top + box.height / 2).toBeCloseTo(outer.bottom - cell / 2, 0);
+		// The text block stays the only obstacle; the board keeps the socket's corner clear anyway.
+		expect(obstacles()).toHaveLength(1);
+		expect(obstacles()[0].contains(toggle)).toBe(false);
+		expect(hero().querySelectorAll('button')).toHaveLength(1);
+	});
+
 	it('leaves a corridor between socket and text for the traces that come in from below', async () => {
 		await mount(Hero);
 		const gap =
@@ -227,17 +358,171 @@ describe('Hero power-up', () => {
 		}
 	});
 
-	it('is static under reduced motion: the ports are lit from the first frame', async () => {
-		document.documentElement.classList.add('reduced');
+	it('is static under reduced motion: the ports are lit and the photo shown from the first frame', async () => {
+		document.documentElement.classList.add('reduced', 'js');
 		try {
 			await mount(Hero);
 			expect(heroAnimations()).toEqual([]);
+			expect(getComputedStyle(hero().querySelector('.die')!).maskImage).toBe('none');
 			for (const port of socket()!.ports()) {
 				expect(getComputedStyle(port).boxShadow).not.toBe('none');
 			}
+			for (const pad of hero().querySelectorAll('.pads .pad')) {
+				expect(getComputedStyle(pad).opacity).toBe('1');
+			}
 		} finally {
-			document.documentElement.classList.remove('reduced');
+			document.documentElement.classList.remove('reduced', 'js');
 		}
+	});
+
+	it('shows the whole frame from the first frame without scripts', async () => {
+		await mount(Hero);
+		for (const pad of hero().querySelectorAll('.pads .pad')) {
+			expect(getComputedStyle(pad).opacity).toBe('1');
+		}
+		const courtyard = hero().querySelector<SVGElement>('.courtyard')!;
+		expect(courtyard.getAnimations({ subtree: true })).toHaveLength(0);
+		expect(getComputedStyle(courtyard).maskImage).toBe('none');
+	});
+
+	it('marks two ports, one on each side, for the lead traces of the board', async () => {
+		await mount(Hero);
+		const leads = socket()!
+			.ports()
+			.filter((port) => port.hasAttribute('data-lead'));
+		expect(leads.map((port) => port.style.gridColumn).sort()).toEqual(['1', '11']);
+	});
+
+	it('draws the outline in two halves, each from where a lead touches it', async () => {
+		await mount(Hero);
+		const halves = [...hero().querySelectorAll<SVGPolylineElement>('.courtyard .outline')];
+		expect(halves).toHaveLength(2);
+		const leads = socket()!
+			.ports()
+			.filter((port) => port.hasAttribute('data-lead'));
+		const rowOf = (port: HTMLElement) => ((Number(port.style.gridRow) - 0.5) / 11) * 100;
+		const left = leads.find((port) => port.style.gridColumn === '1')!;
+		const right = leads.find((port) => port.style.gridColumn === '11')!;
+		const first = (half: SVGPolylineElement) => half.points.getItem(0);
+		expect(first(halves[0]).x).toBeCloseTo(0.5);
+		expect(first(halves[0]).y).toBeCloseTo(rowOf(left), 1);
+		expect(first(halves[1]).x).toBeCloseTo(99.5);
+		expect(first(halves[1]).y).toBeCloseTo(rowOf(right), 1);
+		// Each half ends where the other starts: together they are the whole outline.
+		const last = (half: SVGPolylineElement) => half.points.getItem(half.points.numberOfItems - 1);
+		expect(last(halves[0])).toMatchObject({ x: first(halves[1]).x, y: first(halves[1]).y });
+		expect(last(halves[1])).toMatchObject({ x: first(halves[0]).x, y: first(halves[0]).y });
+	});
+
+	describe('with scripts', () => {
+		afterEach(() => document.documentElement.classList.remove('js'));
+
+		it('waits for the board to power the socket, then draws the outline and lights the ports', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			const courtyard = hero().querySelector<SVGElement>('.courtyard')!;
+			// Waiting: the outline is masked out entirely, from both contact points.
+			expect(getComputedStyle(courtyard).animationDelay).toBe('6s');
+			expect(getComputedStyle(courtyard).getPropertyValue('--reveal').trim()).toBe('-10%');
+			socket()!.el.setAttribute('data-power', 'on');
+			expect(getComputedStyle(courtyard).animationName).toMatch(/outline-reveal-powered/);
+			expect(getComputedStyle(courtyard).animationDelay).toBe('0s');
+			const port = socket()!.ports()[0];
+			expect(getComputedStyle(port).animationName).toMatch(/port-on-powered/);
+		});
+
+		it('keeps the pad ring dark until the leads connect, then lights it in from where they touch', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			const pads = [...hero().querySelectorAll<HTMLElement>('.pads .pad')];
+			// Waiting: every pad, the pin-1 mark too, is out of sight.
+			for (const pad of pads) expect(getComputedStyle(pad).opacity).toBe('0');
+			socket()!.el.setAttribute('data-power', 'on');
+			const start = (pad: HTMLElement) =>
+				(pad.getAnimations() as CSSAnimation[])
+					.filter((a) => /pad-in-powered/.test(a.animationName))
+					.map((a) => Number(a.effect!.getComputedTiming().delay))[0];
+			for (const pad of pads) expect(start(pad), pad.style.gridArea).toBeGreaterThanOrEqual(0);
+			// The pads at the contact points light first, the ones furthest round the ring last.
+			const lead = pads.find((pad) => pad.hasAttribute('data-lead'))!;
+			const far = pads.find((pad) => pad.style.gridRow === '11' && pad.style.gridColumn === '11')!;
+			expect(start(lead)).toBeLessThan(start(far));
+			for (const pad of pads) for (const a of pad.getAnimations()) a.finish();
+			for (const pad of pads) expect(getComputedStyle(pad).opacity).toBe('1');
+		});
+
+		it('keeps the photo dark until the leads connect, then etches it in from where they touch', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			const die = hero().querySelector<HTMLElement>('.die')!;
+			// Waiting: the etch has not begun, nothing of the photo shows.
+			expect(getComputedStyle(die).animationDelay).toBe('6s');
+			expect(getComputedStyle(die).getPropertyValue('--etch').trim()).toBe('-14%');
+			expect(getComputedStyle(die).maskImage).toContain('radial-gradient');
+			socket()!.el.setAttribute('data-power', 'on');
+			expect(getComputedStyle(die).animationName).toMatch(/etch-powered/);
+			const etch = die
+				.getAnimations()
+				.find((a) => /etch-powered/.test((a as CSSAnimation).animationName))!;
+			etch.finish();
+			expect(getComputedStyle(die).getPropertyValue('--etch').trim()).toBe('150%');
+		});
+
+		it('settles the photo as the frame is etched in, though the photo is the <img> of a component of its own', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			const photo = hero().querySelector<HTMLElement>('.die img.photo')!;
+			expect(getComputedStyle(photo).animationName).toBe('none');
+			socket()!.el.setAttribute('data-power', 'on');
+			expect(getComputedStyle(photo).animationName).toMatch(/settle/);
+			// It is still the full frame: the photo fills the die inside its 1px edge.
+			const die = hero().querySelector('.die')!.getBoundingClientRect();
+			const box = photo.getBoundingClientRect();
+			expect(box.width).toBeCloseTo(die.width - 2, 0);
+			expect(box.height).toBeCloseTo(die.height - 2, 0);
+		});
+
+		it('is done drawing when the board is: within the time the board gives it', async () => {
+			document.documentElement.classList.add('js');
+			await mount(Hero);
+			socket()!.el.setAttribute('data-power', 'on');
+			const ends = socket()!
+				.el.getAnimations({ subtree: true })
+				.map((animation) => Number(animation.effect!.getComputedTiming().endTime));
+			expect(ends.length).toBeGreaterThan(0);
+			expect(Math.max(...ends)).toBeLessThanOrEqual(SOCKET_DRAW_MS);
+		});
+	});
+});
+
+describe('Hero focal point', () => {
+	it('makes the photo the biggest thing in the hero on a desktop window', async () => {
+		await page.viewport(1440, 900);
+		await mount(Hero, true);
+		const frame = socket()!.el.getBoundingClientRect();
+		const copy = obstacles()[0].getBoundingClientRect();
+		// A big frame, at least 400px a side, and taller than the whole text block under it.
+		expect(frame.width).toBeGreaterThanOrEqual(400);
+		expect(frame.height).toBeGreaterThan(copy.height);
+		// The photo itself is more than 320px a side, inside its pad ring.
+		const photo = hero().querySelector('img')!.getBoundingClientRect();
+		expect(photo.width).toBeGreaterThanOrEqual(320);
+	});
+
+	it('keeps the photo big on a short laptop window and the hero one window high', async () => {
+		await page.viewport(1280, 720);
+		await mount(Hero, true);
+		const frame = socket()!.el.getBoundingClientRect();
+		expect(frame.width).toBeGreaterThanOrEqual(280);
+		const box = hero().getBoundingClientRect();
+		expect(box.height).toBeCloseTo(720, 0);
+	});
+
+	it('is the only visual in the hero: no logo next to the photo', async () => {
+		await mount(Hero);
+		expect(hero().querySelector('svg')).not.toBeNull(); // the footprint outline
+		expect(hero().querySelector('svg.logo')).toBeNull();
+		expect(hero().querySelectorAll('img')).toHaveLength(1);
 	});
 });
 
@@ -269,7 +554,7 @@ describe('Hero size', () => {
 		expect(box.height).toBeGreaterThan(256);
 		expect(hero().scrollHeight).toBeLessThanOrEqual(hero().clientHeight);
 		for (const part of hero().querySelectorAll(
-			'h1, .tagline, .lead, a.scroll-indicator, .socket'
+			'h1, .tagline, .follow, a.scroll-indicator, .socket'
 		)) {
 			expect(part.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom + 0.5);
 		}
@@ -336,6 +621,34 @@ describe('Availability', () => {
 		expect(root.textContent).not.toContain(EMAIL_FALLBACK_TEXT);
 		expect(root.innerHTML).not.toContain(address);
 		expect(root.innerHTML).not.toContain(scheme);
+	});
+
+	it('shows I.T. It as a small logo in the freelance chip only, and names it', async () => {
+		await page.viewport(1280, 900);
+		const screen = await mount(Availability, true);
+		const logos = document.querySelectorAll<SVGElement>('#availability svg.logo');
+		expect(logos).toHaveLength(1);
+		expect(section('freelance').contains(logos[0])).toBe(true);
+		expect(section('job').querySelector('svg.logo')).toBeNull();
+		// Small and still: a mark next to the title, not a picture.
+		const box = logos[0].getBoundingClientRect();
+		expect(box.width).toBeGreaterThanOrEqual(80);
+		expect(box.width).toBeLessThanOrEqual(130);
+		expect(logos[0].classList.contains('animate')).toBe(false);
+		await expect.element(screen.getByRole('img', { name: content.nl.hero.logoAlt })).toBeVisible();
+		// The chip is still named by its h2.
+		expect(section('freelance').getAttribute('aria-labelledby')).toBe(
+			section('freelance').querySelector('h2')!.id
+		);
+	});
+
+	it('keeps the logo beside the title on a phone, without sideways scroll', async () => {
+		await page.viewport(320, 640);
+		await mount(Availability, true);
+		const logo = document.querySelector('#availability svg.logo')!.getBoundingClientRect();
+		expect(logo.right).toBeLessThanOrEqual(320);
+		const root = document.documentElement;
+		expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
 	});
 
 	it('still shows the freelance hours and what I.T. It takes on', async () => {
@@ -415,7 +728,7 @@ describe('the page together', () => {
 			const root = document.documentElement;
 			expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
 			const box = hero().getBoundingClientRect();
-			for (const part of hero().querySelectorAll('h1, .tagline, .lead, a.scroll-indicator')) {
+			for (const part of hero().querySelectorAll('h1, .tagline, .follow, a.scroll-indicator')) {
 				expect(part.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom + 0.5);
 			}
 		} finally {
@@ -431,6 +744,12 @@ describe('the page together', () => {
 			await render(component, { target });
 		}
 		expect(chips().map((c) => c.designator)).toEqual(['U1', 'U2', 'U3', 'U4', 'U9']);
+		// The photo leads the page; the only logo is the small one by the I.T. It chip.
+		const logos = Array.from(target.querySelectorAll<SVGElement>('svg.logo'));
+		expect(logos).toHaveLength(1);
+		expect(logos[0].getBoundingClientRect().width).toBeLessThan(
+			socket()!.el.getBoundingClientRect().width / 2
+		);
 		const html = target.innerHTML;
 		expect(html).not.toContain(address);
 		expect(html).not.toContain(scheme);

@@ -20,6 +20,8 @@
  * - `branch`: halo and core, a head at its tip while it grows, a pad on the pin once it arrives.
  * - `socket`: the full glow, an extra wide halo under the normal one; no pad on the port, the
  *   socket's own artwork carries the line on.
+ * - `hero`: a slightly quieter halo and core, a head at its tip while it grows, a via at its end
+ *   once it arrives, and a via at its start when it starts on the board.
  * - `decor`: a quieter halo and core, a via at its end.
  * Pads and vias are filled circles. Pulses are drawn last with `lighter` compositing.
  */
@@ -38,6 +40,9 @@ export const SOCKET_GLOW_ALPHA = 0.08;
 /** Decoration sits back: its halo and core are fainter. */
 export const DECOR_HALO_ALPHA = 0.08;
 export const DECOR_CORE_ALPHA = 0.5;
+/** The hero field is dense: a little quieter than the spine and branches, louder than decoration. */
+export const HERO_HALO_ALPHA = 0.12;
+export const HERO_CORE_ALPHA = 0.8;
 export const PAD_RADIUS = 3.5;
 export const VIA_RADIUS = 3.5;
 export const VIA_HOLE_RADIUS = 1.5;
@@ -220,11 +225,14 @@ export class Renderer {
 		const ctx = this.#ctx;
 		for (const side of SIDES) {
 			const colour = this.#palette[side].trace;
-			const socket = items.filter((i) => i.trace.side === side && i.trace.kind === 'socket');
-			const decor = items.filter((i) => i.trace.side === side && i.trace.kind === 'decor');
-			const main = items.filter((i) => i.trace.side === side && i.trace.kind !== 'decor');
+			const ofSide = items.filter((i) => i.trace.side === side);
+			const socket = ofSide.filter((i) => i.trace.kind === 'socket');
+			const decor = ofSide.filter((i) => i.trace.kind === 'decor');
+			const hero = ofSide.filter((i) => i.trace.kind === 'hero');
+			const main = ofSide.filter((i) => i.trace.kind !== 'decor' && i.trace.kind !== 'hero');
 			this.#strokeAll(socket, colour, SOCKET_GLOW_WIDTH, SOCKET_GLOW_ALPHA);
 			this.#strokeAll(decor, colour, HALO_WIDTH, DECOR_HALO_ALPHA);
+			this.#strokeAll(hero, colour, HALO_WIDTH, HERO_HALO_ALPHA);
 			this.#strokeAll(main, colour, HALO_WIDTH, HALO_ALPHA);
 		}
 		ctx.globalAlpha = 1;
@@ -235,7 +243,8 @@ export class Renderer {
 		const ctx = this.#ctx;
 		ctx.lineWidth = CORE_WIDTH;
 		for (const item of items) {
-			ctx.globalAlpha = item.trace.kind === 'decor' ? DECOR_CORE_ALPHA : 1;
+			const kind = item.trace.kind;
+			ctx.globalAlpha = kind === 'decor' ? DECOR_CORE_ALPHA : kind === 'hero' ? HERO_CORE_ALPHA : 1;
 			ctx.strokeStyle = this.#gradient(item.trace);
 			ctx.beginPath();
 			this.#polyline(item.points);
@@ -244,14 +253,19 @@ export class Renderer {
 		ctx.globalAlpha = 1;
 	}
 
-	/** Pads on pins and vias at the ends of the traces that are complete. */
+	/**
+	 * Pads on pins and vias at the ends of the traces that are complete, and a via at the start of
+	 * a trace that starts on the board, as soon as it shows.
+	 */
 	#ends(items: readonly Item[]): void {
 		for (const side of SIDES) {
 			const colours = this.#palette[side];
 			const pads: Point[] = [];
 			const vias: Point[] = [];
 			for (const item of items) {
-				if (!item.full || item.trace.side !== side) continue;
+				if (item.trace.side !== side) continue;
+				if (item.trace.startVia) vias.push(item.trace.points[0]);
+				if (!item.full) continue;
 				const end = item.trace.points[item.trace.points.length - 1];
 				if (item.trace.end.kind === 'pin') pads.push(end);
 				else if (item.trace.end.kind === 'via') vias.push(end);

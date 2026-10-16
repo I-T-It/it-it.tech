@@ -98,6 +98,18 @@ describe('route', () => {
 		expect(dirs.at(-1)).toBe(E);
 	});
 
+	it('takes a dearer turn cost into account', () => {
+		// A lane of bus 1 two rows down: cheap enough to detour onto at the default turn cost.
+		const g = grid(30, 6);
+		for (let col = 0; col < 30; col++) g.lane[g.index(col, 2)] = 1;
+		const from = { col: 0, row: 0 };
+		const to = { col: 20, row: 0 };
+		const detour = route(g, from, to, { startDir: E, endDir: E, bus: 1 });
+		const straight = route(g, from, to, { startDir: E, endDir: E, bus: 1, turnCost: 1.5 });
+		expect(detour!.length).toBeGreaterThan(2);
+		expect(straight).toEqual([from, to]);
+	});
+
 	it('returns null when the pin is enclosed', () => {
 		const g = grid(20, 20);
 		wall(g, 9, 9, 11, 11);

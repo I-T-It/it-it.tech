@@ -27,17 +27,32 @@
  * the board in place, without any growth. No 2D context, or a layout that throws: the board stays
  * blank, `data-pcb-state="off"`, and every chip goes on so no content waits for the board.
  *
+ * The hero: when one is registered, the board fills it edge to edge with the hero field (see
+ * `hero.ts`). Its content is the socket and the children of the obstacles inside it, kept in a
+ * clear ellipse; its links and buttons (the scroll indicator) are obstacles too. The two lead
+ * traces grow in first; when they arrive (`growth.powered`), the socket gets `data-power="on"` and
+ * the logo or photo frame draws itself from where they touch. The rest of the field builds up
+ * after that, once. Reduced motion and the fallback power the socket at once.
+ *
  * `data-pcb-state` on the canvas: `init` (waiting for fonts), `running` (a frame is queued),
  * `idle`, `static` or `off`. In test runs (`debug`, by default when the browser is automated) the
- * canvas also carries `data-spine-front` (the front in document px) and `data-pulses` (live pulses).
+ * canvas also carries `data-spine-front` (the front in document px), `data-pulses` (live pulses),
+ * `data-hero-traces` (how many hero traces), `data-hero-ellipse` (`cx cy rx ry` in document px,
+ * only with a hero) and `data-pcb-seed` (the layout seed).
+ *
+ * Seed: every visit draws its own board. The runtime picks a random seed when it is made and
+ * lays out with it every time, so a resize or a `<details>` toggle moves the traces but never
+ * reshuffles them. Test runs keep the layout's own seed for the viewport, or take `?seed=`.
  */
 
 import type { Point, Rect } from './geometry.js';
 import { Growth } from './growth.js';
-import { layoutBoard, type Board, type LayoutInput } from './layout.js';
+import { heroEllipse } from './hero.js';
+import { layoutBoard, type Board, type HeroInput, type LayoutInput } from './layout.js';
 import { Pulses } from './pulses.js';
 import {
 	chips as registeredChips,
+	hero as registeredHero,
 	obstacles as registeredObstacles,
 	onChange,
 	socket as registeredSocket,
@@ -64,6 +79,27 @@ export interface RuntimeOptions {
 	reducedMotion?: MotionQuery;
 	/** The clock for growth and pulses, in ms. Default: `performance.now()`. */
 	now?: () => number;
+	/**
+	 * The layout seed, the same for every layout of this visit. Default: a random one, so every
+	 * visit gets its own board; in test runs (`debug`) the layout's own seed for the viewport, or
+	 * `?seed=` from the address.
+	 */
+	seed?: number;
+}
+
+/** A random 32-bit seed. */
+function randomSeed(): number {
+	if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+		return crypto.getRandomValues(new Uint32Array(1))[0];
+	}
+	return Math.floor(Math.random() * 2 ** 32);
+}
+
+/** `?seed=` from the address, or undefined. */
+function seedFromUrl(): number | undefined {
+	const value = new URLSearchParams(location.search).get('seed');
+	const seed = Number(value);
+	return value !== null && value !== '' && Number.isFinite(seed) ? seed >>> 0 : undefined;
 }
 
 function docRect(el: Element, scrollX: number, scrollY: number): Rect {
@@ -126,6 +162,8 @@ export class BoardRuntime {
 	maxFrameMs = 0;
 
 	#debug: boolean;
+	/** The layout seed of this visit; undefined: the layout's own. */
+	#seed: number | undefined;
 	#motion: MotionQuery | null;
 	#now: () => number;
 	#renderer: Renderer | null = null;
@@ -143,6 +181,7 @@ export class BoardRuntime {
 	constructor(canvas: HTMLCanvasElement, options: RuntimeOptions = {}) {
 		this.canvas = canvas;
 		this.#debug = options.debug ?? navigator.webdriver === true;
+		this.#seed = options.seed ?? (this.#debug ? seedFromUrl() : randomSeed());
 		this.#motion =
 			options.reducedMotion ??
 			(typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null);
@@ -258,6 +297,14 @@ export class BoardRuntime {
 		this.board = board;
 		this.#renderer?.setBoard(board);
 		this.#handles = registeredChips();
+		if (this.#debug) {
+			const data = this.canvas.dataset;
+			const e = board.hero?.ellipse;
+			if (e) data.heroEllipse = [e.cx, e.cy, e.rx, e.ry].map((v) => v.toFixed(1)).join(' ');
+			else delete data.heroEllipse;
+			data.heroTraces = String(board.traces.filter((t) => t.kind === 'hero').length);
+			data.pcbSeed = String(board.seed);
+		}
 		return true;
 	}
 
@@ -274,22 +321,51 @@ export class BoardRuntime {
 				pins: chip.pins().map((pin) => docCentre(pin, sx, sy))
 			}))
 			.filter((chip) => rendered(chip.rect));
-		const obstacles = registeredObstacles()
-			.filter((el) => el.isConnected)
-			.map((el) => docRect(el, sx, sy))
-			.filter(rendered);
+		const obstacleEls = registeredObstacles().filter((el) => el.isConnected);
+		const obstacles = obstacleEls.map((el) => docRect(el, sx, sy)).filter(rendered);
 		const port = registeredSocket();
 		const socketRect = port?.el.isConnected ? docRect(port.el, sx, sy) : null;
+		const portEls = port?.ports() ?? [];
+		const socket =
+			port && socketRect && rendered(socketRect)
+				? {
+						rect: socketRect,
+						ports: portEls.map((el) => docCentre(el, sx, sy)),
+						// The ports marked data-lead take the two lead traces of the hero.
+						leads: portEls.flatMap((el, i) => (el.hasAttribute('data-lead') ? [i] : []))
+					}
+				: undefined;
+
+		// The hero: as wide as the board, its content (the socket and the obstacles in it) inside a
+		// clear ellipse, its links and buttons in the way of the field.
+		let hero: HeroInput | undefined;
+		const heroHandle = registeredHero();
+		const heroRect = heroHandle?.el.isConnected ? docRect(heroHandle.el, sx, sy) : null;
+		if (heroHandle && heroRect && rendered(heroRect)) {
+			const area = { x: 0, y: heroRect.y, width: root.clientWidth, height: heroRect.height };
+			// Block by block: a wide name over narrow lines fits a flatter ellipse than their box.
+			const content = obstacleEls
+				.filter((el) => heroHandle.el.contains(el))
+				.flatMap((el) => (el.children.length > 0 ? [...el.children] : [el]))
+				.map((el) => docRect(el, sx, sy));
+			if (socket && port && heroHandle.el.contains(port.el)) content.push(socket.rect);
+			const ellipse = heroEllipse(content.filter(rendered), area);
+			if (ellipse) hero = { rect: area, ellipse };
+			for (const el of heroHandle.controls()) {
+				const rect = docRect(el, sx, sy);
+				if (rendered(rect)) obstacles.push(rect);
+			}
+		}
+
 		return {
 			width: root.clientWidth,
 			height: root.scrollHeight,
 			viewportWidth: window.innerWidth,
 			chips,
 			obstacles,
-			socket:
-				port && socketRect && rendered(socketRect)
-					? { rect: socketRect, ports: port.ports().map((el) => docCentre(el, sx, sy)) }
-					: undefined
+			socket,
+			hero,
+			seed: this.#seed
 		};
 	}
 
@@ -326,6 +402,7 @@ export class BoardRuntime {
 			const state = growth.chipState(handle.id);
 			if (handle.state !== state) handle.state = state;
 		}
+		if (growth.powered) this.#power();
 		renderer.draw({
 			view: {
 				scrollX: window.scrollX,
@@ -419,7 +496,13 @@ export class BoardRuntime {
 		}, RELAYOUT_DEBOUNCE_MS);
 	};
 
-	/** No board: every chip goes on, now and when it registers later. */
+	/** The socket gets `data-power="on"`: the logo or photo frame draws itself (see Logo, Hero). */
+	#power(): void {
+		const el = registeredSocket()?.el;
+		if (el && el.dataset.power !== 'on') el.dataset.power = 'on';
+	}
+
+	/** No board: every chip goes on and the socket powers up, now and when they register later. */
 	#fallback(): void {
 		if (this.#raf) cancelAnimationFrame(this.#raf);
 		this.#raf = 0;
@@ -431,6 +514,7 @@ export class BoardRuntime {
 		this.board = null;
 		const lightAll = () => {
 			for (const chip of registeredChips()) chip.state = 'on';
+			this.#power();
 		};
 		lightAll();
 		this.#cleanups.push(onChange(lightAll));

@@ -23,19 +23,20 @@ export interface SectionHead {
 }
 
 export interface Profile {
-	/** "Robbin Schepers", the h1 on both builds. */
+	/** The display name, Robbin "Roboroads" Schepers: the h1 on both builds (`company.displayName`). */
 	name: string;
 	/** "Professional Computer Nerd", English in both locales. */
 	tagline: string;
 }
 
+/** The hero has no lead line: the name and the tagline say who he is, the chips below say the rest. */
 export interface Hero {
-	/** One lead line per variant, shown under the tagline. */
-	lead: { company: string; personal: string };
 	/** CTA labels. The variant decides which one is filled. */
 	cta: { job: string; freelance: string };
 	logoAlt: string;
 	photoAlt: string;
+	/** The Roboroads avatar the personal hero shows now and then instead of the photo. */
+	avatarAlt: string;
 }
 
 /** The U1 chip (job path). */
@@ -177,17 +178,89 @@ export interface Skills extends SectionHead {
 	};
 }
 
-/** One entry in U7. A link is shown only when `url` exists. */
-export interface Talk {
+/** A talk or workshop that is ready to give: one entry of the catalogue in U7. */
+export interface TalkOffer {
 	id: string;
-	date: YearMonth;
+	kind: 'talk' | 'workshop';
+	/**
+	 * Title of the talk. An English title stays as it is in both locales (`titleLang: 'en'`); a
+	 * Dutch title is translated for the English page.
+	 */
 	title: string;
+	/** Two sentences at most, in the language of the page. */
+	summary: string;
+	/** Free text, e.g. "45 minuten". Left out until it is known. */
+	duration?: string;
+	/** Free text, e.g. "Developers". Left out until it is known. */
+	audience?: string;
+	/**
+	 * The languages the talk can be given in, at least one. Kept as data: the page says it once
+	 * for every offer in `labels.offersNote`, and a card shows no language of its own. Not the
+	 * language of the title.
+	 */
+	langs: Locale[];
+	/**
+	 * The language of the title as it was written. The Dutch page marks an English title
+	 * `lang="en"`, so a screen reader switches voice (WCAG 3.1.2). A talk can be given in Dutch
+	 * under an English title.
+	 */
+	titleLang: Locale;
+}
+
+/** One time a talk or workshop was given: one entry of the history in U7. */
+export interface TalkGiven {
+	id: string;
+	/** The offer this was an occurrence of. Without one, `title` says what it was. */
+	offerId?: string;
+	/** A day ("2023-03-14") or a month ("2023-03"). */
+	date: YearMonth;
+	/**
+	 * The language it was given in this time. Shown next to the event. Left out where it is not
+	 * known: it is never guessed from the offer.
+	 */
+	lang?: Locale;
+	/** Where it was given: a meetup, a conference or a company. Left out where it is not known. */
+	event?: string;
+	/**
+	 * What this occurrence was called, when that differs from the offer (a training that was an
+	 * occurrence of the workshop, a demo in the talk of someone else). Written in the language of
+	 * the page: an English title belongs on the offer, with `lang: 'en'`. It holds "{talk}" where
+	 * `talk` goes.
+	 */
+	title?: string;
+	/**
+	 * The talk of someone else that this was a part of, quoted in `title` at "{talk}". It keeps its
+	 * own title in both locales, and `lang` is the language of that title, so the page can mark it.
+	 */
+	talk?: { title: string; lang: Locale };
+	/** Page of the event. A link is shown only when this exists. */
 	url?: string;
 }
 
 export interface Talks extends SectionHead {
-	/** Newest first. */
-	talks: Talk[];
+	/** The catalogue: what is ready to give. */
+	offers: TalkOffer[];
+	/** The history: newest first. */
+	given: TalkGiven[];
+	labels: {
+		/** h3 of the catalogue, e.g. "Klaar om te geven". */
+		offers: string;
+		/** One short note under the heading of the catalogue, for all offers: languages and slides. */
+		offersNote: string;
+		/** h3 of the history, e.g. "Gegeven". */
+		given: string;
+		kind: Record<TalkOffer['kind'], string>;
+		/** The name of a language, for the `lang` of an offer. */
+		language: Record<Locale, string>;
+		/** Labels of the facts on a card. The languages are not one: the note says them. */
+		facts: { duration: string; audience: string };
+		times: {
+			/** Contains "{last}", the date of the one time it was given. */
+			one: string;
+			/** Contains "{count}" and "{last}", the date of the most recent time. */
+			many: string;
+		};
+	};
 }
 
 export interface Education {

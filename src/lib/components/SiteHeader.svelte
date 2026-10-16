@@ -134,12 +134,31 @@
 		<a
 			class="brand"
 			href={home}
-			aria-label={m.header_home({ name: site === 'company' ? company.name : company.founder })}
+			aria-label={m.header_home({
+				name: site === 'company' ? company.name : company.displayName
+			})}
 		>
 			{#if site === 'company'}
 				<Logo size={72} />
 			{:else}
-				<span class="wordmark"><span class="dot" aria-hidden="true"></span>{company.founder}</span>
+				<!--
+					His photo in front of his name: the personal page is about him. The link is named by
+					the display name (aria-label), so the photo is decoration. Below 40rem only the
+					nickname shows: the full name does not fit next to the menu, and the nickname is part
+					of the link name, so what is shown is contained in it (2.5.3).
+				-->
+				<span class="wordmark"
+					><enhanced:img
+						class="avatar"
+						src="../assets/robbin-schepers.jpg"
+						alt=""
+						sizes="28px"
+					/><span class="name"
+						><span class="wide">{company.givenName} "</span>{company.nickname}<span class="wide"
+							>" {company.familyName}</span
+						></span
+					></span
+				>
 			{/if}
 		</a>
 
@@ -280,13 +299,28 @@
 		}
 	}
 
-	/* The pin-1 dot of a chip, as the personal mark. */
-	.dot {
-		width: 0.375rem;
-		height: 0.375rem;
+	/* The personal mark: his face, small and round, with a trace-coloured ring like a lit pad. */
+	.avatar {
+		display: block;
+		width: 1.5rem;
+		height: 1.5rem;
 		border-radius: 50%;
-		background: var(--trace-cyan);
-		box-shadow: 0 0 6px var(--trace-cyan);
+		object-fit: cover;
+		object-position: 45% 25%;
+		box-shadow:
+			0 0 0 1.5px var(--trace-cyan),
+			0 0 8px color-mix(in srgb, var(--trace-cyan) 60%, transparent);
+	}
+
+	/* The rest of the name, shown when there is room next to the menu. */
+	.wide {
+		display: none;
+	}
+
+	@media (min-width: 40rem) {
+		.wide {
+			display: inline;
+		}
 	}
 
 	.menu > ul {

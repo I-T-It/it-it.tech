@@ -26,19 +26,36 @@ afterEach(async () => {
 });
 
 describe('personal mark', () => {
-	it('is the name as text, and the link name contains that text', async () => {
+	it('is the display name as text, and the link name contains that text', async () => {
+		await page.viewport(1280, 800);
 		const screen = await render(SiteHeader, {});
-		const brand = screen.getByRole('link', { name: 'Robbin Schepers, naar boven' });
+		const brand = screen.getByRole('link', { name: 'Robbin "Roboroads" Schepers, naar boven' });
 		await expect.element(brand).toBeVisible();
-		expect(brand.element().textContent?.trim()).toBe('Robbin Schepers');
+		expect(brand.element().textContent?.replace(/\s+/g, ' ').trim()).toBe(
+			'Robbin "Roboroads" Schepers'
+		);
+		expect((brand.element() as HTMLElement).innerText.replace(/\s+/g, ' ').trim()).toBe(
+			'Robbin "Roboroads" Schepers'
+		);
 		expect(header().querySelector('svg.logo')).toBeNull();
+	});
+
+	it('shows only the nickname on a narrow window, which the link name still contains', async () => {
+		await page.viewport(375, 667);
+		const screen = await render(SiteHeader, {});
+		const brand = screen.getByRole('link', { name: 'Robbin "Roboroads" Schepers, naar boven' });
+		await expect.element(brand).toBeVisible();
+		const shown = (brand.element() as HTMLElement).innerText.replace(/\s+/g, ' ').trim();
+		expect(shown).toBe('Roboroads');
+		// 2.5.3: what is shown is part of the name.
+		expect('Robbin "Roboroads" Schepers, naar boven'.includes(shown)).toBe(true);
 	});
 
 	it('says the same in English', async () => {
 		setLocale('en');
 		const screen = await render(SiteHeader, {});
 		await expect
-			.element(screen.getByRole('link', { name: 'Robbin Schepers, back to top' }))
+			.element(screen.getByRole('link', { name: 'Robbin "Roboroads" Schepers, back to top' }))
 			.toBeVisible();
 	});
 
@@ -60,6 +77,41 @@ describe('personal mark', () => {
 		expect(hrefs.slice(0, 3)).toEqual(['/#hero', '/#job', '/#freelance']);
 		expect(hrefs).toContain('/#projects');
 		expect(hrefs[hrefs.length - 1]).toBe('/#contact');
+	});
+});
+
+describe('photo mark', () => {
+	it('puts a small round photo of him in front of the name, as decoration', async () => {
+		await page.viewport(1280, 800);
+		await render(SiteHeader, {});
+		const avatar = header().querySelector<HTMLImageElement>('.brand img')!;
+		expect(avatar).not.toBeNull();
+		// Empty alt: the link is named by the text next to it, the photo adds nothing to say.
+		expect(avatar.getAttribute('alt')).toBe('');
+		const box = avatar.getBoundingClientRect();
+		expect(box.width).toBeGreaterThanOrEqual(24);
+		expect(box.width).toBeLessThanOrEqual(40);
+		expect(box.width).toBeCloseTo(box.height, 0);
+		expect(getComputedStyle(avatar).borderRadius).toBe('50%');
+		const name = header().querySelector('.wordmark')!.getBoundingClientRect();
+		expect(box.right).toBeLessThanOrEqual(name.right);
+		// The mark is the photo, not the logo.
+		expect(header().querySelector('svg.logo')).toBeNull();
+	});
+
+	it('names the link by the display name, with the photo left out of it', async () => {
+		const screen = await render(SiteHeader, {});
+		await expect
+			.element(screen.getByRole('link', { name: 'Robbin "Roboroads" Schepers, naar boven' }))
+			.toBeVisible();
+	});
+
+	it('keeps the photo at 320 CSS px too: the short nickname leaves room for it', async () => {
+		await page.viewport(320, 640);
+		await render(SiteHeader, {});
+		const avatar = header().querySelector<HTMLImageElement>('.brand img')!;
+		expect(avatar.getBoundingClientRect().width).toBeGreaterThanOrEqual(24);
+		expect(header().getBoundingClientRect().height).toBeLessThanOrEqual(58);
 	});
 });
 

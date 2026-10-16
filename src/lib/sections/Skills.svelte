@@ -8,15 +8,50 @@
 </script>
 
 <script lang="ts">
+	import { onMount, tick } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
 	import Chip from '#lib/components/Chip.svelte';
 	import Leds from '#lib/components/Leds.svelte';
 	import { getContent } from '#lib/content/index.js';
+	import { filterableKeys, skillKeyFor } from '#lib/format/skills.js';
+	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { EXPERIENCE_ID, skillFilter } from './skillFilter.svelte.js';
 
-	const content = getContent(getLocale()).skills;
+	const siteContent = getContent(getLocale());
+	const content = siteContent.skills;
 	const { labels } = content;
 	const MAX_LEVEL = 5;
+
+	/** The skills that at least one role has among its tags: only those can filter the roles. */
+	const available = filterableKeys(siteContent.experience.jobs);
+
+	/**
+	 * True once scripts run. The links filter the roles, which needs them, so the prerender writes
+	 * plain names and the links appear on hydration (the text does not move).
+	 */
+	let ready = $state(false);
+	onMount(() => {
+		ready = true;
+	});
+
+	/**
+	 * Sets the filter and brings the visitor to it: scrolls to the Experience chip and puts focus
+	 * on the chip that is on. A click with a modifier, or a middle click, keeps the link's own
+	 * behaviour (a new tab opens the address, which restores the filter).
+	 */
+	async function show(event: MouseEvent, key: string) {
+		if (event.defaultPrevented || event.button !== 0) return;
+		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+		event.preventDefault();
+		skillFilter.select(key);
+		await tick();
+		const section = document.getElementById(EXPERIENCE_ID);
+		section?.scrollIntoView();
+		section
+			?.querySelector<HTMLElement>('[data-filter] [aria-pressed="true"]')
+			?.focus({ preventScroll: true });
+	}
 
 	const years = (skill: Skill) =>
 		(skill.years === 1 ? labels.yearsOne : labels.years).replace('{years}', String(skill.years));
@@ -61,6 +96,9 @@
 	{#if content.intro}
 		<p class="intro">{content.intro}</p>
 	{/if}
+	{#if ready}
+		<p class="hint">{m.skills_filter_hint()}</p>
+	{/if}
 
 	<div class="groups">
 		{#each content.groups as group (group.id)}
@@ -68,8 +106,22 @@
 				<h3>{group.title}</h3>
 				<ul class="skills">
 					{#each sortSkills(group.skills) as skill (skill.id)}
+						{@const key = skillKeyFor(skill, available)}
 						<li data-skill={skill.id}>
-							<span class="name">{skill.title}</span>
+							<span class="name"
+								>{#if ready && key}
+									<!-- eslint-disable svelte/no-navigation-without-resolve -- a query and a hash on this page, which the browser resolves against the page address -->
+									<a
+										class="roles"
+										href="?skill={key}#{EXPERIENCE_ID}"
+										onclick={(event) => show(event, key)}
+										>{skill.title}<span class="sr-only">{' ' + m.skills_show_roles()}</span></a
+									>
+									<!-- eslint-enable svelte/no-navigation-without-resolve -->
+								{:else}
+									{skill.title}
+								{/if}</span
+							>
 							<span class="meter">
 								<Leds level={skill.level} max={MAX_LEVEL} sequence text={levelText(skill)} />
 								<!-- The years are in the level text above, which a screen reader reads. -->
@@ -87,6 +139,25 @@
 	.intro {
 		margin-bottom: 0;
 		color: var(--ink-muted);
+	}
+
+	.hint {
+		margin: 0.25rem 0 0;
+		color: var(--ink-muted);
+	}
+
+	/* A skill with roles is a link, drawn with its underline. The box is as high as the line. */
+	.roles {
+		display: inline-block;
+		min-width: 1.5rem;
+		text-decoration-color: var(--led-color);
+		text-decoration-thickness: 2px;
+	}
+
+	@media (hover: hover) {
+		.roles:hover {
+			text-decoration-thickness: 3px;
+		}
 	}
 
 	/* Two columns where there is room: the left group is cyan, the right one green, like the traces. */

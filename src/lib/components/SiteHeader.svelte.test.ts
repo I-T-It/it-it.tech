@@ -60,6 +60,11 @@ describe('company mark', () => {
 		expect(logo.classList.contains('animate')).toBe(false);
 		expect(header().querySelector('.wordmark')).toBeNull();
 	});
+
+	it('has no photo: the company mark stays the logo', async () => {
+		await render(SiteHeader, {});
+		expect(header().querySelector('img, picture')).toBeNull();
+	});
 });
 
 const menu = () => header().querySelector<HTMLDetailsElement>('details.sections')!;

@@ -10,35 +10,30 @@ export const nl: SiteContent = {
 
 	meta: {
 		company: {
-			title: 'I.T. It: webapplicaties en apps van Robbin Schepers',
+			title: 'I.T. It - Voor alles met stekkers',
 			description:
-				'I.T. It bouwt webapplicaties en apps met Laravel, Svelte, Vue en Flutter. Robbin Schepers werkt eraan doordeweeks vanaf 18:00 en in het weekend.'
+				'I.T. It bouwt webapplicaties en apps en helpt bij computerproblemen. Samen zoeken we de beste oplossing. Doordeweeks vanaf 18:00 en in het weekend.'
 		},
 		personal: {
-			title: 'Robbin Schepers, developer en oprichter van I.T. It',
+			title: 'Robbin "Roboroads" Schepers - Professionele Computer Nerd',
 			description:
-				'Robbin Schepers is developer en werkt overdag in loondienst. In de avonden en het weekend bouwt hij webapplicaties en apps met zijn bedrijf I.T. It.'
+				'Robbin "Roboroads" Schepers is developer en werkt overdag in loondienst. In de avonden en het weekend bouwt hij webapplicaties en apps met zijn bedrijf I.T. It.'
 		}
 	},
 
 	profile: {
-		name: 'Robbin Schepers',
+		name: 'Robbin "Roboroads" Schepers',
 		tagline: 'Professional Computer Nerd'
 	},
 
 	hero: {
-		lead: {
-			company:
-				'Als I.T. It bouw ik webapplicaties en apps met Laravel, Svelte, Vue en Flutter, in de avonden en het weekend.',
-			personal:
-				'Ik werk overdag als developer en bouw in de avonden en het weekend projecten met mijn eigen bedrijf, I.T. It.'
-		},
 		cta: {
 			job: 'Zoek je een developer voor je team?',
 			freelance: 'Project voor I.T. It'
 		},
 		logoAlt: 'Logo van I.T. It',
-		photoAlt: 'Portret van Robbin Schepers'
+		photoAlt: 'Portret van Robbin Schepers',
+		avatarAlt: 'Avatar van Roboroads: een low-poly portret in groen met een gloeiende cowboyhoed'
 	},
 
 	availability: {
@@ -54,14 +49,15 @@ export const nl: SiteContent = {
 		freelance: {
 			title: 'Avonden en weekenden: I.T. It',
 			body: [
-				'Naast mijn baan heb ik een eigen bedrijf, I.T. It. Ik neem projecten aan voor webapplicaties en apps, van het eerste ontwerp tot een draaiende applicatie.'
+				'Naast mijn baan heb ik een eigen bedrijf, I.T. It. Heb je een probleem of een idee waar techniek bij hoort? Dan zoeken we samen uit wat de beste oplossing is. Ik ben niet gebonden aan één taal of framework en kies wat bij jouw situatie past.',
+				'Computerhulp doe ik meestal voor ouderen en voor anderen die niet gewend zijn aan techniek. Ik leg het rustig uit, in gewone taal.'
 			],
 			hours: 'Doordeweeks vanaf 18:00 en in het weekend',
 			takesOn: [
-				"Laravel-applicaties en API's",
-				'Front-ends in Svelte of Vue',
-				'Mobiele apps in Flutter',
-				'Technisch leiderschap en applicatie-architectuur'
+				'Webapplicaties en apps, van eerste idee tot draaiende applicatie',
+				'Bestaande software verbeteren of redden',
+				'Technisch advies en applicatie-architectuur',
+				'Computerhulp, zoals een printer aansluiten of e-mail instellen'
 			],
 			cta: 'Project voor I.T. It',
 			emailSubject: 'Project voor I.T. It'
@@ -71,7 +67,7 @@ export const nl: SiteContent = {
 	about: {
 		title: 'Over mij',
 		paragraphs: [
-			'Ik ben developer met de meeste expertise in de backend. De frontend en devops vind ik ook leuk.',
+			'Ik ben developer met de meeste expertise in de backend. Ik heb ook ervaring met frontend en devops en kan die taken zelf oppakken.',
 			'Ik programmeer sinds mijn elfde. Die ervaring gebruik ik om je project en mijn teamgenoten een stap verder te brengen.',
 			'Ik denk niet in problemen maar in uitdagingen en creatieve oplossingen, dus er is weinig dat ik niet wil bouwen.'
 		]
@@ -596,58 +592,120 @@ export const nl: SiteContent = {
 	talks: {
 		title: 'Talks en workshops',
 		intro:
-			'Talks, workshops en trainingen over Flutter, Svelte, front-end en PHP, de nieuwste bovenaan.',
-		talks: [
+			'Talks en workshops over Flutter, Svelte, front-end en PHP: wat ik kan geven en waar ik ze al gegeven heb.',
+		offers: [
 			{
 				id: 'php-2005-called',
-				date: '2024-06-21',
-				title: '2005 Called! They Want Your Opinion About PHP Back!'
+				kind: 'talk',
+				title: '2005 Called! They Want Your Opinion About PHP Back!',
+				summary:
+					'Waarom PHP slecht was, waarom dat niet meer zo is en waarom het nog steeds een goede taal is om projecten in te bouwen.',
+				langs: ['nl', 'en'],
+				titleLang: 'en'
+			},
+			{
+				id: 'frontend-love',
+				kind: 'talk',
+				title: 'Falling in Love with Front-end all over again',
+				summary:
+					'De magie van Svelte, en hoe het zich verhoudt tot andere frameworks zoals Angular, React en Vue.js.',
+				langs: ['nl', 'en'],
+				titleLang: 'en'
+			},
+			{
+				id: 'flutter-talk',
+				kind: 'talk',
+				title: 'Writing multi-platform apps with native performance',
+				summary: 'De Flutter-workshop als talk, zonder de stappen om zelf mee te bouwen.',
+				langs: ['nl', 'en'],
+				titleLang: 'en'
+			},
+			{
+				id: 'flutter-workshop',
+				kind: 'workshop',
+				title: 'Workshop Flutter',
+				summary: 'Hoe je begint met het bouwen van je eerste Flutter-app voor reviews.',
+				langs: ['nl', 'en'],
+				titleLang: 'nl'
+			}
+		],
+		given: [
+			{
+				id: 'php-2005-called',
+				offerId: 'php-2005-called',
+				date: '2024-06',
+				lang: 'nl',
+				event: 'Sopra Steria'
 			},
 			{
 				id: 'frontend-js-eindhoven',
+				offerId: 'frontend-love',
 				date: '2023-08-23',
-				title: 'Falling in Love with Front-end all over again (talk op JS Meetup Eindhoven)',
+				event: 'JS Meetup Eindhoven',
 				url: 'https://www.meetup.com/nl-NL/js-eindhoven/events/291205657/'
 			},
 			{
 				id: 'frontend-festival',
+				offerId: 'frontend-love',
 				date: '2023-04-13',
-				title: 'Falling in Love with Front-end all over again (talk op Frontend Festival)',
+				event: 'Frontend Festival',
 				url: 'https://frontendfestival.nl'
 			},
 			{
 				id: 'flutter-ordina-noord',
+				offerId: 'flutter-workshop',
 				date: '2022-10-27',
-				title: 'Workshop Flutter Ordina Noord'
+				event: 'Ordina Noord'
 			},
 			{
 				id: 'flutter-frontmania',
+				offerId: 'flutter-talk',
 				date: '2022-10-05',
-				title: 'Talk Flutter FrontMania',
+				lang: 'nl',
+				event: 'FrontMania',
 				url: 'https://frontmania.com/'
 			},
 			{
 				id: 'services-join-belgie',
 				date: '2022-10-04',
-				title: 'Talk "Services down to your pocket" met Remi Appels op JOIN België',
+				event: 'JOIN België',
+				title: 'Flutter-demo in de talk {talk} van Remi Appels',
+				talk: { title: 'Services down to your pocket', lang: 'en' },
 				url: 'https://join.ordina-jworks.io/'
 			},
 			{
 				id: 'flutter-ordina-belgie',
+				offerId: 'flutter-workshop',
 				date: '2022-09-19',
-				title: 'Training Flutter Ordina België'
+				event: 'Ordina België',
+				title: 'Training Flutter'
 			},
 			{
 				id: 'flutter-code-comedy',
+				offerId: 'flutter-workshop',
 				date: '2022-06-16',
-				title: 'Workshop Flutter Code&Comedy'
+				event: 'Code&Comedy'
 			},
 			{
 				id: 'svelte-nieuwegein',
+				offerId: 'frontend-love',
 				date: '2022-04-13',
-				title: 'Talk Svelte FrontEnd Meetup Nieuwegein'
+				event: 'FrontEnd Meetup Nieuwegein'
 			}
-		]
+		],
+		labels: {
+			offers: 'Klaar om te geven',
+			offersNote:
+				'Alle talks en workshops geef ik in het Nederlands of Engels. De slides zijn in het Engels. Vertalen kan als dat nodig is.',
+			given: 'Gegeven',
+			kind: { talk: 'Talk', workshop: 'Workshop' },
+			language: { nl: 'Nederlands', en: 'Engels' },
+			facts: { duration: 'Duur', audience: 'Doelgroep' },
+			times: {
+				one: 'Eén keer gegeven: {last}',
+				many: '{count} keer gegeven, laatst: {last}'
+			}
+		}
 	},
 
 	educationLanguages: {
@@ -664,7 +722,7 @@ export const nl: SiteContent = {
 		languages: [
 			{ id: 'nl', title: 'Nederlands', level: 5 },
 			{ id: 'en', title: 'Engels', level: 5 },
-			{ id: 'ngt', title: 'Nederlandse Gebarentaal (NGT)', level: 2, note: 'basis' }
+			{ id: 'ngt', title: 'Nederlandse Gebarentaal (NGT)', level: 2 }
 		]
 	},
 

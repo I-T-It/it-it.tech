@@ -3,14 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { getContent } from '#lib/content/index.js';
-import type { Job, Locale } from '#lib/content/types.js';
+import type { Job, Locale, TalkOffer } from '#lib/content/types.js';
 import { chips } from '#lib/pcb/registry.svelte.js';
 import { overwriteGetLocale } from '#lib/paraglide/runtime.js';
 import EducationLanguages from './EducationLanguages.svelte';
 import Experience, { newestFirst } from './Experience.svelte';
 import Projects from './Projects.svelte';
 import Skills, { sortSkills } from './Skills.svelte';
-import Talks, { foreignPhrase, newestTalksFirst } from './Talks.svelte';
+import Talks, {
+	foreignTitleLang,
+	newestGivenFirst,
+	offerFacts,
+	offerStats,
+	splitTalkTitle
+} from './Talks.svelte';
 
 const root = document.documentElement;
 const CYAN = 'rgb(0, 231, 255)';
@@ -603,18 +609,26 @@ describe('Skills (U6)', () => {
 
 		it('says the level and the years in words, for screen readers', async () => {
 			await render(Skills, {});
-			expect(skill('php').querySelector('.sr-only')?.textContent).toBe('niveau 5 van 5, 15 jaar');
-			expect(skill('typescript').querySelector('.sr-only')?.textContent).toBe(
+			expect(skill('php').querySelector('.meter .sr-only')?.textContent).toBe(
+				'niveau 5 van 5, 15 jaar'
+			);
+			expect(skill('typescript').querySelector('.meter .sr-only')?.textContent).toBe(
 				'niveau 4 van 5, 2 jaar'
 			);
-			expect(skill('cobol').querySelector('.sr-only')?.textContent).toBe('niveau 1 van 5, 1 jaar');
+			expect(skill('cobol').querySelector('.meter .sr-only')?.textContent).toBe(
+				'niveau 1 van 5, 1 jaar'
+			);
 		});
 
 		it('uses the singular for one year in English', async () => {
 			setLocale('en');
 			await render(Skills, {});
-			expect(skill('dart').querySelector('.sr-only')?.textContent).toBe('level 4 of 5, 1 year');
-			expect(skill('php').querySelector('.sr-only')?.textContent).toBe('level 5 of 5, 15 years');
+			expect(skill('dart').querySelector('.meter .sr-only')?.textContent).toBe(
+				'level 4 of 5, 1 year'
+			);
+			expect(skill('php').querySelector('.meter .sr-only')?.textContent).toBe(
+				'level 5 of 5, 15 years'
+			);
 			expect(document.querySelector('section#skills h2')?.textContent).toBe(skills('en').title);
 		});
 
@@ -626,12 +640,17 @@ describe('Skills (U6)', () => {
 			expect(skill('php').querySelector('.leds-visual')?.getAttribute('aria-hidden')).toBe('true');
 		});
 
-		it('has the level text of every skill and nothing to focus', async () => {
+		it('has the level text of every skill and no button; only the links to roles can be focused', async () => {
 			await render(Skills, {});
-			expect(document.querySelectorAll('section#skills .sr-only')).toHaveLength(
+			expect(document.querySelectorAll('section#skills .meter .sr-only')).toHaveLength(
 				skills().groups.reduce((n, g) => n + g.skills.length, 0)
 			);
-			expect(document.querySelectorAll('section#skills a, section#skills button')).toHaveLength(0);
+			expect(
+				document.querySelectorAll('section#skills button, section#skills [tabindex]')
+			).toHaveLength(0);
+			for (const link of document.querySelectorAll('section#skills a')) {
+				expect(link.closest('.name'), link.textContent ?? '').not.toBeNull();
+			}
 		});
 	});
 
@@ -756,14 +775,12 @@ describe('Skills (U6)', () => {
 
 describe('Talks (U7)', () => {
 	const talks = (locale: Locale = 'nl') => getContent(locale).talks;
-	const items = () => Array.from(document.querySelectorAll<HTMLElement>('[data-talk]'));
-	const item = (id: string) => document.querySelector<HTMLElement>(`[data-talk="${id}"]`)!;
-	const ENGLISH_TITLES = [
-		'php-2005-called',
-		'frontend-js-eindhoven',
-		'frontend-festival',
-		'services-join-belgie'
-	];
+	const offers = () => Array.from(document.querySelectorAll<HTMLElement>('[data-offer]'));
+	const offer = (id: string) => document.querySelector<HTMLElement>(`[data-offer="${id}"]`)!;
+	const rows = () => Array.from(document.querySelectorAll<HTMLElement>('[data-given]'));
+	const row = (id: string) => document.querySelector<HTMLElement>(`[data-given="${id}"]`)!;
+	// The talks that are given in English: their titles stay English on the Dutch page.
+	const ENGLISH_OFFERS = ['php-2005-called', 'frontend-love', 'flutter-talk'];
 
 	it('is a chip labelled by its h2, registered as U7', async () => {
 		const screen = await render(Talks, {});
@@ -774,18 +791,37 @@ describe('Talks (U7)', () => {
 		await expect.element(screen.getByText(talks().intro!)).toBeVisible();
 	});
 
-	it('lists every talk, newest first, with its date', async () => {
+	it('is one chip in two parts: what is ready to give, then when it was given', async () => {
 		await render(Talks, {});
-		expect(items().map((el) => el.dataset.talk)).toEqual(talks().talks.map((t) => t.id));
-		const dates = items().map((el) => el.querySelector('time')!.getAttribute('datetime')!);
+		expect(document.querySelectorAll('section#talks')).toHaveLength(1);
+		const headings = Array.from(document.querySelectorAll('section#talks h3')).map(
+			(h) => h.textContent
+		);
+		expect(headings).toEqual([talks().labels.offers, talks().labels.given]);
+		expect(headings).toEqual(['Klaar om te geven', 'Gegeven']);
+		const [catalogue, history] = Array.from(document.querySelectorAll('section#talks h3'));
+		// Each list sits under its own heading: the offers between the two, the history after.
+		const { DOCUMENT_POSITION_FOLLOWING: after, DOCUMENT_POSITION_PRECEDING: before } = Node;
+		expect(catalogue.compareDocumentPosition(history) & after).toBeTruthy();
+		for (const el of offers()) {
+			expect(catalogue.compareDocumentPosition(el) & after).toBeTruthy();
+			expect(history.compareDocumentPosition(el) & before).toBeTruthy();
+		}
+		for (const el of rows()) expect(history.compareDocumentPosition(el) & after).toBeTruthy();
+	});
+
+	it('lists every occurrence, newest first, with its date', async () => {
+		await render(Talks, {});
+		expect(rows().map((el) => el.dataset.given)).toEqual(talks().given.map((g) => g.id));
+		const dates = rows().map((el) => el.querySelector('time')!.getAttribute('datetime')!);
 		expect(dates).toEqual([...dates].sort().reverse());
-		expect(item('php-2005-called').querySelector('time')?.textContent).toBe('21 jun 2024');
-		expect(item('flutter-frontmania').querySelector('time')?.textContent).toBe('5 okt 2022');
+		expect(row('php-2005-called').querySelector('time')?.textContent).toBe('jun 2024');
+		expect(row('flutter-frontmania').querySelector('time')?.textContent).toBe('5 okt 2022');
 	});
 
 	it('puts a list that arrives out of order right', () => {
-		const t = (id: string, date: string) => ({ id, title: id, date });
-		const sorted = newestTalksFirst([
+		const t = (id: string, date: string) => ({ id, offerId: id, date });
+		const sorted = newestGivenFirst([
 			t('a', '2022-04-13'),
 			t('b', '2024-06-21'),
 			t('c', '2022-04-13')
@@ -793,69 +829,291 @@ describe('Talks (U7)', () => {
 		expect(sorted.map((x) => x.id)).toEqual(['b', 'a', 'c']);
 	});
 
-	it('writes English dates on the English page', async () => {
+	it('writes English dates, labels and counts on the English page', async () => {
 		setLocale('en');
 		await render(Talks, {});
-		expect(item('php-2005-called').querySelector('time')?.textContent).toBe('21 Jun 2024');
+		expect(row('php-2005-called').querySelector('time')?.textContent).toBe('Jun 2024');
 		expect(document.querySelector('section#talks h2')?.textContent).toBe(talks('en').title);
+		expect(
+			Array.from(document.querySelectorAll('section#talks h3')).map((h) => h.textContent)
+		).toEqual(['Ready to give', 'Given']);
+		expect(offer('frontend-love').querySelector('.times')?.textContent).toBe(
+			'Given 3 times, most recently: 23 Aug 2023'
+		);
+		expect(offer('php-2005-called').querySelector('.times')?.textContent).toBe(
+			'Given once: Jun 2024'
+		);
+		expect(offer('flutter-workshop').querySelector('h4')?.textContent).toBe('Flutter workshop');
 	});
 
-	it('links a talk only when it has a url', async () => {
-		await render(Talks, {});
-		let linked = 0;
-		let plain = 0;
-		for (const talk of talks().talks) {
-			const a = item(talk.id).querySelector('a');
-			if (talk.url) {
-				linked++;
-				expect(a?.getAttribute('href')).toBe(talk.url);
-				expect(a?.textContent).toContain(talk.title);
-			} else {
-				plain++;
-				expect(a).toBeNull();
-			}
-		}
-		expect(linked).toBe(4);
-		expect(plain).toBe(5);
-	});
-
-	it('says that a link leaves the site, for screen readers only', async () => {
-		await render(Talks, {});
-		const link = item('frontend-festival').querySelector('a')!;
-		const notice = link.querySelector<HTMLElement>('.sr-only')!;
-		expect(notice.textContent).toContain('(externe site)');
-		expect(notice.getBoundingClientRect().width).toBeLessThanOrEqual(1);
-		expect(link.hasAttribute('target')).toBe(false);
-	});
-
-	it('keeps the title as the content has it, however it is marked up', async () => {
-		await render(Talks, {});
-		for (const talk of talks().talks) {
-			const title = item(talk.id).querySelector('.title')!;
-			expect(title.textContent).toBe(talk.title + (talk.url ? ' (externe site)' : ''));
-		}
-	});
-
-	describe('English titles on the Dutch page', () => {
-		it('are marked lang="en" and nothing else is', async () => {
+	describe('history', () => {
+		it('links the event only when it has a url', async () => {
 			await render(Talks, {});
-			for (const talk of talks().talks) {
-				const spans = item(talk.id).querySelectorAll('[lang]');
-				expect(spans.length > 0, talk.id).toBe(ENGLISH_TITLES.includes(talk.id));
-				for (const span of spans) expect(span.getAttribute('lang')).toBe('en');
+			let linked = 0;
+			let plain = 0;
+			for (const g of talks().given) {
+				const a = row(g.id).querySelector('a');
+				if (g.url) {
+					linked++;
+					expect(a?.getAttribute('href'), g.id).toBe(g.url);
+					expect(a?.textContent, g.id).toContain(g.event);
+				} else {
+					plain++;
+					expect(a, g.id).toBeNull();
+				}
+			}
+			expect(linked).toBe(4);
+			expect(plain).toBe(5);
+		});
+
+		it('says that a link leaves the site, for screen readers only', async () => {
+			await render(Talks, {});
+			const link = row('frontend-festival').querySelector('a')!;
+			const notice = link.querySelector<HTMLElement>('.sr-only')!;
+			expect(notice.textContent).toContain('(externe site)');
+			expect(notice.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+			expect(link.hasAttribute('target')).toBe(false);
+		});
+
+		it('names the event of every occurrence that has one, and leaves the line out of the rest', async () => {
+			await render(Talks, {});
+			for (const g of talks().given) {
+				const event = row(g.id).querySelector('.event');
+				if (g.event) expect(event?.textContent, g.id).toContain(g.event);
+				else expect(event, g.id).toBeNull();
+			}
+			expect(row('frontend-festival').querySelector('.event')?.textContent).toContain(
+				'Frontend Festival'
+			);
+			// The PHP talk was given at Sopra Steria, which has no page to link to.
+			expect(row('php-2005-called').querySelector('.event')?.textContent).toContain('Sopra Steria');
+			expect(row('php-2005-called').querySelector('a')).toBeNull();
+		});
+
+		it('gives the month for the PHP talk, since the day is not known', async () => {
+			await render(Talks, {});
+			const time = row('php-2005-called').querySelector('time')!;
+			expect(time.getAttribute('datetime')).toBe('2024-06');
+			expect(time.textContent).toBe('jun 2024');
+		});
+
+		it('shows the title of the offer, or the title of its own where the occurrence has one', async () => {
+			await render(Talks, {});
+			const title = (id: string) => row(id).querySelector('.title')?.textContent;
+			expect(title('frontend-festival')).toBe('Falling in Love with Front-end all over again');
+			expect(title('frontend-js-eindhoven')).toBe('Falling in Love with Front-end all over again');
+			expect(title('svelte-nieuwegein')).toBe('Falling in Love with Front-end all over again');
+			expect(title('flutter-ordina-noord')).toBe('Workshop Flutter');
+			// The training is an occurrence of the Flutter workshop under its own name.
+			expect(title('flutter-ordina-belgie')).toBe('Training Flutter');
+			expect(title('flutter-frontmania')).toBe(
+				'Writing multi-platform apps with native performance'
+			);
+		});
+
+		it('shows the Services talk as the talk of Remi Appels, with the Flutter demo in it', async () => {
+			await render(Talks, {});
+			const el = row('services-join-belgie');
+			expect(el.querySelector('.title')?.textContent).toBe(
+				'Flutter-demo in de talk Services down to your pocket van Remi Appels'
+			);
+			// Only the title of that talk is English, and it is a quotation.
+			expect(el.querySelectorAll('[lang]')).toHaveLength(1);
+			expect(el.querySelector('q')?.getAttribute('lang')).toBe('en');
+			expect(el.querySelector('.event')?.textContent).toContain('JOIN België');
+			expect(el.querySelector('time')?.getAttribute('datetime')).toBe('2022-10-04');
+			// It is no offer of his own.
+			expect(document.querySelector('[data-offer="services-pocket"]')).toBeNull();
+			expect(document.querySelector('[data-offer]')?.textContent).not.toContain('Remi Appels');
+		});
+
+		it('writes the Services talk in English on the English page, with no language marks', async () => {
+			setLocale('en');
+			await render(Talks, {});
+			const el = row('services-join-belgie');
+			expect(el.querySelector('.title')?.textContent).toBe(
+				'Flutter demo in the talk Services down to your pocket by Remi Appels'
+			);
+			expect(el.querySelector('q')?.textContent).toBe('Services down to your pocket');
+			expect(el.querySelectorAll('[lang]')).toHaveLength(0);
+		});
+
+		it('splits a title around the place of the talk quoted in it', () => {
+			expect(splitTalkTitle('Demo in {talk} van Remi')).toEqual(['Demo in ', ' van Remi']);
+			expect(splitTalkTitle('Demo in {talk}')).toEqual(['Demo in ', '']);
+			expect(splitTalkTitle('Geen plek')).toEqual(['Geen plek', '']);
+		});
+
+		it('says in which language an occurrence was given where that is known, and only there', async () => {
+			await render(Talks, {});
+			const spoken = (id: string) => row(id).querySelector('.spoken')?.textContent;
+			expect(spoken('flutter-frontmania')).toContain('Nederlands');
+			expect(row('flutter-frontmania').querySelector('.event')?.textContent).toContain(
+				'FrontMania'
+			);
+			for (const g of talks().given) {
+				if (g.lang === undefined) expect(spoken(g.id), g.id).toBeUndefined();
+			}
+			expect(
+				rows()
+					.filter((el) => el.querySelector('.spoken'))
+					.map((el) => el.dataset.given)
+			).toEqual(['php-2005-called', 'flutter-frontmania']);
+			expect(row('php-2005-called').querySelector('.event')?.textContent).toContain('Sopra Steria');
+			expect(spoken('php-2005-called')).toContain('Nederlands');
+		});
+
+		it('writes the language of an occurrence in English on the English page', async () => {
+			setLocale('en');
+			await render(Talks, {});
+			expect(row('flutter-frontmania').querySelector('.spoken')?.textContent).toContain('Dutch');
+			// The language is a word of the page, not a passage in another language.
+			expect(row('flutter-frontmania').querySelector('.spoken')?.hasAttribute('lang')).toBe(false);
+		});
+
+		it('gives the date as a machine-readable time', async () => {
+			await render(Talks, {});
+			expect(row('flutter-frontmania').querySelector('time')?.getAttribute('datetime')).toBe(
+				'2022-10-05'
+			);
+		});
+	});
+
+	describe('catalogue', () => {
+		it('lists every offer in the order of the content, titled by an h4 and told apart by kind', async () => {
+			await render(Talks, {});
+			expect(offers().map((el) => el.dataset.offer)).toEqual(talks().offers.map((o) => o.id));
+			for (const o of talks().offers) {
+				const el = offer(o.id);
+				expect(el.querySelector('h4')?.textContent, o.id).toBe(o.title);
+				expect(el.querySelector('.kind')?.textContent, o.id).toBe(talks().labels.kind[o.kind]);
+				expect(el.querySelector('.summary')?.textContent, o.id).toBe(o.summary);
+			}
+			expect(offer('flutter-workshop').querySelector('.kind')?.textContent).toBe('Workshop');
+			expect(offer('flutter-talk').querySelector('.kind')?.textContent).toBe('Talk');
+		});
+
+		it('shows no language line on a card, and no list of facts while there is no duration or audience', async () => {
+			await render(Talks, {});
+			// The shared note says it: every talk and workshop is in Dutch or English.
+			for (const o of talks().offers) {
+				expect(o.langs, o.id).toEqual(['nl', 'en']);
+				expect(offer(o.id).querySelector('.facts'), o.id).toBeNull();
+				expect(offer(o.id).textContent, o.id).not.toContain('Nederlands of Engels');
+				expect(offer(o.id).textContent, o.id).not.toContain('Taal');
 			}
 		});
 
-		it('mark the English words and leave the Dutch around them alone', async () => {
+		it('has one shared note under the heading of the catalogue, before the first offer', async () => {
 			await render(Talks, {});
-			const span = (id: string) => item(id).querySelector('[lang="en"]')!.textContent;
-			expect(span('php-2005-called')).toBe('2005 Called! They Want Your Opinion About PHP Back!');
-			expect(span('frontend-js-eindhoven')).toBe('Falling in Love with Front-end all over again');
-			expect(span('frontend-festival')).toBe('Falling in Love with Front-end all over again');
-			expect(span('services-join-belgie')).toBe('Talk "Services down to your pocket"');
-			expect(item('frontend-festival').querySelector('.title')?.textContent).toContain(
-				'(talk op Frontend Festival)'
+			const notes = document.querySelectorAll('section#talks .offers-note');
+			expect(notes).toHaveLength(1);
+			expect(notes[0].textContent).toBe(
+				'Alle talks en workshops geef ik in het Nederlands of Engels. De slides zijn in het Engels. Vertalen kan als dat nodig is.'
 			);
+			const heading = document.querySelector('section#talks .part-offers h3')!;
+			const first = document.querySelector('[data-offer]')!;
+			const { DOCUMENT_POSITION_FOLLOWING: after } = Node;
+			expect(heading.compareDocumentPosition(notes[0]) & after).toBeTruthy();
+			expect(notes[0].compareDocumentPosition(first) & after).toBeTruthy();
+		});
+
+		it('writes the shared note in English on the English page', async () => {
+			setLocale('en');
+			await render(Talks, {});
+			expect(document.querySelector('section#talks .offers-note')?.textContent).toBe(
+				'I give every talk and workshop in Dutch or English. The slides are in English and can be translated if needed.'
+			);
+		});
+
+		it('keeps the English title of the Flutter talk marked on the Dutch page', async () => {
+			await render(Talks, {});
+			const el = offer('flutter-talk');
+			expect(el.querySelector('h4')?.getAttribute('lang')).toBe('en');
+			expect(el.querySelector('h4')?.textContent).toBe(
+				'Writing multi-platform apps with native performance'
+			);
+		});
+
+		it('adds the duration and the audience to the facts where an offer has them', () => {
+			const labels = talks().labels;
+			const base: TalkOffer = {
+				id: 'x',
+				kind: 'talk',
+				title: 'T',
+				summary: 'S',
+				langs: ['en'],
+				titleLang: 'en'
+			};
+			// The language is not one of them: the shared note under the heading says it.
+			expect(offerFacts(base, labels)).toEqual([]);
+			expect(offerFacts({ ...base, duration: '45 minuten' }, labels)).toEqual([
+				{ label: 'Duur', value: '45 minuten' }
+			]);
+			expect(
+				offerFacts({ ...base, duration: '45 minuten', audience: 'Developers' }, labels)
+			).toEqual([
+				{ label: 'Duur', value: '45 minuten' },
+				{ label: 'Doelgroep', value: 'Developers' }
+			]);
+		});
+
+		it('says how often and when an offer was last given, in a time element', async () => {
+			await render(Talks, {});
+			const times = (id: string) => offer(id).querySelector('.times')!;
+			// A month and a day read the same after the colon: "jun 2024" and "23 aug 2023".
+			expect(times('php-2005-called').textContent).toBe('Eén keer gegeven: jun 2024');
+			expect(times('frontend-love').textContent).toBe('3 keer gegeven, laatst: 23 aug 2023');
+			expect(times('flutter-talk').textContent).toBe('Eén keer gegeven: 5 okt 2022');
+			expect(times('flutter-workshop').textContent).toBe('3 keer gegeven, laatst: 27 okt 2022');
+			expect(times('frontend-love').querySelector('time')?.getAttribute('datetime')).toBe(
+				'2023-08-23'
+			);
+		});
+
+		it('counts the occurrences of an offer and finds the last one', () => {
+			const g = (id: string, offerId: string | undefined, date: string) => ({ id, offerId, date });
+			const given = [
+				g('1', 'a', '2022-04-13'),
+				g('2', 'b', '2024-01-01'),
+				g('3', 'a', '2023-05-01'),
+				g('4', undefined, '2025-01-01')
+			];
+			expect(offerStats('a', given)).toEqual({ count: 2, last: '2023-05-01' });
+			expect(offerStats('b', given)).toEqual({ count: 1, last: '2024-01-01' });
+			// Never given: nothing to say, so the line is left out.
+			expect(offerStats('c', given)).toEqual({ count: 0 });
+		});
+	});
+
+	describe('English titles on the Dutch page', () => {
+		it('are marked lang="en" in the catalogue and the history, and nothing else is', async () => {
+			await render(Talks, {});
+			for (const o of talks().offers) {
+				const lang = offer(o.id).querySelector('.title')?.getAttribute('lang');
+				expect(lang, o.id).toBe(ENGLISH_OFFERS.includes(o.id) ? 'en' : null);
+			}
+			for (const g of talks().given) {
+				const lang = row(g.id).querySelector('.title')?.getAttribute('lang');
+				expect(lang, g.id).toBe(ENGLISH_OFFERS.includes(g.offerId ?? '') ? 'en' : null);
+			}
+			// A title of its own is in the language of the page, except for the talk quoted in it.
+			for (const el of document.querySelectorAll('section#talks [lang]')) {
+				expect(el.getAttribute('lang')).toBe('en');
+				expect(el.classList.contains('title') || el.tagName === 'Q').toBe(true);
+			}
+		});
+
+		it('mark the whole title, which is all English', async () => {
+			await render(Talks, {});
+			expect(offer('frontend-love').querySelector('[lang="en"]')?.textContent).toBe(
+				'Falling in Love with Front-end all over again'
+			);
+			expect(row('services-join-belgie').querySelector('q[lang="en"]')?.textContent).toBe(
+				'Services down to your pocket'
+			);
+			// The event next to it is a name in Dutch, on a Dutch page.
+			expect(row('frontend-festival').querySelector('.event')?.hasAttribute('lang')).toBe(false);
 		});
 
 		it('are not marked on the English page, where the whole page is English', async () => {
@@ -864,30 +1122,46 @@ describe('Talks (U7)', () => {
 			expect(document.querySelectorAll('section#talks [lang]')).toHaveLength(0);
 		});
 
-		it('are found by comparing the Dutch title with the English one', () => {
-			const same = '2005 Called! They Want Your Opinion About PHP Back!';
-			expect(foreignPhrase(same, same)).toBe(same);
-			expect(
-				foreignPhrase(
-					'Falling in Love with Front-end all over again (talk op Frontend Festival)',
-					'Falling in Love with Front-end all over again (talk at Frontend Festival)'
-				)
-			).toBe('Falling in Love with Front-end all over again');
-			expect(
-				foreignPhrase(
-					'Talk "Services down to your pocket" met Remi Appels op JOIN België',
-					'Talk "Services down to your pocket" with Remi Appels at JOIN Belgium'
-				)
-			).toBe('Talk "Services down to your pocket"');
-			// A Dutch title shares no run of words with its translation.
-			expect(
-				foreignPhrase('Workshop Flutter Ordina Noord', 'Flutter workshop at Ordina Noord')
-			).toBeUndefined();
-			expect(
-				foreignPhrase('Talk Flutter FrontMania', 'Flutter talk at FrontMania')
-			).toBeUndefined();
-			// A word or two in common is not a passage in another language.
-			expect(foreignPhrase('Talk Svelte nu', 'Talk Svelte now')).toBeUndefined();
+		it('are found from the language of the title and the language of the page', () => {
+			const english = { titleLang: 'en' } as const;
+			const dutch = { titleLang: 'nl' } as const;
+			expect(foreignTitleLang(english, 'nl')).toBe('en');
+			expect(foreignTitleLang(english, 'en')).toBeUndefined();
+			// A Dutch title is translated for the English page, so there is nothing to mark.
+			expect(foreignTitleLang(dutch, 'nl')).toBeUndefined();
+			expect(foreignTitleLang(dutch, 'en')).toBeUndefined();
+		});
+
+		it('do not depend on the language the talk is given in', async () => {
+			// The Flutter talk is given in Dutch, under an English title: the title is still English.
+			await render(Talks, {});
+			expect(offer('flutter-talk').querySelector('.title')?.getAttribute('lang')).toBe('en');
+			expect(row('flutter-frontmania').querySelector('.title')?.getAttribute('lang')).toBe('en');
+		});
+	});
+
+	describe('information only', () => {
+		// Built from parts: the address and the mail scheme are never written out (see CLAUDE.md).
+		const scheme = ['mail', 'to'].join('');
+
+		it.each(['nl', 'en'] as const)(
+			'has no booking button, no email link and no link inside an offer (%s)',
+			async (locale) => {
+				setLocale(locale);
+				await render(Talks, {});
+				const chip = document.querySelector('section#talks')!;
+				expect(chip.querySelectorAll('button, .cta, .email')).toHaveLength(0);
+				expect(chip.querySelectorAll(`[href^="${scheme}"]`)).toHaveLength(0);
+				expect(chip.querySelectorAll('[data-offer] a')).toHaveLength(0);
+				expect(chip.textContent).not.toContain('[at]');
+			}
+		);
+
+		it('links nothing but the events in the history', async () => {
+			await render(Talks, {});
+			const links = Array.from(document.querySelectorAll('section#talks a'));
+			expect(links).toHaveLength(talks().given.filter((g) => g.url).length);
+			for (const link of links) expect(link.closest('[data-given]')).not.toBeNull();
 		});
 	});
 });
@@ -934,13 +1208,12 @@ describe('EducationLanguages (U8)', () => {
 		expect(language('en').querySelector('.sr-only')?.textContent).toBe('niveau 5 van 5');
 	});
 
-	it('shows the note next to the level of NGT and reads it with the level, once', async () => {
+	it('shows no note next to the level of NGT: the two lit LEDs and the level text say it', async () => {
 		await render(EducationLanguages, {});
 		const ngt = language('ngt');
-		expect(ngt.querySelector('.sr-only')?.textContent).toBe('niveau 2 van 5, basis');
-		const note = ngt.querySelector<HTMLElement>('.note')!;
-		expect(note.textContent).toBe('basis');
-		expect(note.getAttribute('aria-hidden')).toBe('true');
+		expect(ngt.querySelector('.sr-only')?.textContent).toBe('niveau 2 van 5');
+		expect(ngt.querySelectorAll('.led[data-lit="true"]')).toHaveLength(2);
+		expect(ngt.querySelector('.note')).toBeNull();
 		expect(language('nl').querySelector('.note')).toBeNull();
 	});
 
@@ -948,7 +1221,7 @@ describe('EducationLanguages (U8)', () => {
 		setLocale('en');
 		await render(EducationLanguages, {});
 		expect(document.querySelector('section#education h2')?.textContent).toBe(section('en').title);
-		expect(language('ngt').querySelector('.sr-only')?.textContent).toBe('level 2 of 5, basic');
+		expect(language('ngt').querySelector('.sr-only')?.textContent).toBe('level 2 of 5');
 		expect(
 			Array.from(document.querySelectorAll('section#education h3')).map((h) => h.textContent)
 		).toEqual(['Education', 'Languages']);
@@ -1115,7 +1388,8 @@ describe('the chips on one page', () => {
 				headings.filter((h) => h === 'H2'),
 				id
 			).toHaveLength(1);
-			expect(headings.includes('H4'), id).toBe(false);
+			// Only the talks have a level below the h3: the title of each talk on offer.
+			expect(headings.includes('H4'), id).toBe(id === 'talks');
 		}
 		expect(chips().map((c) => c.designator)).toEqual(['U5', 'U6', 'U7', 'U8']);
 	});
