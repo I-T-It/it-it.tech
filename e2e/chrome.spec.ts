@@ -266,26 +266,54 @@ test.describe('menu', () => {
 });
 
 test.describe('footer', () => {
-	test('shows the KvK and BTW numbers and no email', async ({ page }) => {
+	test('has the links and no email, on both builds', async ({ page }) => {
 		await page.goto('./');
 		const footer = page.getByRole('contentinfo');
-		await expect(footer).toContainText('KvK-nummer');
-		await expect(footer).toContainText('86738852');
-		await expect(footer).toContainText('BTW-nummer');
-		await expect(footer).toContainText('NL002333708B14');
 		await expect(footer.getByRole('link', { name: /LinkedIn/ })).toBeVisible();
 		await expect(footer.getByRole('link', { name: /GitHub/ })).toBeVisible();
 		await expect(footer.locator(`a[href^="${scheme}"]`)).toHaveCount(0);
 		await expect(footer).not.toContainText('@');
 	});
 
-	test('says it in English', async ({ page }) => {
+	test('company: shows the company, its town and the KvK and BTW numbers', async ({
+		page
+	}, testInfo) => {
+		test.skip(testInfo.project.name !== 'company', 'the company details are on the company build');
+		await page.goto('./');
+		const footer = page.getByRole('contentinfo');
+		await expect(footer).toContainText('I.T. It');
+		await expect(footer).toContainText('Zwaag');
+		await expect(footer).toContainText('KvK-nummer');
+		await expect(footer).toContainText('86738852');
+		await expect(footer).toContainText('BTW-nummer');
+		await expect(footer).toContainText('NL002333708B14');
+	});
+
+	test('company: says it in English', async ({ page }, testInfo) => {
+		test.skip(testInfo.project.name !== 'company', 'the company details are on the company build');
 		await page.goto('en/');
 		const footer = page.getByRole('contentinfo');
 		await expect(footer).toContainText('KvK number');
 		await expect(footer).toContainText('VAT number');
 		await expect(footer.getByRole('link', { name: 'LinkedIn (external site)' })).toBeVisible();
 	});
+
+	for (const path of ['./', 'en/']) {
+		test(`personal: shows no company details, no KvK and no BTW: ${path}`, async ({
+			page
+		}, testInfo) => {
+			test.skip(testInfo.project.name !== 'personal', 'the company build shows them');
+			await page.goto(path);
+			const footer = page.getByRole('contentinfo');
+			await expect(footer).toContainText('Robbin "Roboroads" Schepers');
+			for (const text of ['I.T. It', 'Zwaag', 'KvK', 'BTW', 'VAT', '86738852', 'NL002333708B14']) {
+				await expect(footer, text).not.toContainText(text);
+			}
+			await expect(footer.locator('dl')).toHaveCount(0);
+			await expect(footer.getByRole('link', { name: /LinkedIn/ })).toBeVisible();
+			await expect(footer.getByRole('link', { name: /GitHub/ })).toBeVisible();
+		});
+	}
 
 	test('sits below the content on a short page', async ({ page }) => {
 		await page.goto('./');
@@ -357,7 +385,7 @@ test.describe('without JavaScript', () => {
 			'href',
 			`${new URL(baseURL!).pathname}en/`
 		);
-		await expect(page.getByRole('contentinfo')).toContainText('86738852');
+		await expect(page.getByRole('contentinfo').getByRole('link', { name: /GitHub/ })).toBeVisible();
 
 		await page.locator('header a[hreflang="en"]').click();
 		await expect(page).toHaveURL(`${baseURL}en/`);

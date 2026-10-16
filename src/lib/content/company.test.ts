@@ -1,16 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { company } from './company.js';
+import { company, companyBtw, companyCity, companyKvk } from './company.js';
 
-describe('company', () => {
-	it('has the registration numbers for the footer', () => {
-		expect(company.kvk).toBe('86738852');
-		expect(company.btw).toBe('NL002333708B14');
+describe('company details', () => {
+	it('has the registration numbers and the town for the company footer', () => {
+		expect(companyKvk).toBe('86738852');
+		expect(companyBtw).toBe('NL002333708B14');
+		expect(companyCity).toBe('Zwaag');
 	});
 
-	it('names the company, the owner and the town', () => {
+	it('are not on `company`, so the personal bundle can drop them', () => {
+		// `company` stays in the personal bundle (links, names). Anything on it would stay too.
+		expect(Object.keys(company)).not.toContain('kvk');
+		expect(Object.keys(company)).not.toContain('btw');
+		expect(Object.keys(company)).not.toContain('city');
+	});
+});
+
+describe('company', () => {
+	it('names the company and the owner', () => {
 		expect(company.name).toBe('I.T. It');
 		expect(company.founder).toBe('Robbin Schepers');
-		expect(company.city).toBe('Zwaag');
 	});
 
 	it('keeps the legal name and the display name apart, built from the same parts', () => {
