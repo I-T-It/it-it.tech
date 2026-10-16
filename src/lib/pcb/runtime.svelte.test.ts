@@ -190,6 +190,31 @@ async function scrollTo(y: number): Promise<void> {
 	await frames(2);
 }
 
+/** Layouts (each after three runs of `referenceMs`) the budget test takes the best of. */
+const BUDGET_ROUNDS = 5;
+/**
+ * The layout of a real page may take this many times `referenceMs`. It takes about 2 times as long
+ * (25 ms against 12 ms on a laptop), and 1.1 to 2.3 times under a heavy CPU load, where both slow
+ * down 2 to 4x. A layout that got 3x slower or more fails; a fixed 100 ms failed on CI at 139 ms.
+ */
+const BUDGET_RATIO = 6;
+
+/**
+ * Milliseconds for a fixed chunk of plain JS (arithmetic, array pushes, a sort): how fast this
+ * machine runs scripts right now. The same work every time, so only the machine changes it.
+ */
+function referenceMs(): number {
+	const start = performance.now();
+	const values: number[] = [];
+	let x = 1;
+	for (let i = 0; i < 50_000; i++) {
+		x = (x * 1664525 + 1013904223) >>> 0;
+		values.push(x);
+	}
+	values.sort((a, b) => a - b);
+	return performance.now() - start;
+}
+
 function tracesOf(runtime: BoardRuntime, kind: Trace['kind']): Trace[] {
 	return runtime.board?.traces.filter((t) => t.kind === kind) ?? [];
 }
@@ -260,13 +285,30 @@ describe('start', () => {
 	it('lays out a real page well within budget', async () => {
 		await page.viewport(1440, 900);
 		buildPage({ chips: [700, 400, 500, 520, 2600, 900, 700, 420, 380] });
-		const { runtime } = launch();
-		await runtime.start();
+		const layOut = async (): Promise<number> => {
+			const { runtime } = launch();
+			await runtime.start();
+			runtime.destroy();
+			return runtime.lastLayoutMs;
+		};
+
+		// A shared CI runner swings 4x or more from one run to the next (the same layout took 34 ms
+		// and 139 ms there, 24 ms here), and the first layout also pays for compiling the code. So:
+		// warm up once, then take the best of several layouts, each next to a fixed chunk of plain
+		// work, and hold the layout to a multiple of that work instead of to a fixed time. A slow
+		// machine slows both, a layout that really got slower does not slow the reference.
+		await layOut();
+		let layoutMs = Infinity;
+		let reference = Infinity;
+		for (let i = 0; i < BUDGET_ROUNDS; i++) {
+			for (let j = 0; j < 3; j++) reference = Math.min(reference, referenceMs());
+			layoutMs = Math.min(layoutMs, await layOut());
+		}
 		console.info(
-			`measure ${runtime.lastMeasureMs.toFixed(1)} ms, layout ${runtime.lastLayoutMs.toFixed(1)} ms`
+			`layout ${layoutMs.toFixed(1)} ms, reference ${reference.toFixed(1)} ms, ` +
+				`ratio ${(layoutMs / reference).toFixed(2)} (limit ${BUDGET_RATIO})`
 		);
-		// The budget is 30 ms on a mid-range laptop; CI machines get headroom.
-		expect(runtime.lastLayoutMs).toBeLessThan(100);
+		expect(layoutMs).toBeLessThan(reference * BUDGET_RATIO);
 	});
 });
 
