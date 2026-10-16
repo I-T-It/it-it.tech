@@ -378,6 +378,8 @@ test.describe('accessibility', () => {
 	});
 
 	test('passes axe with the menu open, in NL and EN at 320 and 1280 CSS px', async ({ page }) => {
+		// Four axe runs over the whole page: more than the default 30 s once the page has every chip.
+		test.setTimeout(90_000);
 		for (const width of [320, 1280]) {
 			await page.setViewportSize({ width, height: 800 });
 			for (const path of ['./', 'en/']) {
