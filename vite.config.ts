@@ -1,5 +1,7 @@
+import { fileURLToPath } from 'node:url';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { enhancedImages } from '@sveltejs/enhanced-img';
+import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-static';
@@ -15,6 +17,26 @@ Object.assign(process.env, env);
 const base = env.BASE_PATH as '' | `/${string}`;
 const buildDir = process.env.BUILD_DIR || 'build';
 
+/**
+ * The photo glitch is for the personal build. Hero imports it in the personal branch only, but an
+ * import is followed before the dead branch is dropped: a company build would still carry the
+ * templates and styles of the two components and the avatar's image files. In a company build
+ * they resolve to an empty component instead. A build only: tests and the dev server keep the
+ * real ones.
+ */
+function companyWithoutGlitch(): Plugin {
+	const empty = fileURLToPath(new URL('./src/lib/components/NoGlitch.svelte', import.meta.url));
+	return {
+		name: 'company-without-photo-glitch',
+		apply: 'build',
+		enforce: 'pre',
+		resolveId(source) {
+			if (env.PUBLIC_SITE !== 'company') return;
+			if (/^#lib\/components\/Glitch(Photo|Toggle)\.svelte$/.test(source)) return empty;
+		}
+	};
+}
+
 export default defineConfig({
 	build: {
 		rolldownOptions: {
@@ -24,6 +46,7 @@ export default defineConfig({
 		}
 	},
 	plugins: [
+		companyWithoutGlitch(),
 		enhancedImages(),
 		sveltekit({
 			compilerOptions: {

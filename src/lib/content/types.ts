@@ -35,6 +35,8 @@ export interface Hero {
 	cta: { job: string; freelance: string };
 	logoAlt: string;
 	photoAlt: string;
+	/** The Roboroads avatar the personal hero shows now and then instead of the photo. */
+	avatarAlt: string;
 }
 
 /** The U1 chip (job path). */

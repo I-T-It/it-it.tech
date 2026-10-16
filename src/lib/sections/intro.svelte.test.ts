@@ -11,6 +11,7 @@ import { company, emailEncoded } from '#lib/content/company.js';
 import { getContent } from '#lib/content/index.js';
 import { profiles, visibleProfiles } from '#lib/content/profiles.js';
 import { decodeEmail, EMAIL_FALLBACK_TEXT } from '#lib/email.js';
+import { glitch } from '#lib/glitch/state.svelte.js';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
 import { SOCKET_DRAW_MS } from '#lib/pcb/growth.js';
 import { chips, obstacles, socket } from '#lib/pcb/registry.svelte.js';
@@ -315,6 +316,23 @@ describe('Hero', () => {
 	it('draws the logo on load', async () => {
 		await mount(Hero);
 		expect(hero().querySelector('svg.logo')?.classList.contains('animate')).toBe(true);
+	});
+
+	// The photo glitch is for the personal build: the company hero has no photo to glitch, and
+	// nothing of it is in the markup, whatever the shared glitch state says.
+	it('has no photo glitch: no glitch state, no stop switch, no picture, no image but the logo', async () => {
+		glitch.armed = true;
+		try {
+			await mount(Hero);
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			expect(hero().querySelector('[data-glitch], [data-show], .glitch')).toBeNull();
+			expect(hero().querySelector('button')).toBeNull();
+			expect(hero().querySelector('picture, img')).toBeNull();
+			expect(hero().querySelector('.photo-socket, .die')).toBeNull();
+			expect(hero().querySelectorAll('svg.logo')).toHaveLength(1);
+		} finally {
+			glitch.armed = false;
+		}
 	});
 });
 

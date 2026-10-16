@@ -31,7 +31,8 @@ export const en: SiteContent = {
 			freelance: 'Project for I.T. It'
 		},
 		logoAlt: 'I.T. It logo',
-		photoAlt: 'Portrait of Robbin Schepers'
+		photoAlt: 'Portrait of Robbin Schepers',
+		avatarAlt: 'Roboroads avatar: a low-poly portrait in green with a glowing cowboy hat'
 	},
 
 	availability: {

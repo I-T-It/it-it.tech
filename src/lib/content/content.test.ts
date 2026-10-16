@@ -112,6 +112,15 @@ describe('NL and EN parity', () => {
 		}
 	});
 
+	it('describes the avatar that replaces the photo now and then, naming the handle', () => {
+		for (const [, c] of both) {
+			expect(c.hero.avatarAlt).toContain('Roboroads');
+			expect(c.hero.avatarAlt).not.toBe(c.hero.photoAlt);
+			expect(c.hero.avatarAlt.length).toBeGreaterThan(30);
+		}
+		expect(nl.hero.avatarAlt).not.toBe(en.hero.avatarAlt);
+	});
+
 	it('differs between EN and NL, except for names, tags, titles and the tagline', () => {
 		const enByPath = new Map(copy(en));
 		const sameAllowed = (path: string, value: string) =>
