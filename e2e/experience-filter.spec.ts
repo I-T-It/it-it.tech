@@ -2,10 +2,10 @@ import { expect, test, type Page } from '@playwright/test';
 import { expectNoAxeViolations } from './axe.js';
 
 // The Experience filter on the built site, in both variants: the link that restores it, the Skills
-// links that set it, and the accessibility of the page with it on. Laravel is in nine of the
-// fifteen roles, Docker in seven and Apache (in the long tail) in two.
+// links that set it, and the accessibility of the page with it on. Laravel is in seven of the
+// twelve roles, Docker in five and Apache (in the long tail) in two.
 
-const ROLES = 15;
+const ROLES = 12;
 
 const rows = (page: Page) => page.locator('#experience .timeline > li');
 const shown = (page: Page) => page.locator('#experience .timeline > li:not([hidden])');
@@ -33,10 +33,10 @@ test.describe('Experience filter', () => {
 
 	test('restores the filter from the address and lands on the roles', async ({ page }) => {
 		await page.goto('./?skill=laravel#experience');
-		await expect(shown(page)).toHaveCount(9);
+		await expect(shown(page)).toHaveCount(7);
 		await expect(rows(page)).toHaveCount(ROLES);
-		await expect(chip(page, 'Laravel (9)')).toHaveAttribute('aria-pressed', 'true');
-		await expect(status(page)).toHaveText('9 rollen met Laravel');
+		await expect(chip(page, 'Laravel (7)')).toHaveAttribute('aria-pressed', 'true');
+		await expect(status(page)).toHaveText('7 rollen met Laravel');
 		await expect(page).toHaveURL(/\?skill=laravel#experience$/);
 
 		// The chip is where the address says: its top is near the top of the window.
@@ -47,8 +47,8 @@ test.describe('Experience filter', () => {
 
 	test('takes any spelling of the skill from the address', async ({ page }) => {
 		await page.goto('./?skill=Vue.js#experience');
-		await expect(shown(page)).toHaveCount(7);
-		await expect(chip(page, 'Vue.js (7)')).toHaveAttribute('aria-pressed', 'true');
+		await expect(shown(page)).toHaveCount(6);
+		await expect(chip(page, 'Vue.js (6)')).toHaveAttribute('aria-pressed', 'true');
 	});
 
 	test('shows every role for an unknown skill in the address', async ({ page }) => {
@@ -62,17 +62,17 @@ test.describe('Experience filter', () => {
 		context
 	}) => {
 		await page.goto('./#experience');
-		await chip(page, 'Docker (7)').click();
-		await expect(shown(page)).toHaveCount(7);
-		await expect(status(page)).toHaveText('7 rollen met Docker');
+		await chip(page, 'Docker (5)').click();
+		await expect(shown(page)).toHaveCount(5);
+		await expect(status(page)).toHaveText('5 rollen met Docker');
 		await expect(page).toHaveURL(/\?skill=docker#experience$/);
 		// The tags that matched are marked.
-		await expect(page.locator('#experience .tech li[data-match]')).toHaveCount(7);
+		await expect(page.locator('#experience .tech li[data-match]')).toHaveCount(5);
 
 		const copy = await context.newPage();
 		await copy.goto(page.url());
-		await expect(shown(copy)).toHaveCount(7);
-		await expect(chip(copy, 'Docker (7)')).toHaveAttribute('aria-pressed', 'true');
+		await expect(shown(copy)).toHaveCount(5);
+		await expect(chip(copy, 'Docker (5)')).toHaveAttribute('aria-pressed', 'true');
 		await copy.close();
 	});
 
@@ -99,18 +99,18 @@ test.describe('Experience filter', () => {
 
 	test('is operated with the keyboard', async ({ page }) => {
 		await page.goto('./#experience');
-		await chip(page, 'Laravel (9)').focus();
+		await chip(page, 'Laravel (7)').focus();
 		await page.keyboard.press('Enter');
-		await expect(shown(page)).toHaveCount(9);
-		await expect(chip(page, 'Laravel (9)')).toBeFocused();
+		await expect(shown(page)).toHaveCount(7);
+		await expect(chip(page, 'Laravel (7)')).toBeFocused();
 		await page.keyboard.press('Space');
 		await expect(shown(page)).toHaveCount(ROLES);
 	});
 
 	test('speaks English on the English page', async ({ page }) => {
 		await page.goto('en/?skill=laravel#experience');
-		await expect(shown(page)).toHaveCount(9);
-		await expect(status(page)).toHaveText('9 roles with Laravel');
+		await expect(shown(page)).toHaveCount(7);
+		await expect(status(page)).toHaveText('7 roles with Laravel');
 		await expect(chip(page, `All (${ROLES})`)).toHaveAttribute('aria-pressed', 'false');
 	});
 
@@ -133,10 +133,10 @@ test.describe('Skills links', () => {
 		await expect(link).toHaveAttribute('href', '?skill=laravel#experience');
 		await link.click();
 
-		await expect(shown(page)).toHaveCount(9);
+		await expect(shown(page)).toHaveCount(7);
 		await expect(page).toHaveURL(/\?skill=laravel#experience$/);
-		await expect(status(page)).toHaveText('9 rollen met Laravel');
-		await expect(chip(page, 'Laravel (9)')).toBeFocused();
+		await expect(status(page)).toHaveText('7 rollen met Laravel');
+		await expect(chip(page, 'Laravel (7)')).toBeFocused();
 		// The Experience chip is in view, below the header.
 		await expect
 			.poll(async () => (await page.locator('#experience').boundingBox())?.y ?? 9999)
@@ -167,7 +167,7 @@ test.describe('Experience filter accessibility', () => {
 			await expectNoAxeViolations(page);
 
 			await page.goto(`${path}?skill=laravel#experience`);
-			await expect(shown(page)).toHaveCount(9);
+			await expect(shown(page)).toHaveCount(7);
 			await expectNoAxeViolations(page);
 
 			await page.locator('#experience [data-filter] button[aria-expanded]').click();
@@ -183,7 +183,7 @@ test.describe('Experience filter accessibility', () => {
 	test('passes axe at 320 CSS px with a filter on and a control focused', async ({ page }) => {
 		await page.setViewportSize({ width: 320, height: 700 });
 		await page.goto('./?skill=vue#experience');
-		await chip(page, 'Vue.js (7)').focus();
+		await chip(page, 'Vue.js (6)').focus();
 		await expectNoAxeViolations(page);
 	});
 

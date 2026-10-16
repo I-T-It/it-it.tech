@@ -164,7 +164,7 @@ describe('Skills: pressing a link', () => {
 		expect(location.pathname).toBe(new URL(before).pathname);
 		expect(
 			Array.from(document.querySelectorAll<HTMLElement>('.timeline > li')).filter((r) => !r.hidden)
-		).toHaveLength(9);
+		).toHaveLength(7);
 	});
 
 	it('scrolls to the Experience chip, below the header', async () => {
@@ -191,7 +191,7 @@ describe('Skills: pressing a link', () => {
 		await render(Skills, {});
 		linkIn('docker')!.focus();
 		await userEvent.keyboard('{Enter}');
-		await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Docker (7)');
+		await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Docker (5)');
 		expect(document.activeElement?.getAttribute('aria-pressed')).toBe('true');
 	});
 
@@ -199,8 +199,8 @@ describe('Skills: pressing a link', () => {
 		makeRoom();
 		await render(Experience, {});
 		await render(Skills, {});
-		await userEvent.click(linkIn('python')!);
-		await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Python (1)');
+		await userEvent.click(linkIn('flutter')!);
+		await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Flutter (1)');
 		expect(
 			Array.from(document.querySelectorAll<HTMLElement>('.timeline > li')).filter((r) => !r.hidden)
 		).toHaveLength(1);
@@ -213,7 +213,7 @@ describe('Skills: pressing a link', () => {
 		await userEvent.click(linkIn('laravel')!);
 		await expect
 			.poll(() => document.querySelector('#experience [role="status"]')?.textContent?.trim())
-			.toBe('9 rollen met Laravel');
+			.toBe('7 rollen met Laravel');
 	});
 
 	it('does nothing but set the filter when Experience is not on the page', async () => {

@@ -243,14 +243,14 @@ describe('the real content', () => {
 		expect(keysOf(locale)).toEqual(keysOf('nl'));
 	});
 
-	it('finds Laravel in nine roles and offers it first among the frameworks', () => {
+	it('finds Laravel in seven roles and offers it first among the frameworks', () => {
 		const { jobs } = getContent('nl').experience;
-		expect(jobsWithSkill(jobs, 'laravel')).toHaveLength(9);
+		expect(jobsWithSkill(jobs, 'laravel')).toHaveLength(7);
 		const options = skillOptions(jobs);
 		expect(options.find((o) => o.key === 'laravel')).toEqual({
 			key: 'laravel',
 			label: 'Laravel',
-			count: 9
+			count: 7
 		});
 		const counts = options.map((o) => o.count);
 		expect(counts).toEqual([...counts].sort((a, b) => b - a));

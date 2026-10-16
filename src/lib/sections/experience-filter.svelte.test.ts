@@ -82,7 +82,7 @@ describe('Experience filter: the controls', () => {
 		// The first ones are the most used, in order; the rest wait behind the "more" button.
 		expect(first).toEqual(names.slice(0, first.length));
 		expect(first.length).toBeGreaterThanOrEqual(10);
-		expect(button('Laravel (9)')).toBeDefined();
+		expect(button('Laravel (7)')).toBeDefined();
 		expect(names.every((n) => !n.endsWith('(1)'))).toBe(true);
 	});
 
@@ -148,9 +148,9 @@ describe('Experience filter: the controls', () => {
 		});
 
 		it('keeps a skill of one role on screen too, e.g. when a link from Skills asks for it', async () => {
-			setAddress('?skill=python');
+			setAddress('?skill=flutter');
 			await render(Experience, {});
-			await expect.poll(() => pressed().map((b) => b.textContent?.trim())).toEqual(['Python (1)']);
+			await expect.poll(() => pressed().map((b) => b.textContent?.trim())).toEqual(['Flutter (1)']);
 		});
 	});
 
@@ -187,14 +187,14 @@ describe('Experience filter: the controls', () => {
 
 		it('does not mark the state by colour alone: a pressed chip differs in shape and weight', async () => {
 			await render(Experience, {});
-			await userEvent.click(button('Laravel (9)'));
-			const on = getComputedStyle(button('Laravel (9)'));
-			const off = getComputedStyle(button('PHP (11)'));
+			await userEvent.click(button('Laravel (7)'));
+			const on = getComputedStyle(button('Laravel (7)'));
+			const off = getComputedStyle(button('PHP (8)'));
 			expect(on.backgroundColor).not.toBe(off.backgroundColor);
 			const dot = (el: HTMLElement) => getComputedStyle(el, '::before');
-			expect(dot(button('Laravel (9)')).content).not.toBe('none');
-			expect(dot(button('Laravel (9)')).backgroundColor).not.toBe(
-				dot(button('PHP (11)')).backgroundColor
+			expect(dot(button('Laravel (7)')).content).not.toBe('none');
+			expect(dot(button('Laravel (7)')).backgroundColor).not.toBe(
+				dot(button('PHP (8)')).backgroundColor
 			);
 		});
 	});
@@ -203,20 +203,20 @@ describe('Experience filter: the controls', () => {
 describe('Experience filter: filtering', () => {
 	it('shows only the roles that have the skill, and hides the others from everyone', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
+		await userEvent.click(button('Laravel (7)'));
 		const expected = jobsWithSkill(jobsOf('nl'), 'laravel').map((j) => `job-${j.id}`);
-		expect(expected).toHaveLength(9);
+		expect(expected).toHaveLength(7);
 		expect(shown().map((row) => row.id)).toEqual(expected);
 		for (const row of rows().filter((r) => r.hidden)) {
 			expect(getComputedStyle(row).display).toBe('none');
 		}
-		expect(button('Laravel (9)').getAttribute('aria-pressed')).toBe('true');
+		expect(button('Laravel (7)').getAttribute('aria-pressed')).toBe('true');
 		expect(pressed()).toHaveLength(1);
 	});
 
 	it('finds a role by a tag in another spelling: Vue.js is `vue`', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('Vue.js (7)'));
+		await userEvent.click(button('Vue.js (6)'));
 		expect(shown().map((row) => row.id)).toEqual(
 			jobsWithSkill(jobsOf('nl'), 'vue').map((j) => `job-${j.id}`)
 		);
@@ -224,7 +224,7 @@ describe('Experience filter: filtering', () => {
 
 	it('keeps the order of the roles', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('PHP (11)'));
+		await userEvent.click(button('PHP (8)'));
 		const all = rows().map((row) => row.id);
 		const kept = shown().map((row) => row.id);
 		expect(kept.length).toBeGreaterThan(1);
@@ -233,28 +233,28 @@ describe('Experience filter: filtering', () => {
 
 	it('takes the filter off with "Alles", and with a second press on the same skill', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
+		await userEvent.click(button('Laravel (7)'));
 		await userEvent.click(buttons()[0]);
 		expect(shown()).toHaveLength(jobsOf('nl').length);
 		expect(pressed()).toEqual([buttons()[0]]);
 
-		await userEvent.click(button('Laravel (9)'));
-		await userEvent.click(button('Laravel (9)'));
+		await userEvent.click(button('Laravel (7)'));
+		await userEvent.click(button('Laravel (7)'));
 		expect(shown()).toHaveLength(jobsOf('nl').length);
 		expect(pressed()).toEqual([buttons()[0]]);
 	});
 
 	it('switches from one skill to another, one at a time', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
-		await userEvent.click(button('Docker (7)'));
-		expect(pressed().map((b) => b.textContent?.trim())).toEqual(['Docker (7)']);
-		expect(shown()).toHaveLength(7);
+		await userEvent.click(button('Laravel (7)'));
+		await userEvent.click(button('Docker (5)'));
+		expect(pressed().map((b) => b.textContent?.trim())).toEqual(['Docker (5)']);
+		expect(shown()).toHaveLength(5);
 	});
 
 	it('marks the tag that matched in every role, with more than colour', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
+		await userEvent.click(button('Laravel (7)'));
 		for (const row of shown()) {
 			const marked = Array.from(row.querySelectorAll<HTMLElement>('.tech li[data-match]'));
 			expect(
@@ -274,7 +274,7 @@ describe('Experience filter: filtering', () => {
 	it('marks nothing when no skill is chosen', async () => {
 		await render(Experience, {});
 		expect(document.querySelectorAll('[data-match]')).toHaveLength(0);
-		await userEvent.click(button('Laravel (9)'));
+		await userEvent.click(button('Laravel (7)'));
 		await userEvent.click(buttons()[0]);
 		expect(document.querySelectorAll('[data-match]')).toHaveLength(0);
 	});
@@ -282,8 +282,8 @@ describe('Experience filter: filtering', () => {
 	it('follows the filter when something else sets it, like a link in Skills', async () => {
 		await render(Experience, {});
 		skillFilter.select('docker');
-		await expect.poll(() => shown().length).toBe(7);
-		expect(pressed().map((b) => b.textContent?.trim())).toEqual(['Docker (7)']);
+		await expect.poll(() => shown().length).toBe(5);
+		expect(pressed().map((b) => b.textContent?.trim())).toEqual(['Docker (5)']);
 	});
 });
 
@@ -300,19 +300,19 @@ describe('Experience filter: what is announced', () => {
 
 	it('says how many roles have the skill', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
-		expect(status().textContent?.trim()).toBe('9 rollen met Laravel');
+		await userEvent.click(button('Laravel (7)'));
+		expect(status().textContent?.trim()).toBe('7 rollen met Laravel');
 	});
 
 	it('says "1 rol" in the singular', async () => {
-		setAddress('?skill=python');
+		setAddress('?skill=flutter');
 		await render(Experience, {});
-		await expect.poll(() => status().textContent?.trim()).toBe('1 rol met Python');
+		await expect.poll(() => status().textContent?.trim()).toBe('1 rol met Flutter');
 	});
 
 	it('says that all roles are back after the reset', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
+		await userEvent.click(button('Laravel (7)'));
 		await userEvent.click(buttons()[0]);
 		expect(status().textContent?.trim()).toBe(`Alle ${jobsOf('nl').length} rollen`);
 	});
@@ -320,18 +320,18 @@ describe('Experience filter: what is announced', () => {
 	it('speaks English, singular and plural', async () => {
 		setLocale('en');
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
-		expect(status().textContent?.trim()).toBe('9 roles with Laravel');
+		await userEvent.click(button('Laravel (7)'));
+		expect(status().textContent?.trim()).toBe('7 roles with Laravel');
 		await userEvent.click(buttons()[0]);
 		expect(status().textContent?.trim()).toBe(`All ${jobsOf('en').length} roles`);
-		skillFilter.select('python');
-		await expect.poll(() => status().textContent?.trim()).toBe('1 role with Python');
+		skillFilter.select('flutter');
+		await expect.poll(() => status().textContent?.trim()).toBe('1 role with Flutter');
 	});
 
 	it('keeps room for the line, so the list does not jump when the text appears', async () => {
 		await render(Experience, {});
 		const before = filter().getBoundingClientRect().height;
-		await userEvent.click(button('Laravel (9)'));
+		await userEvent.click(button('Laravel (7)'));
 		expect(filter().getBoundingClientRect().height).toBe(before);
 	});
 });
@@ -339,7 +339,7 @@ describe('Experience filter: what is announced', () => {
 describe('Experience filter: the address', () => {
 	it('writes the skill and the section to the address, so the link can be sent', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
+		await userEvent.click(button('Laravel (7)'));
 		await expect.poll(() => location.search + location.hash).toBe('?skill=laravel#experience');
 		await userEvent.click(buttons()[0]);
 		await expect.poll(() => location.search + location.hash).toBe('#experience');
@@ -348,15 +348,15 @@ describe('Experience filter: the address', () => {
 	it('restores the filter from the address on load', async () => {
 		setAddress('?skill=vue', '#experience');
 		await render(Experience, {});
-		await expect.poll(() => shown().length).toBe(7);
-		expect(pressed().map((b) => b.textContent?.trim())).toEqual(['Vue.js (7)']);
-		expect(status().textContent?.trim()).toBe('7 rollen met Vue.js');
+		await expect.poll(() => shown().length).toBe(6);
+		expect(pressed().map((b) => b.textContent?.trim())).toEqual(['Vue.js (6)']);
+		expect(status().textContent?.trim()).toBe('6 rollen met Vue.js');
 	});
 
 	it('reads any spelling: ?skill=Node.js', async () => {
 		setAddress('?skill=Node.js');
 		await render(Experience, {});
-		await expect.poll(() => shown().length).toBe(7);
+		await expect.poll(() => shown().length).toBe(4);
 	});
 
 	it('shows every role for a skill that no role has', async () => {
@@ -371,7 +371,7 @@ describe('Experience filter: the address', () => {
 		// The first render has no address to read; the filter is applied by an effect after mount.
 		setAddress('?skill=docker');
 		await render(Experience, {});
-		await expect.poll(() => shown().length).toBe(7);
+		await expect.poll(() => shown().length).toBe(5);
 		expect(rows()).toHaveLength(jobsOf('nl').length);
 	});
 });
@@ -382,9 +382,9 @@ describe('Experience filter: the timeline', () => {
 
 	it('keeps a via for every role on show, and a trace between them but not under the last', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
-		expect(visibleVias()).toHaveLength(9);
-		expect(visibleTraces()).toHaveLength(8);
+		await userEvent.click(button('Laravel (7)'));
+		expect(visibleVias()).toHaveLength(7);
+		expect(visibleTraces()).toHaveLength(6);
 		const last = shown().at(-1)!;
 		expect(last.querySelector('.trace')).toBeNull();
 		expect(
@@ -396,7 +396,7 @@ describe('Experience filter: the timeline', () => {
 
 	it('gives the last role on show no room under it, and the one before it room', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
+		await userEvent.click(button('Laravel (7)'));
 		const role = (row: HTMLElement) => getComputedStyle(row.querySelector('.role')!);
 		expect(role(shown().at(-1)!).paddingBottom).toBe('0px');
 		expect(parseFloat(role(shown()[0]).paddingBottom)).toBeGreaterThan(0);
@@ -404,7 +404,7 @@ describe('Experience filter: the timeline', () => {
 
 	it('puts the traces back when the filter goes', async () => {
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
+		await userEvent.click(button('Laravel (7)'));
 		await userEvent.click(buttons()[0]);
 		expect(visibleVias()).toHaveLength(jobsOf('nl').length);
 		expect(visibleTraces()).toHaveLength(jobsOf('nl').length - 1);
@@ -413,7 +413,7 @@ describe('Experience filter: the timeline', () => {
 	it('lights the vias of roles that were hidden when they come back, where an observer does it', async () => {
 		vi.spyOn(CSS, 'supports').mockReturnValue(false);
 		await render(Experience, {});
-		await userEvent.click(button('Laravel (9)'));
+		await userEvent.click(button('Laravel (7)'));
 		window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
 		await frames();
 		// The roles come back while the window is at the bottom: some of them end up above it, and
