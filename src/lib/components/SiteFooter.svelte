@@ -1,9 +1,13 @@
 <script lang="ts">
-	import { company } from '#lib/content/company.js';
+	import { company, companyBtw, companyCity, companyKvk } from '#lib/content/company.js';
 	import { m } from '#lib/paraglide/messages.js';
+	import { site } from '#lib/site.js';
 
 	// The year is fixed when the page is built; the sites rebuild on every push.
 	const year = new Date().getFullYear();
+
+	// The company site names the company, the personal site names the person.
+	const owner = site === 'company' ? company.name : company.displayName;
 
 	const links = [
 		{ href: company.linkedin, label: () => m.link_linkedin() },
@@ -11,25 +15,33 @@
 	];
 </script>
 
-<!-- No email in the footer, on either build: the address lives in the contact chip (company only). -->
+<!--
+	No email in the footer, on either build: the address lives in the contact chip (company only).
+	The town and the KvK and BTW numbers are company details: the company build only, so the
+	personal build drops them (and the code that reads them) from its output.
+-->
 <footer class="site-footer">
 	<!-- Laid out like the title block in the corner of a drawing: ruled cells, one fact each. -->
 	<div class="block">
 		<p class="cell who">
-			<span class="name">{company.name}</span>
-			<span class="muted">{company.city}</span>
+			<span class="name">{owner}</span>
+			{#if site === 'company'}
+				<span class="muted">{companyCity}</span>
+			{/if}
 		</p>
 
-		<dl class="numbers">
-			<div class="cell">
-				<dt class="muted">{m.footer_kvk()}</dt>
-				<dd>{company.kvk}</dd>
-			</div>
-			<div class="cell">
-				<dt class="muted">{m.footer_btw()}</dt>
-				<dd>{company.btw}</dd>
-			</div>
-		</dl>
+		{#if site === 'company'}
+			<dl class="numbers">
+				<div class="cell">
+					<dt class="muted">{m.footer_kvk()}</dt>
+					<dd>{companyKvk}</dd>
+				</div>
+				<div class="cell">
+					<dt class="muted">{m.footer_btw()}</dt>
+					<dd>{companyBtw}</dd>
+				</div>
+			</dl>
+		{/if}
 
 		<ul class="cell links">
 			{#each links as link (link.href)}
@@ -43,7 +55,7 @@
 		</ul>
 	</div>
 
-	<p class="copyright">{m.footer_copyright({ year, name: company.name })}</p>
+	<p class="copyright">{m.footer_copyright({ year, name: owner })}</p>
 </footer>
 
 <style>

@@ -1,9 +1,17 @@
 import '../../app.css';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
 import SiteFooter from './SiteFooter.svelte';
+
+// The variant is a build-time constant, so one file cannot hold both: this file runs the company
+// build (the one with the company details), SiteFooter.personal.svelte.test.ts the personal one.
+// The real site.ts needs the SvelteKit dev runtime, which a component test does not have.
+vi.mock('../site.js', () => ({
+	site: 'company',
+	variant: { site: 'company' }
+}));
 
 // Built from parts: the mail scheme is never written out (see CLAUDE.md).
 const scheme = ['mail', 'to'].join('');

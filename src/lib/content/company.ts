@@ -12,15 +12,27 @@ export const company = {
 	 * "Roboroads" Schepers, with straight quotes in every language (they read the same in Fira Code).
 	 */
 	displayName: 'Robbin "Roboroads" Schepers',
-	city: 'Zwaag',
 	linkedin: 'https://www.linkedin.com/in/roboroads',
 	github: 'https://github.com/Roboroads',
-	githubHandle: '@Roboroads',
-	/** Chamber of Commerce number, shown in the footer. */
-	kvk: '86738852',
-	/** VAT number, shown in the footer. */
-	btw: 'NL002333708B14'
+	githubHandle: '@Roboroads'
 } as const;
+
+/*
+ * The company's town and registration numbers, shown in the company footer only. The personal site
+ * is personal: it shows none of them. Each is a plain string export on purpose, not a property of
+ * `company` or of a shared object: the build inlines a string constant into the code that reads
+ * it, so once the personal build drops that code the value is gone from the bundle too. An object
+ * would stay, as would a property. Read them behind `site === 'company'`.
+ */
+
+/** Where the company is based. */
+export const companyCity = 'Zwaag';
+
+/** Chamber of Commerce number. */
+export const companyKvk = '86738852';
+
+/** VAT number. */
+export const companyBtw = 'NL002333708B14';
 
 /**
  * The email address, base64 of the address written backwards. Never write the plain address or a
