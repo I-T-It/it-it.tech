@@ -21,8 +21,8 @@ const buildDir = process.env.BUILD_DIR || 'build';
  * The photo glitch is for the personal build. Hero imports it in the personal branch only, but an
  * import is followed before the dead branch is dropped: a company build would still carry the
  * templates and styles of the three components and the avatar's image files. In a company build
- * they resolve to an empty component instead. A build only: tests and the dev server keep the
- * real ones.
+ * they resolve to an empty component instead. The preview card's portrait (OgPortrait, the photo in
+ * its footprint) is the same case. A build only: tests and the dev server keep the real ones.
  */
 function companyWithoutGlitch(): Plugin {
 	const empty = fileURLToPath(new URL('./src/lib/components/NoGlitch.svelte', import.meta.url));
@@ -32,7 +32,9 @@ function companyWithoutGlitch(): Plugin {
 		enforce: 'pre',
 		resolveId(source) {
 			if (env.PUBLIC_SITE !== 'company') return;
-			if (/^#lib\/components\/Glitch(Photo|Toggle|Fx)\.svelte$/.test(source)) return empty;
+			if (/^#lib\/components\/(Glitch(Photo|Toggle|Fx)|OgPortrait)\.svelte$/.test(source)) {
+				return empty;
+			}
 		}
 	};
 }
@@ -60,7 +62,10 @@ export default defineConfig({
 			// Absolute links: Paraglide's localizeHref needs the base path in the href it gets, and
 			// 404.html is served at every depth of the site, so its asset links cannot be relative.
 			paths: { base, relative: false },
-			prerender: { entries: ['/', '/en/', '/robots.txt', '/sitemap.xml', '/not-found/'] }
+			// /og/ and /en/og/ are the preview card pages: scripts/og-images.mjs screenshots and removes them.
+			prerender: {
+				entries: ['/', '/en/', '/robots.txt', '/sitemap.xml', '/not-found/', '/og/', '/en/og/']
+			}
 		}),
 
 		paraglideVitePlugin(paraglideOptions(base))

@@ -49,6 +49,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The build screenshots the preview cards (scripts/og-images.mjs).
+      - run: pnpm exec playwright install --with-deps chromium
       - name: Work out the base path and the site addresses
         id: settings
         env:

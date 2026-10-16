@@ -33,6 +33,8 @@ pnpm build:company  # dist/company and e2e-out/company/it-it.tech
 pnpm build:personal # dist/personal and e2e-out/personal/deschepers.nl
 ```
 
+Builds need Chromium: they screenshot the preview cards (`og/nl.png` and `og/en.png`) from the `/og/` route (`pnpm exec playwright install --with-deps chromium` on a machine without it). `pnpm dev` shows the card at http://localhost:5173/og/.
+
 To look at a production build, serve the copy under its base path:
 
 ```sh
