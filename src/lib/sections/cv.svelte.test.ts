@@ -1034,7 +1034,10 @@ describe('Projects (U10)', () => {
 			'https://plugins.jetbrains.com/plugin/14957-laravel-tinker',
 			'https://github.com/Roboroads/laravel-tinker'
 		]);
-		expect(hrefs('framed')).toEqual(['https://github.com/Roboroads/Framed']);
+		expect(hrefs('framed')).toEqual([
+			'https://getframed.fun',
+			'https://github.com/Roboroads/Framed'
+		]);
 		expect(hrefs('streamline')).toEqual(['https://github.com/StreamlineRadio/Streamline']);
 		expect(hrefs('frontend-festival')).toEqual([
 			'https://github.com/Ordina-Group/frontendfestival.nl'
@@ -1057,6 +1060,16 @@ describe('Projects (U10)', () => {
 				expect(notice.getBoundingClientRect().width).toBeLessThanOrEqual(1);
 			});
 		}
+	});
+
+	it('marks the Framed website as an external site, like every other link', async () => {
+		await render(Projects, {});
+		const site = item('framed').querySelector<HTMLAnchorElement>(
+			'a[href="https://getframed.fun"]'
+		)!;
+		expect(site.textContent).toBe('Projectwebsite, Framed (externe site)');
+		expect(site.querySelector('.sr-only')?.textContent).toBe(', Framed (externe site)');
+		expect(site.hasAttribute('target')).toBe(false);
 	});
 
 	it('speaks English on the English page', async () => {

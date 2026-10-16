@@ -462,7 +462,10 @@ export const en: SiteContent = {
 					'A game you play in real life, in your own neighbourhood. Players hunt each other in a circle, helped by GPS and photos. The last player standing wins.'
 				],
 				tech: ['Flutter', 'Dart', 'Supabase'],
-				links: [{ label: 'Source code on GitHub', url: 'https://github.com/Roboroads/Framed' }]
+				links: [
+					{ label: 'Project website', url: 'https://getframed.fun' },
+					{ label: 'Source code on GitHub', url: 'https://github.com/Roboroads/Framed' }
+				]
 			},
 			{
 				id: 'streamline',

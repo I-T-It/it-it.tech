@@ -464,7 +464,10 @@ export const nl: SiteContent = {
 					"Een spel dat je in het echt speelt, in je eigen buurt. Spelers jagen elkaar in een kring op met hulp van GPS en foto's. De laatste speler die overblijft wint."
 				],
 				tech: ['Flutter', 'Dart', 'Supabase'],
-				links: [{ label: 'Broncode op GitHub', url: 'https://github.com/Roboroads/Framed' }]
+				links: [
+					{ label: 'Projectwebsite', url: 'https://getframed.fun' },
+					{ label: 'Broncode op GitHub', url: 'https://github.com/Roboroads/Framed' }
+				]
 			},
 			{
 				id: 'streamline',

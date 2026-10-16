@@ -455,11 +455,14 @@ describe('projects', () => {
 		}
 	});
 
-	it('links Framed, Streamline and Frontend Festival to their repositories, and GH Radio nowhere', () => {
+	it('links Framed to its website and repository, Streamline and Frontend Festival to their repositories, and GH Radio nowhere', () => {
 		for (const [, c] of both) {
 			const urls = (id: string) =>
 				c.projects.projects.find((p) => p.id === id)!.links.map((l) => l.url);
-			expect(urls('framed')).toEqual(['https://github.com/Roboroads/Framed']);
+			expect(urls('framed')).toEqual([
+				'https://getframed.fun',
+				'https://github.com/Roboroads/Framed'
+			]);
 			expect(urls('streamline')).toEqual(['https://github.com/StreamlineRadio/Streamline']);
 			expect(urls('frontend-festival')).toEqual([
 				'https://github.com/Ordina-Group/frontendfestival.nl'
