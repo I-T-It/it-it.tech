@@ -210,6 +210,25 @@ describe('cleaned up export', () => {
 		}
 	});
 
+	it('lists the AI agentic workflow among the practices, at level 3 with 1 year, last of its level', () => {
+		const titles = { nl: 'Agentische AI-workflow', en: 'AI agentic workflow' } as const;
+		for (const [locale, c] of both) {
+			const practices = c.skills.groups.find((g) => g.id === 'practices')!.skills;
+			const skill = practices.find((s) => s.id === 'ai-agentic-workflow');
+			expect(skill, locale).toEqual({
+				id: 'ai-agentic-workflow',
+				title: titles[locale as 'nl' | 'en'],
+				level: 3,
+				years: 1
+			});
+			// Level 3 with 1 year sorts after every other skill of level 3 or higher.
+			expect(practices.at(-1)).toBe(skill);
+			// Only one group has it.
+			const owners = c.skills.groups.filter((g) => g.skills.some((s) => s.id === skill!.id));
+			expect(owners.map((g) => g.id)).toEqual(['practices']);
+		}
+	});
+
 	it('moves sign language to the languages block, with a level and no note (the LEDs say it)', () => {
 		for (const [, c] of both) {
 			expect(allSkills(c).some((s) => s.id === 'ngt')).toBe(false);
@@ -1002,12 +1021,18 @@ describe('what the content must never hold', () => {
 
 	it('does not name its writing tool', () => {
 		for (const [name, c] of both) {
+			// The one place "AI" may stand: the title of the AI agentic workflow skill, which is a skill.
+			const skillTitles = allSkills(c)
+				.filter((s) => s.id === 'ai-agentic-workflow')
+				.map((s) => s.title);
 			for (const [path, value] of leaves(c)) {
 				const where = `${name}:${path}`;
-				expect([where, /claude|anthropic|chatgpt/i.test(value) || /\bAI\b/.test(value)]).toEqual([
+				const isSkillTitle = /^skills\.groups\[\d+\]\.skills\[\d+\]\.title$/.test(path);
+				const mayHaveAi = isSkillTitle && skillTitles.includes(value);
+				expect([
 					where,
-					false
-				]);
+					/claude|anthropic|chatgpt/i.test(value) || (!mayHaveAi && /\bAI\b/.test(value))
+				]).toEqual([where, false]);
 			}
 		}
 	});

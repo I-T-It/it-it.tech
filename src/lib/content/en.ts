@@ -588,7 +588,8 @@ export const en: SiteContent = {
 					{ id: 'devops', title: 'DevOps', level: 3, years: 5 },
 					{ id: 'sysadmin', title: 'System administration', level: 3, years: 5 },
 					{ id: 'technical-design', title: 'Technical designer', level: 3, years: 3 },
-					{ id: 'open-source', title: 'Open source', level: 3, years: 3 }
+					{ id: 'open-source', title: 'Open source', level: 3, years: 3 },
+					{ id: 'ai-agentic-workflow', title: 'AI agentic workflow', level: 3, years: 1 }
 				]
 			}
 		]
