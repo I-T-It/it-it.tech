@@ -48,5 +48,8 @@
 	"skills_show_roles": "(show roles with this skill)",
 	"talks_title": "Talks and workshops",
 	"education_title": "Education and languages",
-	"contact_title": "Contact"
+	"contact_title": "Contact",
+	"not_found_title": "Page not found",
+	"not_found_text": "This address does not exist on this site, or the page has moved.",
+	"not_found_home": "Go to the home page in English"
 }

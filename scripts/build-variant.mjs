@@ -14,6 +14,7 @@ import { spawn } from 'node:child_process';
 import { cp, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promoteNotFound } from './not-found.mjs';
 import { resolveBuildEnv, SITES, variantDefaults } from './site-env.mjs';
 import { pruneVariantIcons } from './variant-icons.mjs';
 
@@ -47,6 +48,10 @@ const code = await new Promise((resolve) => {
 	child.on('exit', (exitCode) => resolve(exitCode ?? 1));
 });
 if (code !== 0) process.exit(code);
+
+// The prerendered /not-found/ page becomes 404.html (see scripts/not-found.mjs). A build without
+// it fails here: a deploy must not go out with the host's default 404.
+await promoteNotFound(path.resolve(root, env.BUILD_DIR));
 
 // Only this variant's icons stay in the output (see scripts/variant-icons.mjs).
 await pruneVariantIcons(path.resolve(root, env.BUILD_DIR), site);
