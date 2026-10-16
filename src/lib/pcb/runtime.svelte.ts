@@ -14,6 +14,9 @@
  * one requestAnimationFrame), a latched or socket trace that still grows, a booting chip, or a
  * live pulse. Every frame calls `growth.update` with the scroll position, so the spine follows the
  * scroll both ways; when nothing is busy after that frame, the loop stops until the next event.
+ * A scroll event that finds the view where the last frame drew it requests no frame: the event of
+ * a scroll from before the start fires after the first draw, and a scroll can come back to where
+ * it was before the next frame.
  * The socket traces grow from the first frame, so the load sequence runs once, right after the
  * first layout.
  *
@@ -58,7 +61,7 @@ import {
 	socket as registeredSocket,
 	type ChipHandle
 } from './registry.svelte.js';
-import { DEFAULT_PALETTE, Renderer, type Palette } from './renderer.js';
+import { DEFAULT_PALETTE, Renderer, type Palette, type View } from './renderer.js';
 
 /** Relayouts wait for this many ms of quiet. */
 export const RELAYOUT_DEBOUNCE_MS = 200;
@@ -173,6 +176,8 @@ export class BoardRuntime {
 	#started = false;
 	#destroyed = false;
 	#raf = 0;
+	/** The view the last frame drew. */
+	#drawnView: View | null = null;
 	#relayoutTimer: ReturnType<typeof setTimeout> | undefined;
 	#laidOutSize = '';
 	#observer: ResizeObserver | null = null;
@@ -242,7 +247,7 @@ export class BoardRuntime {
 			window.addEventListener(type, listener, { passive: true });
 			this.#cleanups.push(() => window.removeEventListener(type, listener));
 		};
-		add('scroll', this.#request);
+		add('scroll', this.#onScroll);
 		add('resize', this.#onResize);
 		add('pointermove', this.#onPointerMove);
 		add('pointerdown', this.#onPointerDown);
@@ -403,16 +408,14 @@ export class BoardRuntime {
 			if (handle.state !== state) handle.state = state;
 		}
 		if (growth.powered) this.#power();
-		renderer.draw({
-			view: {
-				scrollX: window.scrollX,
-				scrollY: window.scrollY,
-				width: window.innerWidth,
-				height: window.innerHeight
-			},
-			drawn: (id) => growth.drawn(id),
-			pulses: pulses.alive
-		});
+		const view = {
+			scrollX: window.scrollX,
+			scrollY: window.scrollY,
+			width: window.innerWidth,
+			height: window.innerHeight
+		};
+		renderer.draw({ view, drawn: (id) => growth.drawn(id), pulses: pulses.alive });
+		this.#drawnView = view;
 		this.frames++;
 		if (this.#debug) {
 			this.canvas.dataset.spineFront = String(Math.round(growth.front));
@@ -433,6 +436,18 @@ export class BoardRuntime {
 	#onFrame = (): void => {
 		this.#raf = 0;
 		this.#tick();
+	};
+
+	/** A scroll that leaves the view where the last frame drew it needs no frame. */
+	#onScroll = (): void => {
+		const drawn = this.#drawnView;
+		const moved =
+			!drawn ||
+			drawn.scrollX !== window.scrollX ||
+			drawn.scrollY !== window.scrollY ||
+			drawn.width !== window.innerWidth ||
+			drawn.height !== window.innerHeight;
+		if (moved) this.#request();
 	};
 
 	#onResize = (): void => {
