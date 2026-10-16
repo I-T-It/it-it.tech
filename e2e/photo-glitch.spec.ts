@@ -3,15 +3,25 @@ import path from 'node:path';
 import { expect, test, type Page, type Request } from '@playwright/test';
 import { expectNoAxeViolations } from './axe.js';
 
-// The hero photo glitch: on the personal build the photo now and then tears (slices thrown sideways,
-// blocks in the wrong colours, the avatar leaking in, some of it spilling out of the die), flickers
-// the Roboroads avatar in for a moment, and every 20 to 40 s swaps to the avatar for a few seconds.
-// The company build has no photo and none of this. The clock is faked and paused, so five minutes
-// of glitch take a few seconds and every moment is exact.
+// The hero photo glitch: on the personal build the photo and the Roboroads avatar fight over the
+// signal. Every 4 to 8 s a glitch tears the image that holds it (slices thrown sideways, blocks in
+// the wrong colours, the other image leaking in, some of it spilling out of the die), and in about
+// a third of them the other image takes over for good (a swap) or for 100 ms (a flash). The
+// company build has no photo and none of this. The clock is faked and paused, so five minutes of
+// glitch take a few seconds and every moment is exact.
 
 // The numbers of src/lib/glitch/schedule.ts, written out: the test checks the page against them.
 const ARM_AFTER_POWER_MS = 2200 + 2600;
-const FIRST_TEASER_MIN_MS = 4000;
+const GLITCH_WAIT_MIN_MS = 4000;
+const GLITCH_WAIT_MAX_MS = 8000;
+
+// Seeds that make a test quick and sure (`?glitch-seed=`, honoured when the browser is automated);
+// src/lib/glitch/schedule.test.ts checks what each one does. This one swaps to the avatar 4.7 s after
+// the glitch arms and back to the photo 10 s in, so a test that waits for either does not wait long.
+const SWAPS_TWICE_SEED = 129;
+// Within 5 minutes this one flashes the photo over the avatar and the avatar over the photo, tears
+// the avatar, and swaps both ways, each of them at least twice.
+const MIXED_SEED = 3;
 
 const PHOTO_NL = 'Portret van Robbin Schepers';
 const AVATAR_NL = /^Avatar van Roboroads/;
@@ -41,6 +51,9 @@ interface LogEntry {
 	value: string | null;
 	/** At data-power: how many requests for the avatar had gone out by then. */
 	avatarRequests?: number;
+	/** At data-show: the alt text of every image in the hero that is not hidden from screen readers, and the glitch running. */
+	accessible?: string[];
+	glitchKind?: string | null;
 	/** At data-frame: the picture as it was when the frame went up. */
 	geometry?: FrameGeometry;
 }
@@ -70,6 +83,10 @@ function installLog() {
 			tints: fragments.map((el) => el.style.getPropertyValue('--tint'))
 		};
 	};
+	const accessible = () =>
+		[...document.querySelectorAll('#hero .die img:not([aria-hidden="true"])')].map(
+			(el) => el.getAttribute('alt') ?? ''
+		);
 	new MutationObserver((records) => {
 		for (const record of records) {
 			if (record.type === 'attributes') {
@@ -79,7 +96,12 @@ function installLog() {
 					what,
 					value: (record.target as Element).getAttribute(what),
 					avatarRequests: what === 'data-power' ? avatarRequests() : undefined,
-					geometry: what === 'data-frame' ? geometry() : undefined
+					geometry: what === 'data-frame' ? geometry() : undefined,
+					accessible: what === 'data-show' ? accessible() : undefined,
+					glitchKind:
+						what === 'data-show'
+							? (document.querySelector('#hero .glitch')?.getAttribute('data-glitch') ?? null)
+							: undefined
 				});
 				continue;
 			}
@@ -118,8 +140,21 @@ function watchAvatarRequests(page: Page): Request[] {
 async function freeze(page: Page) {
 	await page.evaluate(() => document.fonts.ready);
 	await page.locator('canvas.pcb-board').waitFor({ state: 'attached' });
-	const now = await page.evaluate(() => Date.now());
-	await page.clock.pauseAt(now + 1500);
+	await pauseAhead(page);
+}
+
+/** Pauses a running fake clock a moment ahead. */
+async function pauseAhead(page: Page) {
+	// On a busy runner 1.5 s can pass before the call arrives, and a time in the past is refused.
+	for (const margin of [1500, 5000, 20_000]) {
+		const now = await page.evaluate(() => Date.now());
+		try {
+			await page.clock.pauseAt(now + margin);
+			return;
+		} catch (error) {
+			if (margin === 20_000) throw error;
+		}
+	}
 }
 
 /** Loads the page on a fake clock and freezes it right after load. */
@@ -140,6 +175,20 @@ async function arm(page: Page) {
 	await page.clock.runFor(ARM_AFTER_POWER_MS + 50);
 }
 
+/** Waits, in real time, until the avatar has loaded: a flash or swap that comes sooner is played as a tear. */
+async function avatarLoaded(page: Page) {
+	await expect
+		.poll(() =>
+			page.evaluate(() => {
+				const img = document.querySelector<HTMLImageElement>('#hero img.avatar');
+				return Boolean(img?.complete && img.naturalWidth > 0);
+			})
+		)
+		.toBe(true);
+	// The component waits for decode() too, which settles a moment after the load.
+	await new Promise((resolve) => setTimeout(resolve, 300));
+}
+
 /** Runs the clock in steps of 250 ms until `done` holds. */
 async function runUntil(page: Page, done: () => Promise<boolean>, limitMs = 200_000) {
 	for (let spent = 0; spent < limitMs; spent += 250) {
@@ -150,23 +199,26 @@ async function runUntil(page: Page, done: () => Promise<boolean>, limitMs = 200_
 }
 
 /**
- * axe needs the page's timers, and the clock is frozen: tick it 2 ms at a time until axe is done,
- * which is a second of the clock at most, short of the 3 s the avatar holds.
+ * axe needs the page's timers, which the frozen clock holds back, so the clock runs in real time
+ * while axe does and is frozen again after. The glitch moves on in that time (a second or so of it),
+ * so a test must not count on the state it started axe in being the state axe ends in.
+ *
+ * It used to tick the clock by hand, 2 ms at a time, next to axe. The clock belongs to the browser
+ * context and not to the page, and near its end axe opens a blank page in that context and closes
+ * it again; a tick in flight at that moment failed with "Target page, context or browser has been
+ * closed" though our page was fine, and the test failed now and then. Without a ticker there is no
+ * such race, and axe is also a lot faster than it was on 10 ms ticks.
  */
-async function axeOnFrozenClock(page: Page) {
-	let done = false;
-	const run = expectNoAxeViolations(page).finally(() => {
-		done = true;
-	});
-	run.catch(() => {});
-	while (!done) {
-		await page.clock.runFor(2);
-		await new Promise((resolve) => setTimeout(resolve, 10));
+async function axeOnLiveClock(page: Page) {
+	await page.clock.resume();
+	try {
+		await expectNoAxeViolations(page);
+	} finally {
+		await pauseAhead(page);
 	}
-	await run;
 }
 
-/** The hold: the avatar is the accessible image. */
+/** The avatar holds the signal: it is the accessible image. */
 const holding = (page: Page) => () =>
 	page
 		.locator('#hero img.avatar:not([aria-hidden="true"])')
@@ -197,16 +249,18 @@ test.describe('the photo glitch', () => {
 		expect(added.t - power.t).toBeGreaterThanOrEqual(ARM_AFTER_POWER_MS);
 		expect(avatarRequests.length).toBeGreaterThan(0);
 
-		// The first glitch is a teaser 4 to 8 s after that.
+		// The first glitch comes 4 to 8 s after that, of whatever kind.
 		const glitches = log.filter((e) => e.what === 'data-glitch' && e.value !== null);
 		expect(glitches.length).toBeGreaterThan(0);
 		const first = glitches[0];
-		expect(first.value).toMatch(/^(tease|flicker)$/);
-		expect(first.t - power.t).toBeGreaterThanOrEqual(ARM_AFTER_POWER_MS + FIRST_TEASER_MIN_MS);
-		expect(first.t - power.t).toBeLessThanOrEqual(ARM_AFTER_POWER_MS + 8000 + 500);
-		// And in five minutes there were swaps.
-		expect(glitches.some((e) => e.value === 'swap-in')).toBe(true);
-		expect(glitches.some((e) => e.value === 'swap-out')).toBe(true);
+		expect(first.value).toMatch(/^(tear|flash|swap)$/);
+		expect(first.t - power.t).toBeGreaterThanOrEqual(ARM_AFTER_POWER_MS + GLITCH_WAIT_MIN_MS);
+		expect(first.t - power.t).toBeLessThanOrEqual(ARM_AFTER_POWER_MS + GLITCH_WAIT_MAX_MS + 500);
+		// A glitch every 4 to 8 s, about 45 in five minutes, all three kinds among them.
+		expect(glitches.length).toBeGreaterThan(25);
+		for (const kind of ['tear', 'flash', 'swap']) {
+			expect(glitches.some((e) => e.value === kind)).toBe(true);
+		}
 
 		// Whole-image changes: at most 4 in any second (2.3.1), and in practice 2.
 		const changes = log.filter((e) => e.what === 'data-show').map((e) => e.t);
@@ -262,7 +316,7 @@ test.describe('the photo glitch', () => {
 			}
 		}
 		expect(spilled).toBeGreaterThan(20);
-		// The avatar leaks into the photo in teasers too, not only in swaps.
+		// The avatar leaks into the photo in tears too, not only in swaps.
 		expect(avatar).toBeGreaterThan(5);
 		for (const tint of new Set(drawn.flatMap((g) => g.tints))) {
 			const [red, green, blue] = tint.match(/\d+/g)!.map(Number);
@@ -295,11 +349,46 @@ test.describe('the photo glitch', () => {
 		expect(overflow).toBeLessThanOrEqual(0);
 	});
 
-	test('names the avatar while it holds and the photo again after, in the accessibility tree', async ({
+	test('keeps exactly one image in the accessibility tree through swaps, flashes and tears, and hands it over in swaps only', async ({
 		page
 	}) => {
-		await load(page);
+		// Seed 3 flashes the photo over the avatar and the avatar over the photo, and swaps both ways.
+		await load(page, `./?glitch-seed=${MIXED_SEED}`);
 		await arm(page);
+		await avatarLoaded(page);
+		await page.clock.runFor(5 * 60_000);
+		const shows = (await readLog(page)).filter((e) => e.what === 'data-show');
+		expect(shows.length).toBeGreaterThan(10);
+
+		let holder: 'photo' | 'avatar' = 'photo';
+		let swaps = 0;
+		let flashedOver = 0;
+		for (const entry of shows) {
+			// One image found by a screen reader, always.
+			expect(entry.accessible).toHaveLength(1);
+			const [alt] = entry.accessible!;
+			const now = alt === PHOTO_NL ? 'photo' : 'avatar';
+			if (alt !== PHOTO_NL) expect(alt).toMatch(AVATAR_NL);
+			if (now !== holder) {
+				// The signal changes hands in a swap, never in a flash or a tear.
+				expect(entry.glitchKind).toBe('swap');
+				holder = now;
+				swaps++;
+			} else if (entry.glitchKind === 'flash' && entry.value !== holder) {
+				// The other image on show for a flash, and the accessible one is still the holder.
+				flashedOver++;
+			}
+		}
+		expect(swaps).toBeGreaterThanOrEqual(4);
+		expect(flashedOver).toBeGreaterThanOrEqual(4);
+	});
+
+	test('names the avatar while it holds the signal and the photo again after a swap back, in the accessibility tree', async ({
+		page
+	}) => {
+		await load(page, `./?glitch-seed=${SWAPS_TWICE_SEED}`);
+		await arm(page);
+		await avatarLoaded(page);
 		const die = page.locator('#hero .die');
 		await expect(die.getByRole('img')).toHaveCount(1);
 		await expect(die.getByRole('img', { name: PHOTO_NL })).toBeVisible();
@@ -320,22 +409,27 @@ test.describe('the photo glitch', () => {
 		await expect(die.getByRole('img', { name: AVATAR_NL })).toHaveCount(0);
 	});
 
-	test('passes axe at rest, during the hold and with the switch pressed', async ({ page }) => {
-		await load(page);
+	test('passes axe at rest, while the avatar holds the signal and with the switch pressed', async ({
+		page
+	}) => {
+		// Three axe runs over the whole page take about 10 s on a quiet machine, more on a busy one.
+		test.slow();
+		await load(page, `./?glitch-seed=${SWAPS_TWICE_SEED}`);
 		await arm(page);
-		await axeOnFrozenClock(page);
+		await avatarLoaded(page);
+		await axeOnLiveClock(page);
 
-		// The hold is still there when axe is done.
+		// The avatar holds the signal when axe starts; a later swap may hand it back while axe runs.
 		await runUntil(page, holding(page));
-		await axeOnFrozenClock(page);
 		await expect(page.locator('#hero img.avatar:not([aria-hidden="true"])')).toHaveCount(1);
+		await axeOnLiveClock(page);
 
 		await page.getByRole('button', { name: PAUSE_NL }).click();
 		await expect(page.getByRole('button', { name: PAUSE_NL })).toHaveAttribute(
 			'aria-pressed',
 			'true'
 		);
-		await axeOnFrozenClock(page);
+		await axeOnLiveClock(page);
 	});
 
 	test('has a switch for the keyboard that stops the glitch and is remembered', async ({
@@ -403,8 +497,9 @@ test.describe('the photo glitch', () => {
 	});
 
 	test('names the switch in English on the English page', async ({ page }) => {
-		await load(page, 'en/');
+		await load(page, `en/?glitch-seed=${SWAPS_TWICE_SEED}`);
 		await arm(page);
+		await avatarLoaded(page);
 		await expect(page.getByRole('button', { name: PAUSE_EN })).toBeVisible();
 		await runUntil(page, holding(page));
 		await expect(
