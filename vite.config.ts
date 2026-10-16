@@ -20,7 +20,7 @@ const buildDir = process.env.BUILD_DIR || 'build';
 /**
  * The photo glitch is for the personal build. Hero imports it in the personal branch only, but an
  * import is followed before the dead branch is dropped: a company build would still carry the
- * templates and styles of the two components and the avatar's image files. In a company build
+ * templates and styles of the three components and the avatar's image files. In a company build
  * they resolve to an empty component instead. A build only: tests and the dev server keep the
  * real ones.
  */
@@ -32,7 +32,7 @@ function companyWithoutGlitch(): Plugin {
 		enforce: 'pre',
 		resolveId(source) {
 			if (env.PUBLIC_SITE !== 'company') return;
-			if (/^#lib\/components\/Glitch(Photo|Toggle)\.svelte$/.test(source)) return empty;
+			if (/^#lib\/components\/Glitch(Photo|Toggle|Fx)\.svelte$/.test(source)) return empty;
 		}
 	};
 }

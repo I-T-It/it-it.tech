@@ -6,6 +6,7 @@
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { registerHero, registerObstacle, registerSocket } from '#lib/pcb/registry.svelte.js';
 	import { site } from '#lib/site.js';
+	import GlitchFx from '#lib/components/GlitchFx.svelte';
 	import GlitchPhoto from '#lib/components/GlitchPhoto.svelte';
 	import GlitchToggle from '#lib/components/GlitchToggle.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -179,6 +180,8 @@
 					<!-- The photo, which now and then glitches into the Roboroads avatar and back. -->
 					<GlitchPhoto photoAlt={content.hero.photoAlt} avatarAlt={content.hero.avatarAlt} />
 				</div>
+				<!-- What the glitch tears off the photo is drawn outside the die too: the die clips, the fragments spill. -->
+				<GlitchFx />
 				<!-- The stop switch sits outside the die: the die clips. It shows once the glitch starts. -->
 				<GlitchToggle />
 			</div>
@@ -279,6 +282,8 @@
 	 */
 	.photo-socket {
 		--size: clamp(10rem, min(48vw, calc(100svh - 27rem)), 26rem);
+		/* The die sits this far in from the socket on every side; the glitch's fragments use it too. */
+		--die-inset: calc(100% / 11 + 2px);
 		width: var(--size);
 		height: var(--size);
 	}
@@ -351,7 +356,7 @@
 	/* The photo sits in the middle 9 by 9 cells, inside a thin chamfered frame. */
 	.die {
 		position: absolute;
-		inset: calc(100% / 11 + 2px);
+		inset: var(--die-inset);
 		background: var(--silk);
 		clip-path: polygon(14% 0, 100% 0, 100% 100%, 0 100%, 0 14%);
 	}

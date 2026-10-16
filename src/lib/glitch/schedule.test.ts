@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { SOCKET_DRAW_MS } from '../pcb/growth.js';
 import { createRng } from '../pcb/rng.js';
 import {
+	AVATAR_FRAGMENT_SHARE,
+	BLOCK_LOOKS,
 	FIRST_TEASER_MAX_MS,
 	FIRST_TEASER_MIN_MS,
 	FLICKER_MS,
@@ -9,34 +11,46 @@ import {
 	GLITCH_START_AFTER_POWER_MS,
 	HOLD_MAX_MS,
 	HOLD_MIN_MS,
-	MAX_BAND_AREA,
+	MAX_FLASHES_PER_S,
+	MAX_SPILL,
+	MAX_SWAP_AREA,
+	MAX_TEASE_AREA,
 	MAX_TRANSITIONS_PER_S,
 	MIN_FRAME_MS,
 	SWAP_CLEAR_MS,
+	SWAP_FRAMES,
 	SWAP_GLITCH_MAX_MS,
 	SWAP_GLITCH_MIN_MS,
 	TEASER_GAP_MS,
 	TEASER_MAX_MS,
 	TEASER_MIN_MS,
+	TINTS,
+	TINT_RGB,
 	WAIT_MAX_MS,
 	WAIT_MIN_MS,
+	frameArea,
+	frameTransitions,
 	maxTransitionsInWindow,
 	nextCycle,
+	spillArea,
 	wholeImageTransitions,
 	type Cycle,
-	type GlitchEvent
+	type Frame,
+	type GlitchEvent,
+	type Shown,
+	type Slice
 } from './schedule.js';
 
 const cycleOf = (seed: number, start = 0, options?: { avatar?: boolean }): Cycle =>
 	nextCycle(createRng(seed), start, options);
 
 /** Cycle after cycle for `minutes` of simulated time, like the component plays them. */
-function timeline(seed: number, minutes: number): GlitchEvent[] {
+function timeline(seed: number, minutes: number, options?: { avatar?: boolean }): GlitchEvent[] {
 	const rng = createRng(seed);
 	const events: GlitchEvent[] = [];
 	let start = 0;
 	while (start < minutes * 60_000) {
-		const cycle = nextCycle(rng, start);
+		const cycle = nextCycle(rng, start, options);
 		events.push(...cycle.events);
 		start = cycle.end;
 	}
@@ -46,6 +60,27 @@ function timeline(seed: number, minutes: number): GlitchEvent[] {
 const kinds = (events: GlitchEvent[], ...wanted: GlitchEvent['kind'][]) =>
 	events.filter((e) => wanted.includes(e.kind));
 const seeds = (count: number) => Array.from({ length: count }, (_, i) => i + 1);
+const fragmentsOf = (frame: Frame) => [...frame.slices, ...frame.blocks];
+
+const slice = (over: Partial<Slice> = {}): Slice => ({
+	top: 0.1,
+	height: 0.1,
+	shift: 0.2,
+	source: 'photo',
+	cast: false,
+	split: false,
+	spill: true,
+	tint: 'cyan',
+	...over
+});
+
+/** A frame that changes the picture, for the tests of the counting itself. */
+const frame = (at: number, show: Shown, shift = 0.2): Frame => ({
+	at,
+	show,
+	slices: [slice({ shift })],
+	blocks: []
+});
 
 describe('constants', () => {
 	it('hold the numbers of the plan', () => {
@@ -58,9 +93,16 @@ describe('constants', () => {
 		expect([WAIT_MIN_MS, WAIT_MAX_MS, FIRST_TEASER_MIN_MS, FIRST_TEASER_MAX_MS]).toEqual([
 			20_000, 40_000, 4000, 8000
 		]);
-		expect([FLICKER_MS, FLICKER_SHARE, MAX_TRANSITIONS_PER_S, MAX_BAND_AREA, MIN_FRAME_MS]).toEqual(
-			[100, 1 / 3, 4, 0.08, 60]
-		);
+		expect([FLICKER_MS, FLICKER_SHARE, MIN_FRAME_MS]).toEqual([100, 1 / 3, 60]);
+	});
+
+	it('allow 3 flashes in any second, and a flash is two changes of the picture', () => {
+		expect(MAX_FLASHES_PER_S).toBe(3);
+		expect(MAX_TRANSITIONS_PER_S).toBe(2 * MAX_FLASHES_PER_S);
+	});
+
+	it('size the disturbance: how much of the die, how far past it, how many frames in a swap', () => {
+		expect([MAX_TEASE_AREA, MAX_SWAP_AREA, MAX_SPILL, SWAP_FRAMES]).toEqual([0.4, 0.65, 0.55, 5]);
 	});
 
 	it('starts the glitch when the scroll link is fully in: the socket draw plus 2.6 s after the power', () => {
@@ -182,11 +224,10 @@ describe('a cycle', () => {
 		}
 	});
 
-	it('tears the photo only in a plain teaser: it never shows the avatar', () => {
+	it('has the photo underneath in a plain teaser: the whole image never changes', () => {
 		for (const seed of seeds(300)) {
 			for (const e of kinds(cycleOf(seed).events, 'tease')) {
 				expect(e.frames.every((f) => f.show === 'photo')).toBe(true);
-				expect(e.frames.every((f) => f.bands.every((b) => b.source === 'photo'))).toBe(true);
 			}
 		}
 	});
@@ -253,44 +294,227 @@ describe('frames', () => {
 		}
 	});
 
-	it('cover at most 8% of the die with bands, inside the die, tinted cyan or green only', () => {
-		const tints = new Set<string>();
-		for (const seed of seeds(300)) {
+	it('hold whole slices and rectangular blocks, always at least two slices and one block', () => {
+		for (const seed of seeds(200)) {
 			for (const e of cycleOf(seed).events) {
-				for (const frame of e.frames) {
-					expect(frame.bands).toHaveLength(3);
-					const area = frame.bands.reduce((sum, b) => sum + b.height, 0);
-					expect(area).toBeLessThanOrEqual(MAX_BAND_AREA);
-					for (const band of frame.bands) {
-						expect(band.height).toBeGreaterThan(0);
-						expect(band.top).toBeGreaterThanOrEqual(0);
-						expect(band.top + band.height).toBeLessThanOrEqual(1);
-						expect(Math.abs(band.shift)).toBeGreaterThan(0);
-						expect(Math.abs(band.shift)).toBeLessThan(0.25);
-						tints.add(band.tint);
+				for (const f of e.frames) {
+					expect(f.slices.length).toBeGreaterThanOrEqual(2);
+					expect(f.blocks.length).toBeGreaterThanOrEqual(1);
+					for (const s of f.slices) {
+						expect(s.height).toBeGreaterThan(0);
+						expect(s.top).toBeGreaterThanOrEqual(0);
+						expect(s.top + s.height).toBeLessThanOrEqual(1);
+					}
+					for (const b of f.blocks) {
+						expect(b.width).toBeGreaterThan(0);
+						expect(b.height).toBeGreaterThan(0);
+						expect(b.top).toBeGreaterThanOrEqual(0);
+						expect(b.top + b.height).toBeLessThanOrEqual(1);
 					}
 				}
 			}
 		}
-		expect([...tints].sort()).toEqual(['cyan', 'green']);
 	});
 
-	it('mix the other image into the bands of a swap: avatar strips going in, photo strips coming out', () => {
-		for (const seed of seeds(100)) {
-			const { events } = cycleOf(seed);
-			for (const swap of events.slice(-2)) {
-				for (const frame of swap.frames) {
-					const other = frame.show === 'photo' ? 'avatar' : 'photo';
-					expect(frame.bands.every((b) => b.source === other)).toBe(true);
+	it('throw slices sideways by a lot: from a few percent of the die to over half of what is allowed', () => {
+		let largest = 0;
+		for (const seed of seeds(300)) {
+			for (const e of cycleOf(seed).events) {
+				for (const f of e.frames) {
+					for (const s of f.slices) {
+						expect(Math.abs(s.shift)).toBeGreaterThanOrEqual(0.05);
+						expect(Math.abs(s.shift)).toBeLessThanOrEqual(MAX_SPILL);
+						largest = Math.max(largest, Math.abs(s.shift));
+					}
+				}
+			}
+		}
+		expect(largest).toBeGreaterThan(0.4);
+	});
+
+	it('let fragments spill out of the die sideways, never above or below it, and never far', () => {
+		let spilled = 0;
+		let inside = 0;
+		let clipped = 0;
+		for (const seed of seeds(300)) {
+			for (const e of cycleOf(seed).events) {
+				for (const f of e.frames) {
+					for (const s of f.slices) {
+						expect(s.shift + 1).toBeLessThanOrEqual(1 + MAX_SPILL);
+						expect(s.shift).toBeGreaterThanOrEqual(-MAX_SPILL);
+						if (!s.spill) clipped++;
+					}
+					for (const b of f.blocks) {
+						expect(b.left).toBeGreaterThanOrEqual(-MAX_SPILL);
+						expect(b.left + b.width).toBeLessThanOrEqual(1 + MAX_SPILL);
+					}
+					if (spillArea(f) > 0) spilled++;
+					else inside++;
+				}
+			}
+		}
+		// Most frames have something out on the board, some do not, and some slices are cut at the die.
+		expect(spilled).toBeGreaterThan(inside);
+		expect(inside).toBeGreaterThan(0);
+		expect(clipped).toBeGreaterThan(100);
+	});
+
+	it('show the picture behind every block: the image is big enough to fill its window', () => {
+		for (const seed of seeds(300)) {
+			for (const e of cycleOf(seed).events) {
+				for (const f of e.frames) {
+					for (const b of f.blocks) {
+						// The image sits at dx, dy and is one die across: it must cover the block.
+						expect(b.dx).toBeLessThanOrEqual(b.left + 1e-9);
+						expect(b.dx + 1).toBeGreaterThanOrEqual(b.left + b.width - 1e-9);
+						expect(b.dy).toBeLessThanOrEqual(b.top + 1e-9);
+						expect(b.dy + 1).toBeGreaterThanOrEqual(b.top + b.height - 1e-9);
+					}
 				}
 			}
 		}
 	});
+
+	it('cover at most 40% of the die in a teaser and 65% in a swap, counting what spills', () => {
+		let teaserMost = 0;
+		let swapMost = 0;
+		for (const seed of seeds(300)) {
+			for (const e of cycleOf(seed).events) {
+				const swap = e.kind === 'swap-in' || e.kind === 'swap-out';
+				for (const f of e.frames) {
+					const area = frameArea(f);
+					expect(area).toBeGreaterThan(0.05);
+					expect(area).toBeLessThanOrEqual(swap ? MAX_SWAP_AREA : MAX_TEASE_AREA);
+					if (swap) swapMost = Math.max(swapMost, area);
+					else teaserMost = Math.max(teaserMost, area);
+				}
+			}
+		}
+		// Big, not just allowed to be: the old thin bands covered 8%.
+		expect(teaserMost).toBeGreaterThan(0.25);
+		expect(swapMost).toBeGreaterThan(0.5);
+	});
+
+	it('measure the union: overlapping fragments count once, the part outside the die counts too', () => {
+		const one = (over: Partial<Slice>): Frame => ({
+			at: 0,
+			show: 'photo',
+			slices: [slice({ top: 0, height: 0.2, shift: 0, ...over })],
+			blocks: []
+		});
+		expect(frameArea(one({}))).toBeCloseTo(0.2, 10);
+		expect(spillArea(one({}))).toBe(0);
+		// Shifted half a die to the right: still 0.2 of a die in area, and 0.1 of it is outside.
+		expect(frameArea(one({ shift: 0.5 }))).toBeCloseTo(0.2, 10);
+		expect(spillArea(one({ shift: 0.5 }))).toBeCloseTo(0.1, 10);
+		// Cut at the die's edge instead: only what is left inside shows, and nothing is outside.
+		expect(frameArea(one({ shift: 0.5, spill: false }))).toBeCloseTo(0.1, 10);
+		expect(frameArea(one({ shift: -0.25, spill: false }))).toBeCloseTo(0.15, 10);
+		expect(spillArea(one({ shift: 0.5, spill: false }))).toBe(0);
+		const two: Frame = {
+			at: 0,
+			show: 'photo',
+			slices: [
+				slice({ top: 0, height: 0.2, shift: 0 }),
+				slice({
+					top: 0.1,
+					height: 0.2,
+					shift: -0.25,
+					source: 'avatar',
+					cast: true,
+					split: true,
+					tint: 'green'
+				})
+			],
+			blocks: [
+				{
+					left: 0.5,
+					top: 0.1,
+					width: 0.25,
+					height: 0.1,
+					dx: 0,
+					dy: 0,
+					source: 'photo',
+					look: 'tint',
+					tint: 'cyan'
+				}
+			]
+		};
+		// The two slices share rows 0.1 to 0.2, where they overlap over x = 0 to 0.75; the block sits
+		// inside the first slice. Union: 0.2 + 0.2 - 0.75 x 0.1. The second slice sticks out of the
+		// die's left edge by a quarter of a die over its 0.2 of height.
+		expect(frameArea(two)).toBeCloseTo(0.2 + 0.2 - 0.75 * 0.1, 10);
+		expect(spillArea(two)).toBeCloseTo(0.25 * 0.2, 10);
+	});
+
+	it('cast in cyan, green, magenta and blue only, and none of those is saturated red', () => {
+		const tints = new Set<string>();
+		const looks = new Set<string>();
+		for (const seed of seeds(300)) {
+			for (const e of cycleOf(seed).events) {
+				for (const f of e.frames) {
+					for (const fragment of fragmentsOf(f)) tints.add(fragment.tint);
+					for (const b of f.blocks) looks.add(b.look);
+				}
+			}
+		}
+		expect([...tints].sort()).toEqual([...TINTS].sort());
+		expect([...looks].sort()).toEqual([...BLOCK_LOOKS].sort());
+		expect([...TINTS].sort()).toEqual(['blue', 'cyan', 'green', 'magenta']);
+		for (const tint of TINTS) {
+			const [r, g, b] = TINT_RGB[tint];
+			// WCAG 2.3.1: a colour is a saturated red when red is 80% or more of the three together.
+			expect(r / (r + g + b)).toBeLessThan(0.8);
+			// And far from it: red never leads by more than a third.
+			expect(r / (r + g + b)).toBeLessThan(0.5);
+		}
+	});
+
+	it('mix both images into the fragments of a swap, mostly the one that is not underneath', () => {
+		let other = 0;
+		let same = 0;
+		for (const seed of seeds(200)) {
+			for (const swap of cycleOf(seed).events.slice(-2)) {
+				for (const f of swap.frames) {
+					const here = f.show;
+					for (const fragment of fragmentsOf(f)) {
+						if (fragment.source === here) same++;
+						else other++;
+					}
+				}
+			}
+		}
+		expect(same).toBeGreaterThan(0);
+		expect(other).toBeGreaterThan(same);
+		expect(same / (same + other)).toBeGreaterThan(0.1);
+	});
+
+	it('let the avatar bleed through the photo in teasers too: about 40% of the fragments', () => {
+		let fragments = 0;
+		let avatar = 0;
+		let teasersWithAvatar = 0;
+		let teasers = 0;
+		for (const seed of seeds(1000)) {
+			for (const e of kinds(cycleOf(seed).events, 'tease')) {
+				teasers++;
+				const found = e.frames.flatMap(fragmentsOf);
+				fragments += found.length;
+				const fromAvatar = found.filter((fragment) => fragment.source === 'avatar').length;
+				avatar += fromAvatar;
+				if (fromAvatar > 0) teasersWithAvatar++;
+			}
+		}
+		expect(AVATAR_FRAGMENT_SHARE).toBe(0.4);
+		expect(avatar / fragments).toBeGreaterThan(AVATAR_FRAGMENT_SHARE - 0.08);
+		expect(avatar / fragments).toBeLessThan(AVATAR_FRAGMENT_SHARE + 0.08);
+		// Not in every teaser, and not in none: some teasers are photo only.
+		expect(teasersWithAvatar).toBeGreaterThan(teasers * 0.5);
+		expect(teasersWithAvatar).toBeLessThan(teasers);
+	});
 });
 
 describe('flash budget (WCAG 2.3.1)', () => {
-	it('counts the whole-image changes of a timeline', () => {
-		const frame = (at: number, show: 'photo' | 'avatar') => ({ at, show, bands: [] });
+	it('counts every change of the picture: each frame, and the end of the event', () => {
 		const events: GlitchEvent[] = [
 			{
 				at: 1000,
@@ -303,52 +527,91 @@ describe('flash budget (WCAG 2.3.1)', () => {
 				kind: 'swap-in',
 				duration: 600,
 				frames: [frame(0, 'photo'), frame(300, 'avatar')]
-			},
-			{
-				at: 14_000,
-				kind: 'swap-out',
-				duration: 600,
-				frames: [frame(0, 'avatar'), frame(300, 'photo')]
 			}
 		];
+		expect(frameTransitions(events)).toEqual([1000, 1100, 1200, 1300, 9000, 9300, 9600]);
 		expect(wholeImageTransitions(events)).toEqual([
 			{ at: 1100, to: 'avatar' },
 			{ at: 1200, to: 'photo' },
-			{ at: 9300, to: 'avatar' },
-			{ at: 14_300, to: 'photo' }
+			{ at: 9300, to: 'avatar' }
 		]);
 	});
 
-	it('finds the busiest window', () => {
-		const frame = (at: number, show: 'photo' | 'avatar') => ({ at, show, bands: [] });
+	it('finds the busiest window, its end not included', () => {
 		const events: GlitchEvent[] = [
-			{
-				at: 0,
-				kind: 'flicker',
-				duration: 300,
-				frames: [frame(0, 'photo'), frame(100, 'avatar'), frame(200, 'photo')]
-			},
-			{
-				at: 1000,
-				kind: 'flicker',
-				duration: 300,
-				frames: [frame(0, 'photo'), frame(100, 'avatar'), frame(200, 'photo')]
-			}
+			{ at: 0, kind: 'tease', duration: 200, frames: [frame(0, 'photo'), frame(100, 'photo')] },
+			{ at: 1000, kind: 'tease', duration: 200, frames: [frame(0, 'photo'), frame(100, 'photo')] }
 		];
-		// Changes at 100, 200, 1100 and 1200. A window is 1000 ms long, its end not included.
-		expect(maxTransitionsInWindow(events, 1000)).toBe(2);
-		expect(maxTransitionsInWindow(events, 1001)).toBe(3);
-		expect(maxTransitionsInWindow(events, 1101)).toBe(4);
+		// Changes at 0, 100, 200, 1000, 1100 and 1200.
+		expect(maxTransitionsInWindow(events, 1000)).toBe(3);
+		expect(maxTransitionsInWindow(events, 1001)).toBe(4);
+		expect(maxTransitionsInWindow(events, 1101)).toBe(5);
+		expect(maxTransitionsInWindow(events, 1201)).toBe(6);
 		expect(maxTransitionsInWindow([], 1000)).toBe(0);
 	});
 
-	it('keeps every simulated 10 minutes within 4 changes per second, and in practice within 2', () => {
+	it('keeps one event within the budget by itself: a swap changes the picture 6 times at most', () => {
+		let swapMost = 0;
+		let teaserMost = 0;
+		for (const seed of seeds(1000)) {
+			for (const e of cycleOf(seed).events) {
+				const changes = e.frames.length + 1;
+				if (e.kind === 'swap-in' || e.kind === 'swap-out') {
+					expect(e.frames).toHaveLength(SWAP_FRAMES);
+					swapMost = Math.max(swapMost, changes);
+				} else {
+					teaserMost = Math.max(teaserMost, changes);
+				}
+				expect(changes).toBeLessThanOrEqual(MAX_TRANSITIONS_PER_S);
+			}
+		}
+		expect(swapMost).toBe(MAX_TRANSITIONS_PER_S);
+		expect(teaserMost).toBeGreaterThanOrEqual(4);
+	});
+
+	it('keeps every simulated 10 minutes within 3 flashes (6 changes) per second over 1000 seeds', () => {
 		let busiest = 0;
 		for (const seed of seeds(1000)) {
 			busiest = Math.max(busiest, maxTransitionsInWindow(timeline(seed, 10), 1000));
 		}
 		expect(busiest).toBeLessThanOrEqual(MAX_TRANSITIONS_PER_S);
+		// The effect uses its budget: a swap is the busiest second.
+		expect(busiest).toBe(MAX_TRANSITIONS_PER_S);
+	});
+
+	it('keeps it within the budget when the avatar is not there either', () => {
+		let busiest = 0;
+		for (const seed of seeds(300)) {
+			busiest = Math.max(
+				busiest,
+				maxTransitionsInWindow(timeline(seed, 10, { avatar: false }), 1000)
+			);
+		}
+		expect(busiest).toBeLessThanOrEqual(MAX_TRANSITIONS_PER_S);
+	});
+
+	it('keeps the whole image to 2 changes in any second, as before (a flicker is a flash)', () => {
+		let busiest = 0;
+		for (const seed of seeds(1000)) {
+			const times = wholeImageTransitions(timeline(seed, 10)).map((change) => change.at);
+			for (let i = 0; i < times.length; i++) {
+				busiest = Math.max(
+					busiest,
+					times.filter((t) => t >= times[i] && t < times[i] + 1000).length
+				);
+			}
+		}
 		expect(busiest).toBe(2);
+	});
+
+	it('leaves at least 3 s between two events, so no second holds the changes of two', () => {
+		for (const seed of seeds(300)) {
+			const events = timeline(seed, 10);
+			for (let i = 1; i < events.length; i++) {
+				const gap = events[i].at - (events[i - 1].at + events[i - 1].duration);
+				expect(gap).toBeGreaterThanOrEqual(SWAP_CLEAR_MS);
+			}
+		}
 	});
 });
 
@@ -363,6 +626,16 @@ describe('a cycle without the avatar', () => {
 			expect(end - 500).toBeLessThanOrEqual(WAIT_MAX_MS);
 			const last = events.at(-1)!;
 			expect(end - (last.at + last.duration)).toBeGreaterThanOrEqual(SWAP_CLEAR_MS);
+		}
+	});
+
+	it('has no avatar fragments either: everything is cut from the photo', () => {
+		for (const seed of seeds(300)) {
+			for (const e of cycleOf(seed, 0, { avatar: false }).events) {
+				for (const f of e.frames) {
+					expect(fragmentsOf(f).every((fragment) => fragment.source === 'photo')).toBe(true);
+				}
+			}
 		}
 	});
 });
