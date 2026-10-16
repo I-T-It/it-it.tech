@@ -614,58 +614,121 @@ export const en: SiteContent = {
 
 	talks: {
 		title: 'Talks and workshops',
-		intro: 'Talks, workshops and trainings on Flutter, Svelte, front-end and PHP, newest first.',
-		talks: [
+		intro:
+			'Talks and workshops on Flutter, Svelte, front-end and PHP: what I can give and where I have given them.',
+		offers: [
 			{
 				id: 'php-2005-called',
-				date: '2024-06-21',
-				title: '2005 Called! They Want Your Opinion About PHP Back!'
+				kind: 'talk',
+				title: '2005 Called! They Want Your Opinion About PHP Back!',
+				summary:
+					'Why PHP was bad, why it no longer is, and why it is still a good language to build projects in today.',
+				langs: ['nl', 'en'],
+				titleLang: 'en'
+			},
+			{
+				id: 'frontend-love',
+				kind: 'talk',
+				title: 'Falling in Love with Front-end all over again',
+				summary:
+					'The magic of Svelte, and how it compares to other frameworks like Angular, React and Vue.js.',
+				langs: ['nl', 'en'],
+				titleLang: 'en'
+			},
+			{
+				id: 'flutter-talk',
+				kind: 'talk',
+				title: 'Writing multi-platform apps with native performance',
+				summary: 'The Flutter workshop as a talk, without the do-it-yourself steps.',
+				langs: ['nl', 'en'],
+				titleLang: 'en'
+			},
+			{
+				id: 'flutter-workshop',
+				kind: 'workshop',
+				title: 'Flutter workshop',
+				summary: 'How to start building your first Flutter reviews app.',
+				langs: ['nl', 'en'],
+				titleLang: 'nl'
+			}
+		],
+		given: [
+			{
+				id: 'php-2005-called',
+				offerId: 'php-2005-called',
+				date: '2024-06',
+				lang: 'nl',
+				event: 'Sopra Steria'
 			},
 			{
 				id: 'frontend-js-eindhoven',
+				offerId: 'frontend-love',
 				date: '2023-08-23',
-				title: 'Falling in Love with Front-end all over again (talk at JS Meetup Eindhoven)',
+				event: 'JS Meetup Eindhoven',
 				url: 'https://www.meetup.com/nl-NL/js-eindhoven/events/291205657/'
 			},
 			{
 				id: 'frontend-festival',
+				offerId: 'frontend-love',
 				date: '2023-04-13',
-				title: 'Falling in Love with Front-end all over again (talk at Frontend Festival)',
+				event: 'Frontend Festival',
 				url: 'https://frontendfestival.nl'
 			},
 			{
 				id: 'flutter-ordina-noord',
+				offerId: 'flutter-workshop',
 				date: '2022-10-27',
-				title: 'Flutter workshop at Ordina Noord'
+				event: 'Ordina Noord'
 			},
 			{
 				id: 'flutter-frontmania',
+				offerId: 'flutter-talk',
 				date: '2022-10-05',
-				title: 'Flutter talk at FrontMania',
+				lang: 'nl',
+				event: 'FrontMania',
 				url: 'https://frontmania.com/'
 			},
 			{
 				id: 'services-join-belgie',
 				date: '2022-10-04',
-				title: 'Talk "Services down to your pocket" with Remi Appels at JOIN Belgium',
+				event: 'JOIN Belgium',
+				title: 'Flutter demo in the talk {talk} by Remi Appels',
+				talk: { title: 'Services down to your pocket', lang: 'en' },
 				url: 'https://join.ordina-jworks.io/'
 			},
 			{
 				id: 'flutter-ordina-belgie',
+				offerId: 'flutter-workshop',
 				date: '2022-09-19',
-				title: 'Flutter training at Ordina Belgium'
+				event: 'Ordina Belgium',
+				title: 'Flutter training'
 			},
 			{
 				id: 'flutter-code-comedy',
+				offerId: 'flutter-workshop',
 				date: '2022-06-16',
-				title: 'Flutter workshop at Code&Comedy'
+				event: 'Code&Comedy'
 			},
 			{
 				id: 'svelte-nieuwegein',
+				offerId: 'frontend-love',
 				date: '2022-04-13',
-				title: 'Svelte talk at FrontEnd Meetup Nieuwegein'
+				event: 'FrontEnd Meetup Nieuwegein'
 			}
-		]
+		],
+		labels: {
+			offers: 'Ready to give',
+			offersNote:
+				'I give every talk and workshop in Dutch or English. The slides are in English and can be translated if needed.',
+			given: 'Given',
+			kind: { talk: 'Talk', workshop: 'Workshop' },
+			language: { nl: 'Dutch', en: 'English' },
+			facts: { duration: 'Duration', audience: 'Audience' },
+			times: {
+				one: 'Given once: {last}',
+				many: 'Given {count} times, most recently: {last}'
+			}
+		}
 	},
 
 	educationLanguages: {
