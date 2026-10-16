@@ -28,17 +28,25 @@
 	<link rel="apple-touch-icon" href={asset(`icons/${site}/apple-touch-icon.png`)} />
 </svelte:head>
 
-<!-- The first stop for keyboard users. It goes to <main id="main">, which the page provides. -->
-<a class="skip-link" href="#main">{m.skip_to_content()}</a>
-
 <!--
-	The header waits above the window at the top of the home page. The 404 is too short for that.
-	It shows up three ways: as an error in the browser, as the prerendered not-found route (route
-	id '/not-found'), and as that same file hydrated at the address that was not found, where the
-	browser matches no route at all (route id null). Only the home page, which is long, hides it.
+	The preview card (/og, see scripts/og-images.mjs) is a picture, not a page: it renders bare,
+	with no skip link, header or footer round it.
 -->
-<SiteHeader hideAtTop={page.route.id === '/'} />
+{#if page.route.id === '/og'}
+	{@render children()}
+{:else}
+	<!-- The first stop for keyboard users. It goes to <main id="main">, which the page provides. -->
+	<a class="skip-link" href="#main">{m.skip_to_content()}</a>
 
-{@render children()}
+	<!--
+		The header waits above the window at the top of the home page. The 404 is too short for that.
+		It shows up three ways: as an error in the browser, as the prerendered not-found route (route
+		id '/not-found'), and as that same file hydrated at the address that was not found, where the
+		browser matches no route at all (route id null). Only the home page, which is long, hides it.
+	-->
+	<SiteHeader hideAtTop={page.route.id === '/'} />
 
-<SiteFooter />
+	{@render children()}
+
+	<SiteFooter />
+{/if}

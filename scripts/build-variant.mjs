@@ -9,12 +9,18 @@
 //   BASE_PATH                 '/it-it.tech' or '/deschepers.nl'. Empty once the custom domain is live.
 //   PUBLIC_SITE_URL           https://i-t-it.github.io/it-it.tech or https://roboroads.github.io/deschepers.nl
 //   PUBLIC_COMPANY_SITE_URL   https://i-t-it.github.io/it-it.tech/ (where the personal build links to)
+//   PUBLIC_PERSONAL_SITE_URL  https://roboroads.github.io/deschepers.nl/ (where the company build links to)
 //   BUILD_DIR                 dist/<site>
+//
+// After `vite build` it screenshots the preview cards into og/nl.png and og/en.png (see
+// scripts/og-images.mjs), which needs Chromium: `pnpm run setup`, or `pnpm exec playwright install
+// --with-deps chromium` on a bare machine.
 import { spawn } from 'node:child_process';
 import { cp, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promoteNotFound } from './not-found.mjs';
+import { generateOgImages } from './og-images.mjs';
 import { resolveBuildEnv, SITES, variantDefaults } from './site-env.mjs';
 import { pruneVariantIcons } from './variant-icons.mjs';
 
@@ -48,6 +54,10 @@ const code = await new Promise((resolve) => {
 	child.on('exit', (exitCode) => resolve(exitCode ?? 1));
 });
 if (code !== 0) process.exit(code);
+
+// The prerendered /og/ and /en/og/ pages become og/nl.png and og/en.png, and the pages go. A card
+// that cannot be made fails the build: a deploy must not go out without its preview pictures.
+await generateOgImages(path.resolve(root, env.BUILD_DIR), resolved.BASE_PATH);
 
 // The prerendered /not-found/ page becomes 404.html (see scripts/not-found.mjs). A build without
 // it fails here: a deploy must not go out with the host's default 404.
