@@ -183,6 +183,88 @@ test.describe('header', () => {
 	});
 });
 
+test.describe('menu', () => {
+	test('has an entry for every section of the page, in page order, in both languages', async ({
+		page
+	}) => {
+		for (const path of ['./', 'en/']) {
+			await page.goto(path);
+			const sections = await page
+				.locator('main section')
+				.evaluateAll((els) => els.map((el) => el.id));
+			const entries = await page
+				.locator('header details.sections a')
+				.evaluateAll((links) => links.map((a) => new URL((a as HTMLAnchorElement).href).hash));
+			expect(entries, path).toEqual(sections.map((id) => `#${id}`));
+			// Every entry has a name of its own.
+			const names = await page
+				.locator('header details.sections a')
+				.evaluateAll((links) => links.map((a) => a.textContent?.trim()));
+			expect(new Set(names).size, path).toBe(names.length);
+			expect(names.every((name) => name && name.length > 1)).toBe(true);
+		}
+	});
+
+	test('keeps the entries inside the language of the page', async ({ page, baseURL }) => {
+		const base = new URL(baseURL!).pathname;
+		await page.goto('en/');
+		const hrefs = await page
+			.locator('header nav.menu a')
+			.evaluateAll((links) => links.map((a) => a.getAttribute('href')));
+		expect(hrefs.length).toBeGreaterThan(10);
+		for (const href of hrefs) expect(href).toMatch(new RegExp(`^${base}en/#`));
+		await page.goto('./');
+		const nl = await page
+			.locator('header nav.menu a')
+			.evaluateAll((links) => links.map((a) => a.getAttribute('href')));
+		for (const href of nl) expect(href).toMatch(new RegExp(`^${base}#`));
+	});
+
+	test('opens, takes you to a section and closes again', async ({ page }) => {
+		await page.goto('./');
+		await revealHeader(page);
+		const menu = page.locator('header details.sections');
+		await expect(menu).not.toHaveAttribute('open', '');
+		await menu.locator('summary').click();
+		await expect(menu).toHaveAttribute('open', '');
+		const entries = menu.getByRole('link');
+		await expect(entries).toHaveCount(11);
+		for (const entry of await entries.all()) await expect(entry).toBeVisible();
+
+		await menu.getByRole('link', { name: 'Projecten', exact: true }).click();
+		await expect(page).toHaveURL(/#projects$/);
+		await expect(menu).not.toHaveAttribute('open', '');
+		await expect(page.locator('#projects')).toBeInViewport();
+	});
+
+	test('opens from the keyboard and closes on Escape', async ({ page }) => {
+		await page.goto('./');
+		await page.keyboard.press('Tab');
+		await page.keyboard.press('Tab');
+		await expect(page.locator('header a.brand')).toBeFocused();
+		await page.keyboard.press('Tab');
+		await expect(page.locator('header details.sections summary')).toBeFocused();
+		await page.keyboard.press('Enter');
+		await expect(page.locator('header details.sections')).toHaveAttribute('open', '');
+		await page.keyboard.press('Tab');
+		await expect(page.locator('header details.sections a').first()).toBeFocused();
+		await page.keyboard.press('Escape');
+		await expect(page.locator('header details.sections')).not.toHaveAttribute('open', '');
+		await expect(page.locator('header details.sections summary')).toBeFocused();
+	});
+
+	test('is reachable without JavaScript', async ({ browser, baseURL }) => {
+		const context = await browser.newContext({ javaScriptEnabled: false });
+		const page = await context.newPage();
+		await page.goto(baseURL!);
+		await page.locator('header details.sections summary').click();
+		await expect(page.locator('header details.sections')).toHaveAttribute('open', '');
+		await page.locator('header details.sections').getByRole('link', { name: 'Talks' }).click();
+		await expect(page).toHaveURL(/#talks$/);
+		await context.close();
+	});
+});
+
 test.describe('footer', () => {
 	test('shows the KvK and BTW numbers and no email', async ({ page }) => {
 		await page.goto('./');
@@ -266,6 +348,23 @@ test.describe('accessibility', () => {
 			await expectNoAxeViolations(page);
 			await revealHeader(page);
 			await expectNoAxeViolations(page);
+		}
+	});
+
+	test('passes axe with the menu open, in NL and EN at 320 and 1280 CSS px', async ({ page }) => {
+		for (const width of [320, 1280]) {
+			await page.setViewportSize({ width, height: 800 });
+			for (const path of ['./', 'en/']) {
+				await page.goto(path);
+				await revealHeader(page);
+				await page.locator('header details.sections summary').click();
+				await expect(page.locator('header details.sections')).toHaveAttribute('open', '');
+				await expectNoAxeViolations(page);
+				const overflow = await page.evaluate(
+					() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+				);
+				expect(overflow, `${path} at ${width}`).toBeLessThanOrEqual(0);
+			}
 		}
 	});
 });

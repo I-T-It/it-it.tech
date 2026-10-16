@@ -4,7 +4,8 @@
 	import { company } from '#lib/content/company.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { localizeHref } from '#lib/paraglide/runtime.js';
-	import { site } from '#lib/site.js';
+	import { sectionIds, type SectionId } from '#lib/nav.js';
+	import { site, variant } from '#lib/site.js';
 	import LanguageToggle from './LanguageToggle.svelte';
 	import Logo from './Logo.svelte';
 
@@ -12,14 +13,23 @@
 	// work from another page (the 404).
 	const home = localizeHref(resolve('/'));
 
-	/** Desktop-only anchors, then Contact, which stays on every width. */
-	const anchors = [
-		{ id: 'about', label: () => m.nav_about(), desktop: true },
-		{ id: 'experience', label: () => m.nav_experience(), desktop: true },
-		{ id: 'skills', label: () => m.nav_skills(), desktop: true },
-		{ id: 'talks', label: () => m.nav_talks(), desktop: true },
-		{ id: 'contact', label: () => m.nav_contact(), desktop: false }
-	];
+	/** The name of each section in the menu. Typed on SectionId: a new section needs a name here. */
+	const labels: Record<SectionId, () => string> = {
+		hero: () => m.nav_start(),
+		job: () => m.nav_job(),
+		freelance: () => m.nav_freelance(),
+		about: () => m.nav_about(),
+		competences: () => m.nav_competences(),
+		experience: () => m.nav_experience(),
+		projects: () => m.nav_projects(),
+		skills: () => m.nav_skills(),
+		talks: () => m.nav_talks(),
+		education: () => m.nav_education(),
+		contact: () => m.nav_contact()
+	};
+
+	/** Every section in the menu, one entry each, in page order. */
+	const sections = sectionIds(variant.availabilityOrder);
 
 	interface Props {
 		/**
@@ -33,6 +43,7 @@
 
 	let header: HTMLElement;
 	let sentinel: HTMLElement;
+	let menu: HTMLDetailsElement;
 
 	/** True once the visitor has scrolled past the sentinel (40% of the window, at most 200px). */
 	let scrolled = $state(false);
@@ -81,12 +92,28 @@
 		header.addEventListener('focusin', focusIn);
 		header.addEventListener('focusout', focusOut);
 
+		// The menu is a native <details>: it opens and closes without any of this. The script only
+		// closes it where the browser would leave it open: on Escape (focus goes back to the
+		// button), and when focus leaves it.
+		const menuKeydown = (event: KeyboardEvent) => {
+			if (event.key !== 'Escape' || !menu.open) return;
+			menu.open = false;
+			menu.querySelector('summary')?.focus();
+		};
+		const menuFocusOut = (event: FocusEvent) => {
+			if (!menu.contains(event.relatedTarget as Node | null)) menu.open = false;
+		};
+		menu.addEventListener('keydown', menuKeydown);
+		menu.addEventListener('focusout', menuFocusOut);
+
 		return () => {
 			observer.disconnect();
 			watcher?.disconnect();
 			window.removeEventListener('resize', measure);
 			header.removeEventListener('focusin', focusIn);
 			header.removeEventListener('focusout', focusOut);
+			menu.removeEventListener('keydown', menuKeydown);
+			menu.removeEventListener('focusout', menuFocusOut);
 			document.documentElement.style.removeProperty('--header-height');
 		};
 	});
@@ -118,11 +145,21 @@
 
 		<nav class="menu" aria-label={m.header_nav_label()}>
 			<ul>
-				{#each anchors as anchor (anchor.id)}
-					<li class:desktop={anchor.desktop}>
-						<a href="{home}#{anchor.id}">{anchor.label()}</a>
-					</li>
-				{/each}
+				<li>
+					<details class="sections" bind:this={menu}>
+						<summary>{m.nav_menu()}</summary>
+						<ul class="panel">
+							{#each sections as id (id)}
+								<li>
+									<a href="{home}#{id}" onclick={() => (menu.open = false)}>{labels[id]()}</a>
+								</li>
+							{/each}
+						</ul>
+					</details>
+				</li>
+				<li>
+					<a class="contact" href="{home}#contact">{labels.contact()}</a>
+				</li>
 			</ul>
 		</nav>
 		<!-- eslint-enable svelte/no-navigation-without-resolve -->
@@ -252,7 +289,7 @@
 		box-shadow: 0 0 6px var(--trace-cyan);
 	}
 
-	ul {
+	.menu > ul {
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
@@ -261,18 +298,8 @@
 		list-style: none;
 	}
 
-	/* Over, Ervaring, Vaardigheden and Talks only fit on a wide screen. */
-	li.desktop {
-		display: none;
-	}
-
-	@media (min-width: 56rem) {
-		li.desktop {
-			display: list-item;
-		}
-	}
-
-	.menu a {
+	.menu a,
+	summary {
 		display: inline-flex;
 		align-items: center;
 		min-height: 2rem;
@@ -283,23 +310,118 @@
 	}
 
 	@media (min-width: 40rem) {
-		.menu a {
+		.menu a,
+		summary {
 			padding-inline: 0.625rem;
 		}
 	}
 
 	@media (hover: hover) {
-		.menu a:hover {
+		.menu a:hover,
+		summary:hover {
 			color: var(--ink);
 			text-decoration: underline;
 		}
 	}
 
-	/* Contact is the one anchor that is always there, so it looks like a control. */
-	li:not(.desktop) a {
+	/*
+	 * Contact is also a button of its own beside the menu, once the bar has room for it. Below
+	 * that it is only the last entry of the menu.
+	 */
+	.menu .contact {
+		display: none;
 		border: 1px solid var(--silk);
 		border-radius: 0.25rem;
 		color: var(--ink);
+	}
+
+	@media (min-width: 40rem) {
+		.menu .contact {
+			display: inline-flex;
+		}
+	}
+
+	/*
+	 * The menu button. A native <details>, so it works without script. The chevron is drawn: the
+	 * corner of a square, turned (the same mark as the roles in Experience).
+	 */
+	summary {
+		gap: 0.375rem;
+		color: var(--ink);
+		cursor: pointer;
+		list-style: none;
+	}
+
+	summary::-webkit-details-marker {
+		display: none;
+	}
+
+	summary::after {
+		content: '';
+		flex: none;
+		width: 0.4375rem;
+		height: 0.4375rem;
+		border-right: 2px solid var(--trace-cyan);
+		border-bottom: 2px solid var(--trace-cyan);
+		transform: translateY(-2px) rotate(45deg);
+		transition: transform 0.2s ease;
+	}
+
+	details[open] > summary::after {
+		transform: translateY(1px) rotate(225deg);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		summary::after {
+			transition: none;
+		}
+	}
+
+	:global(html.reduced) summary::after {
+		transition: none;
+	}
+
+	/*
+	 * Every section, in page order, in a panel under the bar, as wide as the content column. It is
+	 * out of the flow (the header keeps its height) and solid, so the page behind it never
+	 * muddies the text.
+	 */
+	.panel {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.125rem 0.5rem;
+		width: min(var(--content-max), calc(100% - 2 * var(--gutter)));
+		margin: 0 auto;
+		padding: 0.5rem;
+		box-sizing: border-box;
+		border: 1px solid var(--silk-faint);
+		border-top: 0;
+		background: color-mix(in srgb, var(--board-navy) 40%, black);
+		list-style: none;
+	}
+
+	@media (min-width: 40rem) {
+		.panel {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+
+	@media (min-width: 56rem) {
+		.panel {
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+		}
+	}
+
+	.panel a {
+		display: flex;
+		min-height: 2.5rem;
+		padding-inline: 0.75rem;
+		color: var(--ink);
+		overflow-wrap: anywhere;
 	}
 
 	/* On a very short window the header scrolls away; see --header-height in app.css. */

@@ -3,11 +3,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { overwriteGetLocale, type Locale } from '#lib/paraglide/runtime.js';
+import { sectionIds } from '#lib/nav.js';
 import SiteHeader from './SiteHeader.svelte';
 
-// The variant is a build-time constant: this file runs the personal build. SiteHeader reads only
-// `site`, so the mock holds only that. The company build is covered in SiteHeader.svelte.test.ts.
-vi.mock('../site.js', () => ({ site: 'personal' }));
+// The variant is a build-time constant: this file runs the personal build. SiteHeader reads `site`
+// and the availability order, so the mock holds those. The company build is covered in
+// SiteHeader.svelte.test.ts.
+vi.mock('../site.js', () => ({
+	site: 'personal',
+	variant: { availabilityOrder: ['job', 'freelance'] }
+}));
 
 const header = () => document.querySelector<HTMLElement>('header')!;
 
@@ -38,10 +43,23 @@ describe('personal mark', () => {
 	});
 
 	it('keeps the same menu, Contact and toggle as the company build', async () => {
+		await page.viewport(1280, 800);
 		const screen = await render(SiteHeader, {});
 		await expect.element(screen.getByRole('navigation', { name: 'Hoofdmenu' })).toBeVisible();
 		await expect.element(screen.getByRole('link', { name: 'Contact' })).toBeVisible();
+		await expect.element(screen.getByText('Menu', { exact: true })).toBeVisible();
 		expect(header().querySelectorAll('a[hreflang]')).toHaveLength(2);
+	});
+
+	it('lists every section of the personal page in page order: job before freelance', async () => {
+		await render(SiteHeader, {});
+		const hrefs = Array.from(
+			header().querySelectorAll<HTMLAnchorElement>('details.sections a')
+		).map((a) => a.getAttribute('href'));
+		expect(hrefs).toEqual(sectionIds(['job', 'freelance']).map((id) => `/#${id}`));
+		expect(hrefs.slice(0, 3)).toEqual(['/#hero', '/#job', '/#freelance']);
+		expect(hrefs).toContain('/#projects');
+		expect(hrefs[hrefs.length - 1]).toBe('/#contact');
 	});
 });
 
