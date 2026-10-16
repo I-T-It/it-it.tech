@@ -215,19 +215,31 @@ const rectsOf = (frame: Frame): Rect[] => [
 	}))
 ];
 
-/** The area of the union of the rectangles, by cutting the plane along every edge. */
+/**
+ * The area of the union of the rectangles, by cutting the plane along every edge. `fit` asks for it
+ * on every trim of every frame, and a frame has 3 to 7 rectangles, so this sorts by insertion into
+ * two arrays and reuses the second for every strip, instead of a Set and a filtered, mapped, sorted
+ * copy per strip. The result is the same to the last bit, with ties kept in the order they came.
+ */
 function unionArea(rects: readonly Rect[]): number {
-	const xs = [...new Set(rects.flatMap((r) => [r.x0, r.x1]))].sort((a, b) => a - b);
+	const edges: number[] = [];
+	for (const { x0, x1 } of rects) {
+		insertEdge(edges, x0);
+		insertEdge(edges, x1);
+	}
+	const strip: Rect[] = [];
 	let area = 0;
-	for (let i = 0; i + 1 < xs.length; i++) {
-		const [left, right] = [xs[i], xs[i + 1]];
-		const spans = rects
-			.filter((r) => r.x0 <= left && r.x1 >= right)
-			.map((r) => [r.y0, r.y1] as const)
-			.sort((a, b) => a[0] - b[0]);
+	for (let i = 0; i + 1 < edges.length; i++) {
+		const [left, right] = [edges[i], edges[i + 1]];
+		if (right === left) continue;
+		// What crosses the strip, from the top down. Rectangles that start level keep their order.
+		strip.length = 0;
+		for (const r of rects) {
+			if (r.x0 <= left && r.x1 >= right) insertByTop(strip, r);
+		}
 		let covered = 0;
 		let reach = -Infinity;
-		for (const [from, to] of spans) {
+		for (const { y0: from, y1: to } of strip) {
 			if (to <= reach) continue;
 			covered += to - Math.max(from, reach);
 			reach = to;
@@ -235,6 +247,18 @@ function unionArea(rects: readonly Rect[]): number {
 		area += covered * (right - left);
 	}
 	return area;
+}
+
+function insertEdge(edges: number[], x: number): void {
+	let at = edges.push(x) - 1;
+	for (; at > 0 && edges[at - 1] > x; at--) edges[at] = edges[at - 1];
+	edges[at] = x;
+}
+
+function insertByTop(strip: Rect[], rect: Rect): void {
+	let at = strip.push(rect) - 1;
+	for (; at > 0 && strip[at - 1].y0 > rect.y0; at--) strip[at] = strip[at - 1];
+	strip[at] = rect;
 }
 
 /** How much of a die the fragments of a frame cover together, the part outside the die included. */
