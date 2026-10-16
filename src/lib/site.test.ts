@@ -4,6 +4,7 @@ import {
 	absoluteUrl,
 	COMPANY_SITE_URL,
 	parseSite,
+	PERSONAL_SITE_URL,
 	site,
 	siteUrl,
 	variant,
@@ -72,6 +73,23 @@ describe('resolveBuildEnv', () => {
 			resolveBuildEnv({ PUBLIC_COMPANY_SITE_URL: 'https://it-it.tech/' }).PUBLIC_COMPANY_SITE_URL
 		).toBe('https://it-it.tech/');
 	});
+
+	it('gives the company build a link to the personal site, github.io by default', () => {
+		expect(resolveBuildEnv({}).PUBLIC_PERSONAL_SITE_URL).toBe(
+			'https://roboroads.github.io/deschepers.nl/'
+		);
+		expect(resolveBuildEnv({ PUBLIC_PERSONAL_SITE_URL: '' }).PUBLIC_PERSONAL_SITE_URL).toBe(
+			'https://roboroads.github.io/deschepers.nl/'
+		);
+	});
+
+	it('takes the personal site url from the env and keeps one trailing slash', () => {
+		const url = (value: string) =>
+			resolveBuildEnv({ PUBLIC_PERSONAL_SITE_URL: value }).PUBLIC_PERSONAL_SITE_URL;
+		expect(url('https://deschepers.nl/')).toBe('https://deschepers.nl/');
+		expect(url('https://deschepers.nl')).toBe('https://deschepers.nl/');
+		expect(url('https://example.test/x//')).toBe('https://example.test/x/');
+	});
 });
 
 describe('build-time site', () => {
@@ -80,6 +98,8 @@ describe('build-time site', () => {
 		expect(siteUrl).toBe(process.env.PUBLIC_SITE_URL);
 		expect(COMPANY_SITE_URL).toBe(process.env.PUBLIC_COMPANY_SITE_URL);
 		expect(COMPANY_SITE_URL.endsWith('/')).toBe(true);
+		expect(PERSONAL_SITE_URL).toBe(process.env.PUBLIC_PERSONAL_SITE_URL);
+		expect(PERSONAL_SITE_URL.endsWith('/')).toBe(true);
 	});
 
 	it('picks the variant that belongs to the site', () => {

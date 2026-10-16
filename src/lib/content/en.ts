@@ -11,12 +11,16 @@ export const en: SiteContent = {
 		company: {
 			title: 'I.T. It - For everything with a plug',
 			description:
-				'I.T. It builds web applications and apps and helps with computer problems. Together we find the best solution. Weekday evenings from 18:00 and weekends.'
+				'I.T. It is the company of Robbin Schepers. He builds web applications and apps and helps with computer problems on weekdays from 18:00 and at weekends.',
+			ogImageAlt:
+				'I.T. It logo on a dark circuit board, with the text For everything with a plug and the web address'
 		},
 		personal: {
 			title: 'Robbin "Roboroads" Schepers - Professional Computer Nerd',
 			description:
-				'Robbin "Roboroads" Schepers is a developer with a day job. In the evenings and at weekends he builds web applications and apps with his company I.T. It.'
+				'Robbin "Roboroads" Schepers is a developer with a day job. In the evenings and at weekends he builds web applications and apps with his company I.T. It.',
+			ogImageAlt:
+				'Portrait of Robbin Schepers on a dark circuit board, with his name, the text Professional Computer Nerd and the web address'
 		}
 	},
 
@@ -735,7 +739,8 @@ export const en: SiteContent = {
 			email: 'Email',
 			linkedin: 'LinkedIn',
 			github: 'GitHub',
-			company: 'Go to I.T. It'
+			company: 'Go to I.T. It',
+			personal: "Robbin's personal site"
 		}
 	}
 };

@@ -24,6 +24,7 @@ for (const key of [
 	'PUBLIC_SITE',
 	'PUBLIC_SITE_URL',
 	'PUBLIC_COMPANY_SITE_URL',
+	'PUBLIC_PERSONAL_SITE_URL',
 	'BUILD_DIR'
 ]) {
 	delete cleanEnv[key];

@@ -296,6 +296,7 @@
 		src="../assets/robbin-schepers.jpg"
 		alt={photoAlt}
 		sizes="(min-width: 40rem) 26rem, 46vw"
+		fetchpriority="high"
 		bind:this={photoEl}
 		aria-hidden={held ? 'true' : undefined}
 		onload={rememberPhoto}

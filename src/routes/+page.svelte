@@ -1,8 +1,6 @@
 <script lang="ts">
-	import { getContent } from '#lib/content/index.js';
-	import { getLocale } from '#lib/paraglide/runtime.js';
-	import { site } from '#lib/site.js';
 	import PcbBoard from '#lib/components/PcbBoard.svelte';
+	import Seo from '#lib/components/Seo.svelte';
 	import Hero from '#lib/sections/Hero.svelte';
 	import Availability from '#lib/sections/Availability.svelte';
 	import About from '#lib/sections/About.svelte';
@@ -13,15 +11,10 @@
 	import Talks from '#lib/sections/Talks.svelte';
 	import EducationLanguages from '#lib/sections/EducationLanguages.svelte';
 	import Contact from '#lib/sections/Contact.svelte';
-
-	// The title of the page is page copy, so it lives in the content files with the descriptions.
-	const meta = getContent(getLocale()).meta[site];
 </script>
 
-<!-- S8 replaces this title with the Seo component. -->
-<svelte:head>
-	<title>{meta.title}</title>
-</svelte:head>
+<!-- The title, description, canonical, social tags and structured data of the page. -->
+<Seo />
 
 <PcbBoard />
 

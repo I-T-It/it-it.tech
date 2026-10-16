@@ -14,6 +14,8 @@ export type YearMonth = string;
 export interface PageMeta {
 	title: string;
 	description: string;
+	/** What the preview card (og/<locale>.png) shows, for the og:image:alt and twitter:image:alt tags. */
+	ogImageAlt: string;
 }
 
 /** Heading and optional intro shared by every section. */
@@ -295,6 +297,8 @@ export interface Contact extends SectionHead {
 		github: string;
 		/** Personal build: the link to I.T. It, e.g. "Naar I.T. It". */
 		company: string;
+		/** Company build: the link to Robbin's own site, e.g. "Persoonlijke site van Robbin". */
+		personal: string;
 	};
 }
 

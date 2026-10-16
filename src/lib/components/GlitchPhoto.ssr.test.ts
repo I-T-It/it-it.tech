@@ -21,6 +21,10 @@ describe('GlitchPhoto prerender', () => {
 		expect(html).toContain('image/webp');
 	});
 
+	it('asks the browser to fetch the photo first: it is the largest thing above the fold', () => {
+		expect(prerender()).toMatch(/<img[^>]*\bfetchpriority="high"/);
+	});
+
 	it('writes no avatar: no address, no alt text, and the photo is not hidden', () => {
 		const html = prerender();
 		expect(html).not.toContain('roboroads-avatar');

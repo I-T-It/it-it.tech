@@ -31,7 +31,8 @@ vi.mock('../site.js', () => ({
 		primaryPath: 'freelance',
 		availabilityOrder: ['freelance', 'job']
 	},
-	COMPANY_SITE_URL: 'https://company.example/'
+	COMPANY_SITE_URL: 'https://company.example/',
+	PERSONAL_SITE_URL: 'https://personal.example/'
 }));
 
 // Built from parts: the address and the mail scheme are never written out (see CLAUDE.md).
@@ -860,17 +861,45 @@ describe('Contact', () => {
 		expect(section().querySelector('a[href="https://company.example/"]')).toBeNull();
 	});
 
-	it('lists the three ways to reach him, in a list', async () => {
+	it('links to the personal site of Robbin, saying that it is an external site', async () => {
+		const screen = await mount(Contact);
+		const link = screen.getByRole('link', {
+			name: `${content.nl.contact.labels.personal} (externe site)`
+		});
+		await expect.element(link).toHaveAttribute('href', 'https://personal.example/');
+		const anchor = section().querySelector<HTMLAnchorElement>(
+			'a[href="https://personal.example/"]'
+		)!;
+		expect(anchor.textContent).toContain('Persoonlijke site van Robbin');
+		expect(anchor.querySelector('.sr-only')!.textContent!.trim()).toBe('(externe site)');
+	});
+
+	it('links to the English page of the personal site on the English page', async () => {
+		setLocale('en');
+		const screen = await mount(Contact);
+		const link = screen.getByRole('link', {
+			name: `${content.en.contact.labels.personal} (external site)`
+		});
+		await expect.element(link).toHaveAttribute('href', 'https://personal.example/en/');
+	});
+
+	it('puts the personal site last, after the email, LinkedIn and GitHub', async () => {
+		await mount(Contact);
+		const hrefs = Array.from(section().querySelectorAll('a')).map((a) => a.getAttribute('href'));
+		expect(hrefs.slice(1)).toEqual([company.linkedin, company.github, 'https://personal.example/']);
+	});
+
+	it('lists the four ways to reach him, in a list', async () => {
 		await mount(Contact);
 		const items = section().querySelectorAll('ul > li');
-		expect(items).toHaveLength(3);
+		expect(items).toHaveLength(4);
 		for (const item of items) expect(item.querySelectorAll('a')).toHaveLength(1);
 	});
 
 	it('draws the icon pads as decoration, hidden from screen readers', async () => {
 		await mount(Contact);
 		const pads = section().querySelectorAll('.pad');
-		expect(pads).toHaveLength(3);
+		expect(pads).toHaveLength(4);
 		for (const pad of pads) {
 			expect(pad.getAttribute('aria-hidden')).toBe('true');
 			expect(pad.querySelector('a, button, [tabindex]')).toBeNull();
