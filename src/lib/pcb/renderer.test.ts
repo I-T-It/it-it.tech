@@ -386,6 +386,37 @@ describe('drawing', () => {
 		);
 	});
 
+	it('draws the leads of a hero like the field, with no wide glow to mark them out', () => {
+		const lead = trace(
+			'socket:L0',
+			[
+				{ x: 0, y: 400 },
+				{ x: 400, y: 400 }
+			],
+			'socket',
+			'left',
+			{ kind: 'port', port: 0 }
+		);
+		const canvas = { width: 0, height: 0 };
+		const ctx = new RecordingContext();
+		const renderer = new Renderer(canvas, ctx as unknown as CanvasRenderingContext2D);
+		renderer.resize(VIEW.width, VIEW.height, 1);
+		renderer.setBoard({
+			...board([lead]),
+			hero: {
+				rect: { x: 0, y: 0, width: 1200, height: 900 },
+				ellipse: { cx: 600, cy: 450, rx: 400, ry: 200 }
+			}
+		});
+		renderer.draw(frame(VIEW));
+		const strokes = ctx.named('stroke');
+		expect(Math.max(...strokes.map((s) => s.state.lineWidth as number))).toBe(HALO_WIDTH);
+		const halo = strokes.find((s) => s.state.lineWidth === HALO_WIDTH);
+		const core = strokes.find((s) => s.state.lineWidth === CORE_WIDTH);
+		expect(halo?.state.globalAlpha).toBeCloseTo(HERO_HALO_ALPHA);
+		expect(core?.state.globalAlpha).toBeCloseTo(HERO_CORE_ALPHA);
+	});
+
 	describe('hero traces', () => {
 		const fromEdge = trace(
 			'hero:0.0',

@@ -28,14 +28,17 @@
  *   Each trace waits a seeded 0 to 400 ms, then grows with an ease-out over 1.6 s, so every
  *   socket trace is full 2 s after the first `update`.
  *   With a hero the socket traces are its two leads instead, part of the field's build: they
- *   grow steadily from the load and arrive after 3.8 s. `powered` turns true then (at once
- *   without any leads), and the runtime lets the logo or photo frame draw itself from where they
- *   touch, in 2.2 s: it is done when the field is.
+ *   start like any other hero trace (see below), grow steadily and arrive after 3.8 s. `powered`
+ *   turns true then (at once without any leads), and the runtime lets the logo or photo frame
+ *   draw itself from where they touch, in 2.2 s: it is done when the field is. A lead that would
+ *   need more than the fastest trace of the field grows to be there in time starts earlier
+ *   instead (but never before 150 ms), so it is never much faster than the field round it.
  * - `hero`: by time from the first `update` too, once, slowly: the field builds up from the four
  *   corners of the hero. A trace waits longer the further its start lies from the nearest corner
  *   (up to 2.4 s, plus a seeded 0 to 300 ms), a trace that starts at a via in the hero 1.5 s
- *   more, then grows steadily to arrive at a seeded moment in the last 0.7 s of the 6 s build:
- *   the field closes round the content as the logo finishes.
+ *   more, then grows steadily to arrive at a seeded moment in the last 2.4 s of the 6 s build:
+ *   the field closes round the content as the logo is drawn, and a few traces are still coming
+ *   in after the socket has power, the last as the logo finishes.
  *
  * Chips: a chip goes `booting` when its first branch arrives (is fully drawn), and `on` when all
  * its branches have arrived or 2.5 s after it started booting, whichever comes first. A chip
@@ -83,10 +86,11 @@ export const SOCKET_DRAW_MS = 2200;
  */
 export const LEAD_MS = HERO_MS - SOCKET_DRAW_MS;
 /**
- * Every hero trace arrives in the last this many ms of the build, as the logo finishes: each
- * grows steadily from its start to a seeded moment in that stretch.
+ * Every hero trace arrives in the last this many ms of the build, the last as the logo finishes:
+ * each grows steadily from its start to a seeded moment in that stretch. The leads arrive at
+ * `LEAD_MS`, near the start of it; the rest of the field comes in round them and after them.
  */
-export const HERO_END_SPREAD_MS = 700;
+export const HERO_END_SPREAD_MS = 2400;
 /** A hero trace starting at the middle of an edge waits this many ms more than one in a corner. */
 export const HERO_SPREAD_MS = 2400;
 /** Plus a seeded 0 to this many ms. */
@@ -97,8 +101,16 @@ export const HERO_VIA_DELAY_MS = 1500;
 const SOCKET_GROW_MS = SOCKET_MS - SOCKET_STAGGER_MS;
 /** A hero trace finishes this many ms before HERO_MS at the latest, clear of rounding. */
 const HERO_SLACK_MS = 50;
-/** A hero trace grows for at least this long. */
-const MIN_HERO_GROW_MS = 300;
+/** A hero trace grows for at least this long, so a late starter does not flash in. */
+const MIN_HERO_GROW_MS = 1200;
+/**
+ * A lead grows no faster than the fastest trace of the field it joins (this many px/s when there
+ * is none) where it can help it: a longer lead starts earlier than the field's own delays would
+ * have it, but never before `LEAD_MIN_DELAY_MS`.
+ */
+export const LEAD_MAX_SPEED = 160;
+/** A lead never starts before this: the first traces of the field start in the corners then. */
+export const LEAD_MIN_DELAY_MS = 150;
 
 /**
  * The front in document px for a scroll position: `FRONT_RATIO` down the viewport, moving on to
@@ -169,6 +181,29 @@ function heroDelay(board: Board, trace: Trace, random: number): number {
 	// A via below the hero is where a trace from the bottom edge comes in: it goes with the edges.
 	const onBoard = trace.startVia === true && start.y <= area.y + area.height;
 	return (onBoard ? HERO_VIA_DELAY_MS : 0) + spread * HERO_SPREAD_MS + random * HERO_JITTER_MS;
+}
+
+/** The wait (ms) and growth speed (px/s) of a hero trace: it arrives in the last stretch. */
+function heroTiming(board: Board, trace: Trace): { stagger: number; speed: number } {
+	const rng = createRng(deriveSeed(board.seed, trace.id));
+	const random = rng.next();
+	const arrival = rng.next();
+	const stagger = heroDelay(board, trace, random);
+	const growMs = Math.max(
+		MIN_HERO_GROW_MS,
+		HERO_MS - HERO_SLACK_MS - arrival * HERO_END_SPREAD_MS - stagger
+	);
+	return { stagger, speed: trace.length / (growMs / 1000) };
+}
+
+/**
+ * How long a lead waits after the load: the wait of any hero trace starting where it does, but
+ * short enough that it can still be in at `LEAD_MS` without growing faster than `maxSpeed` px/s,
+ * and never before `LEAD_MIN_DELAY_MS`.
+ */
+function leadDelay(board: Board, trace: Trace, random: number, maxSpeed: number): number {
+	const latest = LEAD_MS - (trace.length / maxSpeed) * 1000;
+	return Math.max(LEAD_MIN_DELAY_MS, Math.min(heroDelay(board, trace, random), latest));
 }
 
 function easeOut(t: number): number {
@@ -264,11 +299,14 @@ export class Growth {
 			if (entry.startAt === null || entry.drawn >= entry.trace.length) continue;
 			const length = entry.trace.length;
 			const since = now - entry.startAt;
+			// A lead grows from its own start to the moment the socket has power. Measured against
+			// the same two instants at the end, it is exactly full then.
+			const leadSpan = (this.#loadedAt ?? now) + LEAD_MS - entry.startAt;
 			let grown =
 				entry.mode !== 'socket'
 					? (since * entry.speed) / 1000
 					: this.#leads
-						? length * Math.min(1, Math.max(0, since / LEAD_MS))
+						? length * (leadSpan > 0 ? Math.min(1, Math.max(0, since / leadSpan)) : 1)
 						: length * easeOut(Math.min(1, Math.max(0, since / SOCKET_GROW_MS)));
 			if (entry.floorFrom !== null) grown = Math.max(grown, front - entry.floorFrom);
 			entry.drawn = Math.max(entry.drawn, Math.min(length, grown));
@@ -337,34 +375,33 @@ export class Growth {
 	#load(board: Board, oldTraces: Map<string, TraceEntry>, oldChips: Map<string, ChipEntry>): void {
 		this.#height = board.height;
 		this.#leads = board.hero !== null;
+		// A lead grows no faster than the fastest trace of the field it joins.
+		let leadSpeed = 0;
+		if (this.#leads) {
+			for (const trace of board.traces) {
+				if (trace.kind === 'hero') leadSpeed = Math.max(leadSpeed, heroTiming(board, trace).speed);
+			}
+		}
+		if (!(leadSpeed > 0)) leadSpeed = LEAD_MAX_SPEED;
 		for (const trace of board.traces) {
 			const old = oldTraces.get(trace.id);
 			const mode = modeOf(trace);
 			const full = old !== undefined && old.drawn >= old.trace.length;
-			const rng = createRng(deriveSeed(board.seed, trace.id));
-			const random = rng.next();
-			const arrival = rng.next();
+			const random = createRng(deriveSeed(board.seed, trace.id)).next();
+			// The leads are part of the field's build and keep to their own wait, like its traces.
+			const lead = mode === 'socket' && this.#leads;
+			const timing = mode === 'hero' ? heroTiming(board, trace) : null;
 			const stagger =
 				mode === 'socket'
-					? this.#leads
-						? 0
+					? lead
+						? leadDelay(board, trace, random, leadSpeed)
 						: random * SOCKET_STAGGER_MS
-					: mode === 'hero'
-						? heroDelay(board, trace, random)
+					: timing
+						? timing.stagger
 						: trace.kind === 'decor'
 							? random * MAX_STAGGER_MS
 							: 0;
-			const speed =
-				mode === 'hero'
-					? trace.length /
-						(Math.max(
-							MIN_HERO_GROW_MS,
-							HERO_MS - HERO_SLACK_MS - arrival * HERO_END_SPREAD_MS - stagger
-						) /
-							1000)
-					: trace.kind === 'branch'
-						? BRANCH_SPEED
-						: GROWTH_SPEED;
+			const speed = timing ? timing.speed : trace.kind === 'branch' ? BRANCH_SPEED : GROWTH_SPEED;
 			const loadedAt = timed(mode) ? this.#loadedAt : null;
 			this.#traces.set(trace.id, {
 				trace,
@@ -373,7 +410,7 @@ export class Growth {
 				speed,
 				// A hero trace keeps to its own wait, so it is still full in time.
 				startAt:
-					loadedAt !== null && (mode === 'hero' || old?.startAt == null)
+					loadedAt !== null && (mode === 'hero' || lead || old?.startAt == null)
 						? loadedAt + stagger
 						: (old?.startAt ?? null),
 				floorFrom: old?.floorFrom ?? null,
