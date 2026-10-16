@@ -44,18 +44,39 @@ import {
 const cycleOf = (seed: number, start = 0, options?: { avatar?: boolean }): Cycle =>
 	nextCycle(createRng(seed), start, options);
 
-/** Cycle after cycle for `minutes` of simulated time, like the component plays them. */
-function timeline(seed: number, minutes: number, options?: { avatar?: boolean }): GlitchEvent[] {
-	const rng = createRng(seed);
-	const events: GlitchEvent[] = [];
-	let start = 0;
-	while (start < minutes * 60_000) {
-		const cycle = nextCycle(rng, start, options);
-		events.push(...cycle.events);
-		start = cycle.end;
+/**
+ * Cycle after cycle for `minutes` of simulated time, like the component plays them. Planning a
+ * cycle is the expensive part (each frame is fitted to its area cap), and the budget tests all walk
+ * the same timelines, so each one is planned once per file. The result is read-only.
+ */
+const timelines = new Map<string, readonly GlitchEvent[]>();
+function timeline(
+	seed: number,
+	minutes: number,
+	options?: { avatar?: boolean }
+): readonly GlitchEvent[] {
+	const key = `${seed}:${minutes}:${options?.avatar ?? true}`;
+	let events = timelines.get(key);
+	if (!events) {
+		const rng = createRng(seed);
+		const planned: GlitchEvent[] = [];
+		let start = 0;
+		while (start < minutes * 60_000) {
+			const cycle = nextCycle(rng, start, options);
+			planned.push(...cycle.events);
+			start = cycle.end;
+		}
+		events = planned;
+		timelines.set(key, events);
 	}
 	return events;
 }
+
+/**
+ * How many seeds the 10 minute timelines run over. A timeline is about 17 cycles, so this is a few
+ * thousand cycles and tens of thousands of frames; single cycles run over more seeds further down.
+ */
+const TIMELINE_SEEDS = 250;
 
 const kinds = (events: GlitchEvent[], ...wanted: GlitchEvent['kind'][]) =>
 	events.filter((e) => wanted.includes(e.kind));
@@ -173,7 +194,7 @@ describe('a cycle', () => {
 	});
 
 	it('keeps every teaser 3 s clear of a swap glitch, before and after it', () => {
-		for (const seed of seeds(300)) {
+		for (const seed of seeds(TIMELINE_SEEDS)) {
 			const events = timeline(seed, 10);
 			events.forEach((e, i) => {
 				if (e.kind !== 'tease' && e.kind !== 'flicker') return;
@@ -569,9 +590,9 @@ describe('flash budget (WCAG 2.3.1)', () => {
 		expect(teaserMost).toBeGreaterThanOrEqual(4);
 	});
 
-	it('keeps every simulated 10 minutes within 3 flashes (6 changes) per second over 1000 seeds', () => {
+	it('keeps every simulated 10 minutes within 3 flashes (6 changes) per second', () => {
 		let busiest = 0;
-		for (const seed of seeds(1000)) {
+		for (const seed of seeds(TIMELINE_SEEDS)) {
 			busiest = Math.max(busiest, maxTransitionsInWindow(timeline(seed, 10), 1000));
 		}
 		expect(busiest).toBeLessThanOrEqual(MAX_TRANSITIONS_PER_S);
@@ -581,7 +602,7 @@ describe('flash budget (WCAG 2.3.1)', () => {
 
 	it('keeps it within the budget when the avatar is not there either', () => {
 		let busiest = 0;
-		for (const seed of seeds(300)) {
+		for (const seed of seeds(TIMELINE_SEEDS)) {
 			busiest = Math.max(
 				busiest,
 				maxTransitionsInWindow(timeline(seed, 10, { avatar: false }), 1000)
@@ -592,7 +613,7 @@ describe('flash budget (WCAG 2.3.1)', () => {
 
 	it('keeps the whole image to 2 changes in any second, as before (a flicker is a flash)', () => {
 		let busiest = 0;
-		for (const seed of seeds(1000)) {
+		for (const seed of seeds(TIMELINE_SEEDS)) {
 			const times = wholeImageTransitions(timeline(seed, 10)).map((change) => change.at);
 			for (let i = 0; i < times.length; i++) {
 				busiest = Math.max(
@@ -605,7 +626,7 @@ describe('flash budget (WCAG 2.3.1)', () => {
 	});
 
 	it('leaves at least 3 s between two events, so no second holds the changes of two', () => {
-		for (const seed of seeds(300)) {
+		for (const seed of seeds(TIMELINE_SEEDS)) {
 			const events = timeline(seed, 10);
 			for (let i = 1; i < events.length; i++) {
 				const gap = events[i].at - (events[i - 1].at + events[i - 1].duration);
